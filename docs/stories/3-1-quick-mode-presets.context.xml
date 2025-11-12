@@ -1,0 +1,731 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-key>3-1-quick-mode-presets</story-key>
+    <epic>E3</epic>
+    <story-id>3-1</story-id>
+    <title>Quick Mode Presets</title>
+    <status>ready-for-dev</status>
+    <generated>2025-11-11</generated>
+  </metadata>
+
+  <user-story>
+    <as-a>neurodivergent professional needing quick focus support</as-a>
+    <i-want>to start my proven "Focus" audio setup in ≤2 taps</i-want>
+    <so-that>I can avoid cognitive overhead of reconfiguring 8 parameters every session</so-that>
+  </user-story>
+
+  <acceptance-criteria>
+    <criterion id="AC1">
+      <title>Preset Application Updates Audio Graph</title>
+      <description>When user clicks a mode chip (Focus/Calm/Energize), all 8 audio parameters (speed, intensity, spatialDepth, movement, binaural frequency, noise type/volume) update to preset values and the audio graph reflects changes within 100ms perceived latency. No audio dropouts or crackling during transition.</description>
+      <sources>docs/epic-3-preset-mode-orchestration.context.xml:75-90, docs/PRD.md:100-213, index.html:666-717 (MODE_LIBRARY), index.html:738-755 (audio parameter state hooks)</sources>
+      <validation>
+        <test type="manual">Switch between all 3 presets 10 times, verify smooth transitions</test>
+        <test type="performance">Measure applyPreset() latency with performance.mark() - target &lt;100ms</test>
+        <test type="regression">Verify existing Epic 1/2 audio tests still pass</test>
+      </validation>
+    </criterion>
+    
+    <criterion id="AC2">
+      <title>Visual Preset Highlighting</title>
+      <description>Active mode chip has aria-selected="true" and aria-current="true", styled with accent color. Screen reader announces "Focus mode selected" when activated. Keyboard navigation (Tab + Arrow keys) highlights focus correctly.</description>
+      <sources>docs/epic-3-preset-mode-orchestration.context.xml:219-236, index.html:2306-2351 (mode selector), docs/architecture.md:accessibility-requirements</sources>
+      <validation>
+        <test type="accessibility">Navigate with keyboard only, verify focus indicators visible</test>
+        <test type="screen-reader">Verify NVDA/VoiceOver announces mode changes</test>
+        <test type="manual">Verify visual highlight matches selected mode</test>
+      </validation>
+    </criterion>
+    
+    <criterion id="AC3">
+      <title>Preset Change Event Logging</title>
+      <description>Console logs structured event when preset changes: {event: 'PRESET_CHANGED', presetId: 'calm', previousPresetId: 'focus', timestamp, trackId}. Event structure ready for Epic 4 IndexedDB integration. No PII or sensitive data logged.</description>
+      <sources>docs/epic-3-preset-mode-orchestration.context.xml:289-309, docs/architecture.md:82-87 (SessionLogger integration)</sources>
+      <validation>
+        <test type="unit">Verify logPresetChange() emits correct event structure</test>
+        <test type="manual">Check console logs during preset switching</test>
+        <test type="integration">Future E4 story will subscribe to these events for analytics</test>
+      </validation>
+    </criterion>
+    
+    <criterion id="AC4">
+      <title>Editable Default Presets (Settings Panel)</title>
+      <description>Settings panel allows customizing default presets (Focus/Calm/Energize). Clicking "Edit Focus" opens parameter sliders. Changes persist to localStorage and load on page refresh. Reset button restores factory defaults.</description>
+      <sources>docs/epic-3-preset-mode-orchestration.context.xml:311-339, docs/PRD.md:functional-requirements</sources>
+      <validation>
+        <test type="integration">Edit default, refresh page, verify persistence</test>
+        <test type="manual">Customize all 3 defaults, verify applied on next load</test>
+        <test type="edge-case">localStorage quota exceeded → graceful fallback to factory defaults</test>
+      </validation>
+    </criterion>
+    
+    <criterion id="AC5">
+      <title>Performance &amp; Latency Target</title>
+      <description>Preset application latency &lt;100ms perceived (target 50-80ms actual). Mode chip click → applyPreset() &lt;5ms. applyPreset() → audio graph updates &lt;20ms. Total UI responsiveness &lt;100ms to user perception.</description>
+      <sources>docs/epic-3-preset-mode-orchestration.context.xml:1187-1202 (performance targets)</sources>
+      <validation>
+        <test type="performance">Use performance.measure() to validate targets</test>
+        <test type="low-end-device">Test on 5-year-old Android phone</test>
+        <test type="regression">Verify no performance degradation from Epic 1/2 baseline</test>
+      </validation>
+    </criterion>
+  </acceptance-criteria>
+
+  <tasks>
+    <task id="T1" ac-ref="AC1 AC3 AC5">
+      <title>Extract applyPreset() helper function</title>
+      <priority>HIGH</priority>
+      <estimate>30 minutes</estimate>
+      <implementation>
+        <location>index.html (React component scope)</location>
+        <code-snippet>
+          <![CDATA[
+const applyPreset = (preset, presetId) => {
+  performance.mark('preset-apply-start');
+  
+  // Batch all parameter updates
+  setSpeed(preset.speed);
+  setIntensity(preset.intensity);
+  setSpatialDepth(preset.spatialDepth);
+  setMovementPattern(preset.movement);
+  setBinauralEnabled(preset.binaural.enabled);
+  setBinauralFreq(preset.binaural.freq);
+  setNoiseType(preset.noise.type);
+  setNoiseVolume(preset.noise.volume);
+  
+  // Update active preset tracking
+  setActivePresetId(presetId);
+  
+  // Log preset change event
+  logPresetChange(presetId);
+  
+  performance.mark('preset-apply-end');
+  const measure = performance.measure('preset-apply', 'preset-apply-start', 'preset-apply-end');
+  console.log(`Preset applied in ${measure.duration.toFixed(2)}ms`);
+};
+          ]]>
+        </code-snippet>
+        <notes>
+          - React 18 automatically batches setState calls in event handlers
+          - Existing Epic 1/2 useEffects listen to these state changes and update audio graph
+          - No new audio code needed - just triggering existing parameter binding logic
+        </notes>
+      </implementation>
+      <testing>
+        <test>Unit test: Verify all 8 setState calls triggered</test>
+        <test>Unit test: Verify activePresetId updates correctly</test>
+        <test>Integration test: Verify audio graph reflects changes</test>
+        <test>Performance test: Measure latency &lt;100ms</test>
+      </testing>
+    </task>
+    
+    <task id="T2" ac-ref="AC1 AC2">
+      <title>Add activePresetId state hook with localStorage persistence</title>
+      <priority>HIGH</priority>
+      <estimate>15 minutes</estimate>
+      <implementation>
+        <location>index.html (React state hooks section, ~line 740)</location>
+        <code-snippet>
+          <![CDATA[
+const [activePresetId, setActivePresetId] = useState('focus');
+
+// Initialize from localStorage if user customized defaults
+useEffect(() => {
+  const savedActivePreset = localStorage.getItem('activePresetId');
+  if (savedActivePreset) {
+    setActivePresetId(savedActivePreset);
+  }
+}, []);
+
+// Persist active preset selection
+useEffect(() => {
+  try {
+    localStorage.setItem('activePresetId', activePresetId);
+  } catch (err) {
+    console.error('Failed to persist activePresetId:', err);
+  }
+}, [activePresetId]);
+          ]]>
+        </code-snippet>
+        <notes>
+          - Use try/catch around localStorage writes (quota limits, Safari private mode)
+          - Follow Epic 2 localStorage patterns (skipBreathingRitual, darkMode)
+        </notes>
+      </implementation>
+      <testing>
+        <test>Unit test: Verify localStorage read/write</test>
+        <test>Manual test: Refresh page, verify last preset remembered</test>
+        <test>Edge case: localStorage quota exceeded → console error only (no crash)</test>
+      </testing>
+    </task>
+    
+    <task id="T3" ac-ref="AC1 AC2">
+      <title>Wire mode chips to applyPreset() with ARIA attributes</title>
+      <priority>HIGH</priority>
+      <estimate>20 minutes</estimate>
+      <implementation>
+        <location>index.html lines 2306-2351 (mode selector UI)</location>
+        <code-snippet>
+          <![CDATA[
+<div className="mode-selector" role="tablist" aria-label="Preset modes">
+  {MODE_LIBRARY.map((mode, idx) => (
+    <button
+      key={mode.id}
+      role="tab"
+      className={`mode-chip ${activePresetId === mode.id ? 'active' : ''}`}
+      aria-selected={activePresetId === mode.id}
+      aria-current={activePresetId === mode.id ? 'true' : undefined}
+      onClick={() => {
+        applyPreset(mode.preset, mode.id);
+        setHeroMessage(mode.heroCopy);
+        setA11yAnnouncement(`${mode.label} mode selected`);
+      }}
+      style={{ '--accent-color': mode.accent }}
+    >
+      <span className="mode-label">{mode.label}</span>
+      <span className="mode-short">{mode.short}</span>
+    </button>
+  ))}
+</div>
+          ]]>
+        </code-snippet>
+        <notes>
+          - Replace existing modeIndex state check with activePresetId === mode.id
+          - Preserve existing roving tabindex logic from Epic 1 (keyboard navigation)
+          - setHeroMessage and setA11yAnnouncement already exist from Epic 1
+        </notes>
+      </implementation>
+      <testing>
+        <test>Manual test: Click each mode chip, verify audio changes</test>
+        <test>Accessibility test: Tab + Arrow navigation works</test>
+        <test>Screen reader test: Verify announcements (NVDA/VoiceOver)</test>
+      </testing>
+    </task>
+    
+    <task id="T4" ac-ref="AC3">
+      <title>Implement logPresetChange() event logging helper</title>
+      <priority>MEDIUM</priority>
+      <estimate>15 minutes</estimate>
+      <implementation>
+        <location>index.html (helper functions section)</location>
+        <code-snippet>
+          <![CDATA[
+const logPresetChange = (newPresetId) => {
+  const event = {
+    event: 'PRESET_CHANGED',
+    presetId: newPresetId,
+    previousPresetId: activePresetId,
+    timestamp: Date.now(),
+    trackId: currentTrackIndex !== null ? playlist[currentTrackIndex].id : null
+  };
+  
+  console.log('[SessionLogger]', event);
+  
+  // E4 integration point - future: dispatch to IndexedDB logger
+  // window.dispatchEvent(new CustomEvent('preset-changed', { detail: event }));
+};
+          ]]>
+        </code-snippet>
+        <notes>
+          - Follow Epic 2 logging pattern (console.log with [SessionLogger] prefix)
+          - Structure ready for Epic 4 IndexedDB integration
+          - No PII in logs (preset/track IDs only)
+        </notes>
+      </implementation>
+      <testing>
+        <test>Unit test: Verify event structure correct</test>
+        <test>Manual test: Check console logs during preset switching</test>
+        <test>Manual test: Verify trackId null when no track playing</test>
+      </testing>
+    </task>
+    
+    <task id="T5" ac-ref="AC4">
+      <title>Build settings panel for editable default presets</title>
+      <priority>MEDIUM</priority>
+      <estimate>45 minutes</estimate>
+      <implementation>
+        <location>index.html (new component in settings section)</location>
+        <code-snippet>
+          <![CDATA[
+const EditDefaultPresetDialog = ({ preset, onSave, onCancel }) => {
+  const [editedPreset, setEditedPreset] = useState(preset);
+  
+  const handleSave = () => {
+    try {
+      const savedDefaults = JSON.parse(localStorage.getItem('default-presets') || '{}');
+      savedDefaults[preset.id] = editedPreset;
+      localStorage.setItem('default-presets', JSON.stringify(savedDefaults));
+      onSave();
+      showToast(`${preset.label} preset updated`, 'success');
+    } catch (err) {
+      if (err.name === 'QuotaExceededError') {
+        showToast('Storage full. Cannot save changes.', 'error');
+      } else {
+        console.error('Failed to save preset:', err);
+        showToast('Error saving preset.', 'error');
+      }
+    }
+  };
+  
+  const handleReset = () => {
+    try {
+      const savedDefaults = JSON.parse(localStorage.getItem('default-presets') || '{}');
+      delete savedDefaults[preset.id];
+      localStorage.setItem('default-presets', JSON.stringify(savedDefaults));
+      onSave();
+      showToast(`${preset.label} preset reset to default`, 'success');
+    } catch (err) {
+      console.error('Failed to reset preset:', err);
+    }
+  };
+  
+  return (
+    <dialog open className="edit-default-preset-dialog">
+      <div className="dialog-header">
+        <h2>Edit {preset.label} Preset</h2>
+        <button onClick={onCancel} aria-label="Close dialog">×</button>
+      </div>
+      
+      <div className="dialog-content">
+        <label>
+          Rotation Speed
+          <input type="range" min="0" max="1" step="0.05" 
+                 value={editedPreset.speed} 
+                 onChange={(e) => setEditedPreset({...editedPreset, speed: parseFloat(e.target.value)})} />
+          <output>{editedPreset.speed.toFixed(2)}</output>
+        </label>
+        {/* ... repeat for all 8 parameters ... */}
+      </div>
+      
+      <div className="dialog-actions">
+        <button onClick={handleSave} className="primary-btn">Save Changes</button>
+        <button onClick={handleReset} className="secondary-btn">Reset to Default</button>
+        <button onClick={onCancel} className="secondary-btn">Cancel</button>
+      </div>
+    </dialog>
+  );
+};
+
+// Load customized defaults on mount:
+const loadDefaultPresets = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('default-presets') || '{}');
+    return MODE_LIBRARY.map(mode => ({
+      ...mode,
+      preset: saved[mode.id] || mode.preset
+    }));
+  } catch (err) {
+    console.error('Failed to load default presets:', err);
+    return MODE_LIBRARY;
+  }
+};
+          ]]>
+        </code-snippet>
+        <notes>
+          - Settings panel should be accessible from hero or main menu
+          - Use existing showToast() helper from Epic 2
+          - Wrap localStorage operations in try/catch (quota limits)
+        </notes>
+      </implementation>
+      <testing>
+        <test>Manual test: Edit Focus preset, refresh page, verify persistence</test>
+        <test>Manual test: Reset button restores factory defaults</test>
+        <test>Edge case: localStorage quota exceeded → error toast shown</test>
+      </testing>
+    </task>
+    
+    <task id="T6" ac-ref="AC5">
+      <title>Performance testing &amp; optimization</title>
+      <priority>HIGH</priority>
+      <estimate>30 minutes</estimate>
+      <implementation>
+        <approach>
+          - Add performance.mark() calls in applyPreset()
+          - Measure latency on desktop Chrome, Firefox, Safari
+          - Test on low-end Android device (5-year-old phone)
+          - Profile with React DevTools to identify bottlenecks
+          - Verify no new audio artifacts introduced
+        </approach>
+        <targets>
+          <target>Mode chip click → applyPreset() call: &lt;5ms</target>
+          <target>applyPreset() setState batching: &lt;10ms</target>
+          <target>Audio graph parameter updates: &lt;20ms (Web Audio API)</target>
+          <target>Total perceived latency: &lt;100ms</target>
+        </targets>
+      </implementation>
+      <testing>
+        <test>Performance test: Measure latency on desktop (target &lt;50ms actual)</test>
+        <test>Performance test: Measure on mobile (target &lt;100ms actual)</test>
+        <test>Load test: Switch presets 100 times, check for memory leaks</test>
+        <test>Regression: Run Epic 1/2 smoke tests, verify no performance degradation</test>
+      </testing>
+    </task>
+  </tasks>
+
+  <artifacts>
+    <docs>
+      <artifact>
+        <path>docs/epic-3-preset-mode-orchestration.context.xml</path>
+        <title>Epic 3 Technical Context</title>
+        <section>Story 3-1: Quick Mode Presets</section>
+        <snippet>Three default presets (Focus/Calm/Energize) activate with one tap, immediately updating audio graph with predefined parameters. Acceptance criteria: Tapping mode chip applies preset values (speed, intensity, spatialDepth, movement, binaural, noise) to audio graph. Selected mode highlights with accent color and aria-current. Preset change logs preset ID for session tracking. Default presets editable via settings panel. Mode change &lt;100 ms parameter update latency.</snippet>
+      </artifact>
+      
+      <artifact>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>FR5 – Preset &amp; Mode Orchestration</section>
+        <snippet>Quick Modes: Focus, Calm, and Energize define default audio configurations (rotation speed, binaural frequency, noise type). Users can select a mode with one tap. Advanced Controls: Drawer exposes sliders for rotation speed, movement pattern, binaural frequency, noise type/volume. Changes reflect immediately in the audio graph. Custom Presets: Users can save custom parameter combinations, rename/reorder presets, and export/import for sharing.</snippet>
+      </artifact>
+      
+      <artifact>
+        <path>index.html</path>
+        <title>Main Application</title>
+        <section>MODE_LIBRARY constant (lines 666-717)</section>
+        <snippet>Three hardcoded preset definitions: Focus (beta 14 Hz, circle movement, pink noise), Calm (theta 8 Hz, figure8 movement, pink noise), Energize (gamma 30 Hz, random movement, white noise). Each preset includes: id, label, description, heroCopy, accent color, preset object (speed, intensity, spatialDepth, movement, binaural, noise), and highlights array.</snippet>
+      </artifact>
+      
+      <artifact>
+        <path>index.html</path>
+        <title>Main Application</title>
+        <section>Audio parameter state hooks (lines 738-755)</section>
+        <snippet>Individual state hooks for each audio parameter: speed, intensity, spatialDepth, movementPattern, binauralEnabled, binauralFreq, noiseType, noiseVolume. Initialized from defaultMode (MODE_LIBRARY[0]). Existing Epic 1/2 useEffects listen to these states and update the audio graph automatically.</snippet>
+      </artifact>
+      
+      <artifact>
+        <path>index.html</path>
+        <title>Main Application</title>
+        <section>Mode selector UI (lines 2306-2351)</section>
+        <snippet>Mode chips render in tablist with roving tabindex. Currently uses modeIndex state to highlight active chip. onClick calls applyPreset() helper (to be created) and updates hero message. aria-selected and aria-current attributes for accessibility.</snippet>
+      </artifact>
+    </docs>
+    
+    <code>
+      <current-state>
+        <location>index.html:666-717</location>
+        <description>MODE_LIBRARY constant with 3 hardcoded presets</description>
+        <code-snippet>
+          <![CDATA[
+const MODE_LIBRARY = [
+  {
+    id: 'focus',
+    label: 'Focus',
+    short: 'Deep work',
+    description: 'Steady orbit + beta beats for sustained attention',
+    heroCopy: 'Steady pulses to clear the mind',
+    accent: 'var(--accent-focus)',
+    preset: {
+      speed: 0.55,
+      intensity: 0.85,
+      spatialDepth: 0.45,
+      movement: 'circle',
+      binaural: { enabled: true, freq: 14 },
+      noise: { type: 'pink', volume: 0.08 }
+    },
+    highlights: ['Beta 14 Hz pulses', 'Low drift orbit', 'Pink noise cushion']
+  },
+  {
+    id: 'calm',
+    label: 'Calm',
+    short: 'Wind down',
+    description: 'Gentle figure-eight + theta beats for deep relaxation',
+    heroCopy: 'Let the waves cradle you',
+    accent: 'var(--accent-calm)',
+    preset: {
+      speed: 0.35,
+      intensity: 0.75,
+      spatialDepth: 0.35,
+      movement: 'figure8',
+      binaural: { enabled: true, freq: 8 },
+      noise: { type: 'pink', volume: 0.12 }
+    },
+    highlights: ['Theta 8 Hz drift', 'Slow figure-eight', 'Soft pink wash']
+  },
+  {
+    id: 'energize',
+    label: 'Energize',
+    short: 'Power up',
+    description: 'Random orbit + gamma beats for peak alertness',
+    heroCopy: 'Spark your energy',
+    accent: 'var(--accent-energize)',
+    preset: {
+      speed: 0.95,
+      intensity: 0.95,
+      spatialDepth: 0.65,
+      movement: 'random',
+      binaural: { enabled: true, freq: 30 },
+      noise: { type: 'white', volume: 0.05 }
+    },
+    highlights: ['Gamma 30 Hz buzz', 'Chaotic orbit', 'Bright white edge']
+  }
+];
+          ]]>
+        </code-snippet>
+      </current-state>
+      
+      <current-state>
+        <location>index.html:738-755</location>
+        <description>Audio parameter state hooks</description>
+        <code-snippet>
+          <![CDATA[
+const [modeIndex, setModeIndex] = useState(0);
+const defaultMode = MODE_LIBRARY[modeIndex];
+
+const [speed, setSpeed] = useState(defaultMode.preset.speed);
+const [intensity, setIntensity] = useState(defaultMode.preset.intensity);
+const [spatialDepth, setSpatialDepth] = useState(defaultMode.preset.spatialDepth);
+const [movementPattern, setMovementPattern] = useState(defaultMode.preset.movement);
+const [binauralEnabled, setBinauralEnabled] = useState(defaultMode.preset.binaural.enabled);
+const [binauralFreq, setBinauralFreq] = useState(defaultMode.preset.binaural.freq);
+const [noiseType, setNoiseType] = useState(defaultMode.preset.noise.type);
+const [noiseVolume, setNoiseVolume] = useState(defaultMode.preset.noise.volume);
+
+// Existing Epic 1/2 useEffects listen to these states and update audio graph:
+useEffect(() => {
+  if (rotationNodesRef.current) {
+    // Update rotation speed in audio graph
+  }
+}, [speed]);
+
+useEffect(() => {
+  if (gainChainRef.current) {
+    // Update intensity in audio graph
+  }
+}, [intensity]);
+
+// ... similar useEffects for all 8 parameters
+          ]]>
+        </code-snippet>
+        <notes>
+          - modeIndex will be deprecated in favor of activePresetId (string)
+          - All 8 parameter states already have useEffects that update audio graph
+          - No new audio code needed - just trigger state updates via applyPreset()
+        </notes>
+      </current-state>
+      
+      <current-state>
+        <location>index.html:2306-2351</location>
+        <description>Mode selector UI</description>
+        <code-snippet>
+          <![CDATA[
+<div className="mode-selector" role="tablist">
+  {MODE_LIBRARY.map((mode, idx) => (
+    <button
+      key={mode.id}
+      role="tab"
+      className="mode-chip"
+      aria-selected={modeIndex === idx}
+      aria-current={modeIndex === idx ? 'true' : undefined}
+      onClick={() => {
+        setModeIndex(idx);
+        // TODO: Call applyPreset(mode.preset, mode.id) instead
+        setHeroMessage(mode.heroCopy);
+      }}
+      onKeyDown={(e) => {
+        // Roving tabindex logic for arrow key navigation
+        if (e.key === 'ArrowRight') {
+          // Move to next mode chip
+        } else if (e.key === 'ArrowLeft') {
+          // Move to previous mode chip
+        }
+      }}
+    >
+      {mode.label}
+    </button>
+  ))}
+</div>
+          ]]>
+        </code-snippet>
+        <notes>
+          - Replace modeIndex check with activePresetId === mode.id
+          - Add applyPreset() call in onClick handler
+          - Add setA11yAnnouncement() for screen reader feedback
+          - Preserve existing keyboard navigation logic
+        </notes>
+      </current-state>
+    </code>
+  </artifacts>
+
+  <dependencies>
+    <epic-dependencies>
+      <dependency status="complete">
+        <epic>E1</epic>
+        <story>1-1</story>
+        <provides>Hero UI, mode chips, audio parameter state hooks, setHeroMessage, setA11yAnnouncement</provides>
+      </dependency>
+      <dependency status="complete">
+        <epic>E1</epic>
+        <story>1-2</story>
+        <provides>Breathing ritual flow, localStorage patterns, accessibility helpers</provides>
+      </dependency>
+      <dependency status="complete">
+        <epic>E2</epic>
+        <story>2-1, 2-2</story>
+        <provides>showToast() helper, playlist state, localStorage quota handling patterns</provides>
+      </dependency>
+    </epic-dependencies>
+    
+    <story-dependencies>
+      <blocks>
+        <story>3-2</story>
+        <reason>Advanced Controls drawer needs activePresetId state and applyPreset() helper</reason>
+      </blocks>
+      <blocks>
+        <story>3-3</story>
+        <reason>Custom Preset CRUD needs applyPreset() helper to restore saved presets</reason>
+      </blocks>
+      <blocks>
+        <epic>E4</epic>
+        <reason>Session tracking needs PRESET_CHANGED events and activePresetId in session schema</reason>
+      </blocks>
+    </story-dependencies>
+  </dependencies>
+
+  <technical-constraints>
+    <constraint type="performance">
+      <requirement>Preset application latency &lt;100ms perceived (target 50-80ms actual)</requirement>
+      <rationale>Users perceive delays >100ms as sluggish. Quick modes must feel instant.</rationale>
+      <validation>Use performance.measure() to validate. Test on low-end Android device.</validation>
+    </constraint>
+    
+    <constraint type="architecture">
+      <requirement>Single-file React architecture (no build step, no modules)</requirement>
+      <rationale>Project uses React 18 UMD + Babel Standalone in browser. All code in index.html.</rationale>
+      <validation>Verify code runs in plain HTTP server without bundling.</validation>
+    </constraint>
+    
+    <constraint type="storage">
+      <requirement>localStorage quota limits (~5MB in most browsers)</requirement>
+      <rationale>Editable default presets stored in localStorage. Must handle quota exceeded gracefully.</rationale>
+      <validation>Wrap all localStorage writes in try/catch. Show error toast on quota exceeded.</validation>
+    </constraint>
+    
+    <constraint type="accessibility">
+      <requirement>WCAG 2.1 AA compliance - keyboard navigation, screen reader support, focus indicators</requirement>
+      <rationale>App targets neurodivergent users who may rely on assistive technology.</rationale>
+      <validation>Test with NVDA/VoiceOver. Verify aria-selected, aria-current, roving tabindex work.</validation>
+    </constraint>
+    
+    <constraint type="compatibility">
+      <requirement>No audio dropouts or crackling during preset switching</requirement>
+      <rationale>Audio stability is core value proposition. Parameter changes must be seamless.</rationale>
+      <validation>Manual listening test. Switch presets 50 times, verify zero dropouts.</validation>
+    </constraint>
+  </technical-constraints>
+
+  <testing-strategy>
+    <unit-tests count="5">
+      <test>applyPreset() updates all 8 parameter states correctly</test>
+      <test>logPresetChange() emits correct event structure</test>
+      <test>activePresetId state persists to localStorage</test>
+      <test>Editable defaults save/load from localStorage correctly</test>
+      <test>Reset button restores factory preset values</test>
+    </unit-tests>
+    
+    <integration-tests count="3">
+      <test>Mode chip click → applyPreset() → audio graph updates</test>
+      <test>Keyboard navigation through mode chips works</test>
+      <test>Settings panel edit → refresh → preset loads customized values</test>
+    </integration-tests>
+    
+    <manual-tests count="7">
+      <test priority="critical">Smoke test: Click Focus → Calm → Energize, verify audio changes smoothly</test>
+      <test priority="high">Accessibility: Navigate mode chips with keyboard only (Tab + Arrow keys)</test>
+      <test priority="high">Screen reader: Verify mode change announcements (NVDA/VoiceOver)</test>
+      <test priority="high">Performance: Measure preset switch latency (&lt;100ms target)</test>
+      <test priority="medium">Persistence: Edit default preset, refresh page, verify loads customized</test>
+      <test priority="low">Edge case: Fill localStorage to quota, verify graceful error handling</test>
+      <test priority="high">Regression: Run Epic 1/2 smoke tests, verify no breakage</test>
+    </manual-tests>
+  </testing-strategy>
+
+  <definition-of-done>
+    <code-implementation>
+      <item>applyPreset() helper function implemented with all 8 parameter updates</item>
+      <item>activePresetId state hook added with localStorage persistence</item>
+      <item>Mode chips wired to applyPreset() with proper aria-selected/aria-current</item>
+      <item>logPresetChange() event logging implemented</item>
+      <item>Settings panel for editable defaults built (optional - can defer to Story 3-2)</item>
+      <item>All code follows Epic 2 patterns (try/finally, refs for cleanup, functional setState)</item>
+    </code-implementation>
+    
+    <testing>
+      <item>5 unit tests passing</item>
+      <item>3 integration tests passing</item>
+      <item>7 manual tests executed and documented</item>
+      <item>Performance targets validated (&lt;100ms latency)</item>
+      <item>Accessibility tests passing (keyboard nav, screen reader)</item>
+      <item>Epic 1/2 regression tests still passing (no breakage)</item>
+    </testing>
+    
+    <documentation>
+      <item>Code comments explain applyPreset() logic and parameter batching</item>
+      <item>Test results documented in test artifacts folder</item>
+      <item>localStorage schema for activePresetId and default-presets documented</item>
+    </documentation>
+    
+    <quality-gates>
+      <item>No console errors or warnings</item>
+      <item>No audio dropouts during preset switching (manual listening test)</item>
+      <item>No memory leaks (test 100 preset switches)</item>
+      <item>WCAG AA compliance (aria attributes, keyboard nav, focus indicators)</item>
+      <item>Mobile responsive (mode chips usable on 320px viewport)</item>
+    </quality-gates>
+  </definition-of-done>
+
+  <implementation-notes>
+    <architecture-alignment>
+      <note>Follows single-file React architecture - all code inline in index.html</note>
+      <note>Uses existing localStorage patterns from Epic 2 (skipBreathingRitual, darkMode)</note>
+      <note>Leverages existing audio parameter useEffects from Epic 1 - no new audio code needed</note>
+      <note>Telemetry events structured for Epic 4 IndexedDB integration (future)</note>
+    </architecture-alignment>
+    
+    <key-decisions>
+      <decision>Use activePresetId (string) instead of modeIndex (number) for better extensibility to custom presets in Story 3-3</decision>
+      <decision>Batch all 8 parameter updates in single applyPreset() call - React 18 auto-batches setState in event handlers</decision>
+      <decision>Store editable defaults in localStorage under 'default-presets' key - separate from MODE_LIBRARY constant</decision>
+      <decision>Log PRESET_CHANGED events to console now, wire to IndexedDB in Epic 4 - keeps stories decoupled</decision>
+    </key-decisions>
+    
+    <risks-and-mitigations>
+      <risk severity="high">
+        <issue>Preset switching causes audio dropouts</issue>
+        <probability>low</probability>
+        <impact>High - breaks core value proposition</impact>
+        <mitigation>Leverage existing useEffect hooks that already handle parameter updates smoothly (proven in Epic 1/2). Add regression test: switch presets 50 times, verify 0 dropouts.</mitigation>
+      </risk>
+      
+      <risk severity="medium">
+        <issue>localStorage quota exceeded when saving editable defaults</issue>
+        <probability>very-low</probability>
+        <impact>Medium - users lose ability to customize defaults</impact>
+        <mitigation>Wrap all localStorage writes in try/catch. Show error toast on quota exceeded. Preset data is small (~500 bytes), so quota unlikely unless browser heavily restricted.</mitigation>
+      </risk>
+      
+      <risk severity="low">
+        <issue>Performance degradation on low-end devices</issue>
+        <probability>low</probability>
+        <impact>Medium - sluggish UI on budget phones</impact>
+        <mitigation>Test on 5-year-old Android device. Use performance.measure() to identify bottlenecks. React 18 auto-batching should prevent excessive renders.</mitigation>
+      </risk>
+    </risks-and-mitigations>
+  </implementation-notes>
+
+  <success-metrics>
+    <metric name="preset-reuse-rate" target="≥80%">
+      <measurement>Percent of sessions using a preset (vs. manual parameter tweaking)</measurement>
+      <baseline>0% (no preset system exists)</baseline>
+      <target-post-story>20% (basic preset selection working - full reuse requires Story 3-3 auto-restore)</target-post-story>
+      <notes>Epic 4 session logs will track presetId field for analytics</notes>
+    </metric>
+    
+    <metric name="parameter-latency" target="less-than-100ms">
+      <measurement>performance.measure() on applyPreset() function</measurement>
+      <baseline>N/A (new feature)</baseline>
+      <target-post-story>50-80ms actual, less than 100ms perceived</target-post-story>
+      <notes>Existing Epic 1 useEffects already fast (~50ms). Story adds batching wrapper.</notes>
+    </metric>
+  </success-metrics>
+</story-context>

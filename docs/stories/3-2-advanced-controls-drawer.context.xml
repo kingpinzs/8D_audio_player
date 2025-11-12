@@ -1,0 +1,760 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-key>3-2-advanced-controls-drawer-live-binding</story-key>
+    <epic>E3</epic>
+    <story-id>3-2</story-id>
+    <title>Advanced Controls Drawer &amp; Live Binding</title>
+    <status>ready-for-dev</status>
+    <generated>2025-11-11</generated>
+    <depends-on>
+      <story>3-1-quick-mode-presets</story>
+      <reason>Needs activePresetId state and applyPreset() helper</reason>
+    </depends-on>
+  </metadata>
+
+  <user-story>
+    <as-a>audio tinkerer who wants deep control</as-a>
+    <i-want>sliders to adjust every audio parameter in real-time</i-want>
+    <so-that>I can experiment and discover my perfect focus state without fear of losing working configuration</so-that>
+  </user-story>
+
+  <acceptance-criteria>
+    <criterion id="AC1">
+      <title>Advanced Controls Drawer UI</title>
+      <description>Expandable drawer below mode chips with 8 controls (speed, intensity, spatial depth, movement pattern, binaural beats on/off, binaural frequency, noise type, noise volume). All controls have visible labels, accessible markup, and keyboard shortcut Ctrl+E to toggle.</description>
+      <sources>docs/stories/3-2-advanced-controls-drawer.md:18-44, index.html:743-753 (existing parameter state hooks)</sources>
+      <validation>
+        <test type="manual">Click toggle, verify drawer expands/collapses smoothly</test>
+        <test type="accessibility">Tab through all controls, verify labels announced</test>
+        <test type="keyboard">Press Ctrl+E, verify drawer toggles</test>
+      </validation>
+    </criterion>
+    
+    <criterion id="AC2">
+      <title>Live Parameter Binding (less than 100ms Latency)</title>
+      <description>Slider onChange events trigger state updates within 5ms, audio graph updates within 20ms (Web Audio API), total perceived latency less than 100ms. No audio dropouts or crackling. Existing Epic 1/2 useEffects handle audio updates automatically.</description>
+      <sources>docs/stories/3-2-advanced-controls-drawer.md:46-62, index.html:1240+ (existing useEffects for audio parameters)</sources>
+      <validation>
+        <test type="performance">Use performance.mark() to measure onChange → audio update latency</test>
+        <test type="manual">Adjust speed slider, observe analyzer canvas updates smoothly</test>
+        <test type="regression">Run Epic 1/2 audio tests, verify no new artifacts</test>
+      </validation>
+    </criterion>
+    
+    <criterion id="AC3">
+      <title>Parameter Value Persistence (Not Saved to Storage)</title>
+      <description>Adjusted values remain in current preset state but are NOT written to localStorage yet. User must explicitly click "Save Preset" (Story 3-3) to persist. Refreshing page resets to last saved preset.</description>
+      <sources>docs/stories/3-2-advanced-controls-drawer.md:64-76</sources>
+      <validation>
+        <test type="manual">Adjust speed, switch to Calm, switch back to Focus → verify Focus resets to default</test>
+        <test type="manual">Adjust speed, refresh page → verify reset to default</test>
+        <test type="integration">Only Story 3-3 "Save Preset" writes to localStorage</test>
+      </validation>
+    </criterion>
+    
+    <criterion id="AC4">
+      <title>Sensor Lock UI for Adaptive Mode (Epic 5 Integration)</title>
+      <description>When Epic 5 adaptive mode is enabled, all sliders disabled with lock icon (🔒) and message "Parameters locked by adaptive mode". "Unlock" button allows user to override. aria-live announcement for accessibility.</description>
+      <sources>docs/stories/3-2-advanced-controls-drawer.md:78-93</sources>
+      <validation>
+        <test type="manual">Mock setSensorLocked(true), verify sliders disabled</test>
+        <test type="accessibility">Screen reader announces lock state</test>
+        <test type="manual">Click "Unlock", verify controls re-enabled</test>
+      </validation>
+    </criterion>
+    
+    <criterion id="AC5">
+      <title>Helper Text &amp; Parameter Guidance</title>
+      <description>Tooltips or inline text provide parameter guidance. Binaural frequency slider shows band label (Delta/Theta/Alpha/Beta/Gamma). Movement pattern dropdown shows use case hints. Helps users understand parameter effects without reading docs.</description>
+      <sources>docs/stories/3-2-advanced-controls-drawer.md:95-107</sources>
+      <validation>
+        <test type="manual">Verify all tooltips/hints appear on hover/focus</test>
+        <test type="accessibility">Tooltips accessible via keyboard focus</test>
+      </validation>
+    </criterion>
+  </acceptance-criteria>
+
+  <implementation-guide>
+    <step id="1" priority="HIGH" estimate="60min">
+      <title>Build AdvancedControls Component Structure</title>
+      <description>Create AdvancedControls React component with details/summary element for drawer. Include all 8 controls with proper labels, ARIA attributes, and helper functions for binaural band names.</description>
+      <location>index.html (inline component after MODE_LIBRARY, before main App return)</location>
+      <code-example><![CDATA[
+const AdvancedControls = ({ 
+  // Parameter states (from existing Epic 1 hooks)
+  speed, setSpeed,
+  intensity, setIntensity,
+  spatialDepth, setSpatialDepth,
+  movementPattern, setMovementPattern,
+  binauralEnabled, setBinauralEnabled,
+  binauralFreq, setBinauralFreq,
+  noiseType, setNoiseType,
+  noiseVolume, setNoiseVolume,
+  // UI state
+  isExpanded, setIsExpanded,
+  sensorLocked, setSensorLocked,
+  setA11yAnnouncement
+}) => {
+  return (
+    <details 
+      open={isExpanded} 
+      onToggle={(e) => setIsExpanded(e.target.open)}
+      className="advanced-controls"
+    >
+      <summary>
+        ⚙️ Advanced Controls
+        <kbd>Ctrl+E</kbd>
+      </summary>
+      
+      <div className="controls-grid">
+        {/* Rotation Speed Slider */}
+        <label className="control-group">
+          <span className="control-label">Rotation Speed</span>
+          <div className="control-input">
+            <input 
+              type="range" 
+              min="0" 
+              max="1" 
+              step="0.05" 
+              value={speed} 
+              onChange={(e) => setSpeed(parseFloat(e.target.value))} 
+              disabled={sensorLocked}
+              aria-label="Rotation speed"
+            />
+            <output>{speed.toFixed(2)}</output>
+          </div>
+          <span className="control-hint">How fast sound orbits your head</span>
+        </label>
+        
+        {/* Repeat for all 8 parameters... */}
+        
+        {/* Binaural Frequency with band label */}
+        {binauralEnabled && (
+          <label className="control-group">
+            <span className="control-label">Binaural Frequency</span>
+            <div className="control-input">
+              <input 
+                type="range" 
+                min="0" 
+                max="40" 
+                step="1" 
+                value={binauralFreq} 
+                onChange={(e) => setBinauralFreq(parseInt(e.target.value))} 
+                disabled={sensorLocked}
+                aria-label="Binaural frequency"
+              />
+              <output>
+                {binauralFreq} Hz 
+                <span className="freq-band">({getBinauralBand(binauralFreq)})</span>
+              </output>
+            </div>
+            <span className="control-hint">{getBinauralHint(binauralFreq)}</span>
+          </label>
+        )}
+      </div>
+      
+      {/* Sensor Lock Notice */}
+      {sensorLocked && (
+        <div className="sensor-lock-notice" role="status" aria-live="polite">
+          <span className="lock-icon">🔒</span>
+          <span className="lock-message">Parameters locked by adaptive mode</span>
+          <button 
+            onClick={() => {
+              setSensorLocked(false);
+              setA11yAnnouncement('Adaptive mode disabled. Controls unlocked.');
+            }}
+            className="unlock-btn"
+          >
+            Unlock Manual Control
+          </button>
+        </div>
+      )}
+    </details>
+  );
+};
+
+// Helper: Get binaural frequency band name
+const getBinauralBand = (freq) => {
+  if (freq < 4) return 'Delta';
+  if (freq < 8) return 'Theta';
+  if (freq < 14) return 'Alpha';
+  if (freq < 30) return 'Beta';
+  return 'Gamma';
+};
+
+// Helper: Get binaural frequency hint
+const getBinauralHint = (freq) => {
+  if (freq < 4) return 'Deep sleep, healing';
+  if (freq < 8) return 'Deep relaxation, meditation';
+  if (freq < 14) return 'Calm focus, learning';
+  if (freq < 30) return 'Active focus, problem-solving';
+  return 'Peak alertness, high energy';
+};
+      ]]></code-example>
+      <notes>
+        - Use details/summary element for native expand/collapse behavior
+        - All parameter state hooks ALREADY EXIST from Epic 1 - just pass as props
+        - Existing useEffects listen to these states and update audio graph automatically
+        - No new audio code needed - live binding works out of the box
+      </notes>
+      <testing>
+        <test>Manual: Verify all 8 controls render correctly</test>
+        <test>Accessibility: Tab through controls, verify labels announced</test>
+        <test>Manual: Expand/collapse drawer works smoothly</test>
+      </testing>
+    </step>
+    
+    <step id="2" priority="MEDIUM" estimate="15min">
+      <title>Add Keyboard Shortcut (Ctrl+E)</title>
+      <description>Add global keyboard listener for Ctrl+E (or Cmd+E on Mac) to toggle drawer. Announce state change to screen readers.</description>
+      <location>index.html (useEffect after mount effect)</location>
+      <code-example><![CDATA[
+useEffect(() => {
+  const handleKeyDown = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+      e.preventDefault();
+      setIsAdvancedControlsExpanded(prev => !prev);
+      setA11yAnnouncement(
+        isAdvancedControlsExpanded 
+          ? 'Advanced controls collapsed' 
+          : 'Advanced controls expanded'
+      );
+    }
+  };
+  
+  window.addEventListener('keydown', handleKeyDown);
+  return () => window.removeEventListener('keydown', handleKeyDown);
+}, [isAdvancedControlsExpanded]);
+      ]]></code-example>
+      <notes>
+        - Use metaKey for Mac Cmd key
+        - Prevent default to avoid browser "Save Page" dialog
+        - Cleanup event listener on unmount (Epic 2 pattern)
+      </notes>
+      <testing>
+        <test>Manual: Press Ctrl+E, verify drawer toggles</test>
+        <test>Manual: Press Cmd+E on Mac, verify works</test>
+        <test>Accessibility: Screen reader announces state change</test>
+      </testing>
+    </step>
+    
+    <step id="3" priority="HIGH" estimate="20min">
+      <title>Wire Live Parameter Binding (Already Done!)</title>
+      <description>No new code needed! Simply pass existing parameter state/setter props to AdvancedControls component. Existing Epic 1/2 useEffects already listen to these states and update audio graph.</description>
+      <location>index.html (App component render, below mode selector)</location>
+      <code-example><![CDATA[
+{/* Mode Selector (existing) */}
+<div className="mode-tabs">...</div>
+
+{/* Advanced Controls Drawer (NEW) */}
+<AdvancedControls
+  speed={speed}
+  setSpeed={setSpeed}
+  intensity={intensity}
+  setIntensity={setIntensity}
+  spatialDepth={spatialDepth}
+  setSpatialDepth={setSpatialDepth}
+  movementPattern={movementPattern}
+  setMovementPattern={setMovementPattern}
+  binauralEnabled={binauralEnabled}
+  setBinauralEnabled={setBinauralEnabled}
+  binauralFreq={binauralFreq}
+  setBinauralFreq={setBinauralFreq}
+  noiseType={noiseType}
+  setNoiseType={setNoiseType}
+  noiseVolume={noiseVolume}
+  setNoiseVolume={setNoiseVolume}
+  isExpanded={isAdvancedControlsExpanded}
+  setIsExpanded={setIsAdvancedControlsExpanded}
+  sensorLocked={sensorLocked}
+  setSensorLocked={setSensorLocked}
+  setA11yAnnouncement={setA11yAnnouncement}
+/>
+      ]]></code-example>
+      <notes>
+        - Existing useEffects at lines 1240+ already handle audio graph updates
+        - React 18 auto-batches setState calls in onChange handlers
+        - No performance.mark() needed here - existing useEffects already fast
+        - Live binding "just works" with no additional code
+      </notes>
+      <testing>
+        <test>Integration: Adjust speed slider → verify audio graph speed changes</test>
+        <test>Performance: Measure onChange → audio update latency (should be less than 100ms)</test>
+        <test>Manual: Adjust all 8 parameters, verify audio reflects changes</test>
+      </testing>
+    </step>
+    
+    <step id="4" priority="LOW" estimate="10min">
+      <title>Add sensorLocked State for Epic 5</title>
+      <description>Add sensorLocked state hook with default false. Create helper functions for Epic 5 to call when adaptive mode activates. Expose API on window for future integration.</description>
+      <location>index.html (state hooks section)</location>
+      <code-example><![CDATA[
+const [sensorLocked, setSensorLocked] = useState(false);
+
+// Epic 5 will call these functions to control lock state
+const enableSensorMode = () => {
+  setSensorLocked(true);
+  setA11yAnnouncement('Adaptive mode enabled. Controls locked.');
+  showToast('Adaptive mode active', 'info');
+};
+
+const disableSensorMode = () => {
+  setSensorLocked(false);
+  setA11yAnnouncement('Adaptive mode disabled. Controls unlocked.');
+  showToast('Manual control restored', 'info');
+};
+
+// Expose for Epic 5 integration
+window.audioControlsAPI = {
+  enableSensorMode,
+  disableSensorMode
+};
+      ]]></code-example>
+      <notes>
+        - Default false (manual control enabled)
+        - Epic 5 will call window.audioControlsAPI.enableSensorMode() when sensors trigger
+        - Unlock button in UI calls setSensorLocked(false) directly
+      </notes>
+      <testing>
+        <test>Manual: Call window.audioControlsAPI.enableSensorMode() in console, verify sliders disabled</test>
+        <test>Manual: Click "Unlock" button, verify sliders re-enabled</test>
+        <test>Accessibility: Lock icon and message announced to screen readers</test>
+      </testing>
+    </step>
+    
+    <step id="5" priority="MEDIUM" estimate="45min">
+      <title>Style Advanced Controls with CSS</title>
+      <description>Add CSS for drawer, controls grid, sliders, sensor lock notice. Use CSS variables for theming (dark mode support). Responsive grid layout.</description>
+      <location>index.html (style section at top of file)</location>
+      <code-example><![CDATA[
+/* Advanced Controls Drawer */
+.advanced-controls {
+  background: var(--surface-1);
+  border: 2px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.advanced-controls summary {
+  font-weight: 600;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  list-style: none; /* Hide default arrow */
+}
+
+.advanced-controls summary::after {
+  content: '▼';
+  transition: transform 0.2s;
+}
+
+.advanced-controls[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.advanced-controls kbd {
+  font-size: 0.75rem;
+  background: var(--surface-2);
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+/* Controls Grid */
+.controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.control-label {
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.control-input {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.control-input input[type="range"] {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  appearance: none;
+  background: linear-gradient(to right, var(--accent-focus) 0%, var(--surface-3) 0%);
+}
+
+.control-input input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-focus);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.control-input input[type="range"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-input output {
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5rem;
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.freq-band {
+  font-size: 0.85rem;
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.control-hint {
+  font-size: 0.85rem;
+  color: var(--text-3);
+  font-style: italic;
+}
+
+/* Sensor Lock Notice */
+.sensor-lock-notice {
+  background: var(--warning-bg);
+  border: 2px solid var(--warning-border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.lock-icon {
+  font-size: 1.5rem;
+}
+
+.lock-message {
+  flex: 1;
+  font-weight: 500;
+  color: var(--warning-text);
+}
+
+.unlock-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  background: var(--surface-1);
+  border: 2px solid var(--border);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.unlock-btn:hover {
+  background: var(--accent-focus);
+  color: white;
+  border-color: var(--accent-focus);
+}
+
+/* Checkbox Styling */
+.checkbox-group {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .controls-grid {
+    grid-template-columns: 1fr;
+  }
+}
+      ]]></code-example>
+      <notes>
+        - Use existing CSS variables from Epic 1 theme
+        - Grid auto-fits to viewport (responsive)
+        - Dark mode support via CSS variables
+        - details/summary native browser styling overridden for consistency
+      </notes>
+      <testing>
+        <test>Manual: Verify drawer styling matches design system</test>
+        <test>Manual: Dark mode toggle, verify colors adapt</test>
+        <test>Responsive: Test on 320px, 768px, 1024px viewports</test>
+      </testing>
+    </step>
+    
+    <step id="6" priority="HIGH" estimate="30min">
+      <title>Performance Testing &amp; Latency Validation</title>
+      <description>Add performance.mark() measurements to validate less than 100ms latency target. Test on desktop and mobile. Load test with rapid slider adjustments.</description>
+      <location>index.html (optional wrapper around slider onChange handlers)</location>
+      <code-example><![CDATA[
+// Optional: Add to each slider onChange for detailed measurement
+const handleSpeedChange = (e) => {
+  performance.mark('param-change-start');
+  setSpeed(parseFloat(e.target.value));
+  
+  // Measure in useEffect after audio update
+  requestAnimationFrame(() => {
+    performance.mark('param-change-end');
+    const measure = performance.measure(
+      'param-latency', 
+      'param-change-start', 
+      'param-change-end'
+    );
+    if (measure.duration > 100) {
+      console.warn(`Slow parameter update: ${measure.duration.toFixed(2)}ms`);
+    }
+  });
+};
+      ]]></code-example>
+      <notes>
+        - Existing useEffects already fast (proven in Epic 1/2)
+        - This step is validation, not optimization
+        - React 18 batching should keep latency low
+        - Target: less than 100ms perceived, 50ms actual
+      </notes>
+      <testing>
+        <test>Performance: Measure all 8 parameter latencies (target less than 100ms)</test>
+        <test>Load test: Adjust sliders rapidly 50 times, check for stuttering</test>
+        <test>Low-end device: Test on 5-year-old Android phone</test>
+      </testing>
+    </step>
+  </implementation-guide>
+
+  <existing-code-context>
+    <file path="index.html">
+      <section name="Audio Parameter State Hooks" lines="743-753">
+        <description>All 8 audio parameter state hooks ALREADY EXIST from Epic 1. Simply pass these to AdvancedControls component.</description>
+        <code><![CDATA[
+const [speed, setSpeed] = useState(defaultMode.preset.speed);
+const [intensity, setIntensity] = useState(defaultMode.preset.intensity);
+const [spatialDepth, setSpatialDepth] = useState(defaultMode.preset.spatialDepth);
+const [movementPattern, setMovementPattern] = useState(defaultMode.preset.movement);
+const [binauralEnabled, setBinauralEnabled] = useState(defaultMode.preset.binaural.enabled);
+const [binauralFreq, setBinauralFreq] = useState(defaultMode.preset.binaural.freq);
+const [noiseType, setNoiseType] = useState(defaultMode.preset.noise.type);
+const [noiseVolume, setNoiseVolume] = useState(defaultMode.preset.noise.volume);
+        ]]></code>
+      </section>
+      
+      <section name="Audio Update useEffects" lines="1240+">
+        <description>Existing useEffects from Epic 1 listen to parameter state changes and update audio graph automatically. NO NEW AUDIO CODE NEEDED.</description>
+        <code><![CDATA[
+useEffect(() => {
+  if (rotationNodesRef.current) {
+    // Update rotation speed in audio graph
+  }
+}, [speed]);
+
+useEffect(() => {
+  if (gainChainRef.current) {
+    // Update intensity in audio graph
+  }
+}, [intensity]);
+
+// ... similar useEffects for all 8 parameters
+        ]]></code>
+        <notes>
+          - These useEffects already optimized for smooth updates
+          - No audio dropouts when parameters change
+          - Live binding works automatically when sliders call setState
+        </notes>
+      </section>
+      
+      <section name="Story 3-1 Additions" lines="761, 2087-2114">
+        <description>Story 3-1 added activePresetId state and applyPreset() helper. Story 3-2 doesn't need these directly, but they coexist peacefully.</description>
+        <code><![CDATA[
+const [activePresetId, setActivePresetId] = useState('focus');
+
+const applyPreset = (preset, presetId) => {
+  performance.mark('preset-apply-start');
+  // Batch all parameter updates
+  setSpeed(preset.speed);
+  setIntensity(preset.intensity);
+  // ... etc
+};
+        ]]></code>
+        <notes>
+          - AdvancedControls sliders can coexist with mode chip preset selection
+          - Adjusting slider doesn't change activePresetId (until Story 3-3 "Save Preset")
+          - Clicking mode chip will override slider adjustments (calls applyPreset())
+        </notes>
+      </section>
+    </file>
+  </existing-code-context>
+
+  <technical-constraints>
+    <constraint type="performance">
+      <requirement>Slider onChange → audio update latency less than 100ms perceived (target 50-80ms actual)</requirement>
+      <rationale>Users expect instant feedback when adjusting sliders. Delays greater than 100ms feel sluggish.</rationale>
+      <validation>Use performance.measure() to validate. Test on low-end Android device.</validation>
+    </constraint>
+    
+    <constraint type="architecture">
+      <requirement>Single-file React architecture (no build step, no modules)</requirement>
+      <rationale>Project uses React 18 UMD + Babel Standalone in browser. All code in index.html.</rationale>
+      <validation>Verify code runs in plain HTTP server without bundling.</validation>
+    </constraint>
+    
+    <constraint type="audio">
+      <requirement>No audio dropouts or crackling during parameter changes</requirement>
+      <rationale>Audio stability is core value proposition. Parameter changes must be seamless.</rationale>
+      <validation>Manual listening test. Adjust sliders 50 times, verify zero dropouts.</validation>
+    </constraint>
+    
+    <constraint type="accessibility">
+      <requirement>WCAG 2.1 AA compliance - keyboard navigation, screen reader support, focus indicators</requirement>
+      <rationale>App targets neurodivergent users who may rely on assistive technology.</rationale>
+      <validation>Test with NVDA/VoiceOver. Verify all sliders have labels, tooltips accessible.</validation>
+    </constraint>
+    
+    <constraint type="state-management">
+      <requirement>Parameter adjustments NOT saved to localStorage (yet)</requirement>
+      <rationale>Story 3-3 implements "Save Preset" button. Story 3-2 only adjusts in-memory state.</rationale>
+      <validation>Adjust slider, refresh page → verify resets to default. No localStorage writes.</validation>
+    </constraint>
+  </technical-constraints>
+
+  <testing-strategy>
+    <unit-tests count="3">
+      <test>getBinauralBand() returns correct band name for frequency ranges</test>
+      <test>getBinauralHint() returns helpful description for each band</test>
+      <test>Sensor lock state disables all controls when sensorLocked = true</test>
+    </unit-tests>
+    
+    <integration-tests count="4">
+      <test>Speed slider onChange → setSpeed called → audio graph updates</test>
+      <test>Keyboard shortcut Ctrl+E toggles drawer expansion</test>
+      <test>Binaural checkbox disables frequency slider when unchecked</test>
+      <test>Sensor lock notice appears when sensorLocked = true</test>
+    </integration-tests>
+    
+    <manual-tests count="8">
+      <test priority="critical">Smoke test: Open drawer, adjust all 8 parameters, verify audio changes</test>
+      <test priority="high">Accessibility: Tab through all controls with keyboard only</test>
+      <test priority="high">Screen reader: Verify labels, values, hints announced correctly</test>
+      <test priority="high">Performance: Measure slider onChange latency (less than 100ms target)</test>
+      <test priority="medium">Responsive: Test on mobile (320px), tablet (768px), desktop (1024px+)</test>
+      <test priority="medium">Dark mode: Toggle dark mode, verify colors adapt correctly</test>
+      <test priority="low">Sensor lock: Mock setSensorLocked(true), verify controls disabled</test>
+      <test priority="high">Regression: Run Epic 1/2 smoke tests, verify no breakage</test>
+    </manual-tests>
+  </testing-strategy>
+
+  <definition-of-done>
+    <code-implementation>
+      <item>AdvancedControls component built with all 8 controls</item>
+      <item>Keyboard shortcut Ctrl+E implemented</item>
+      <item>Live parameter binding working (existing useEffects handle audio)</item>
+      <item>Sensor lock UI implemented with unlock button</item>
+      <item>Helper text and frequency band labels added</item>
+      <item>CSS styling complete with responsive grid</item>
+      <item>sensorLocked state hook added for Epic 5 integration</item>
+    </code-implementation>
+    
+    <testing>
+      <item>3 unit tests passing</item>
+      <item>4 integration tests passing</item>
+      <item>8 manual tests executed and documented</item>
+      <item>Performance targets validated (less than 100ms latency)</item>
+      <item>Accessibility tests passing (keyboard, screen reader)</item>
+      <item>Epic 1/2 regression tests still passing</item>
+    </testing>
+    
+    <documentation>
+      <item>Code comments explain component structure</item>
+      <item>Performance measurements documented</item>
+      <item>Accessibility compliance verified (WCAG AA)</item>
+      <item>Technical context file complete (this file)</item>
+    </documentation>
+    
+    <quality-gates>
+      <item>No console errors or warnings</item>
+      <item>No audio dropouts during parameter adjustments</item>
+      <item>Sliders usable on touch devices (48px tap target)</item>
+      <item>Drawer expand/collapse smooth animation</item>
+      <item>Dark mode fully supported</item>
+      <item>No localStorage writes (validated - only Story 3-3 saves)</item>
+    </quality-gates>
+  </definition-of-done>
+
+  <success-metrics>
+    <metric name="parameter-latency" target="less-than-100ms">
+      <measurement>performance.measure() on each slider onChange</measurement>
+      <baseline>N/A (new feature)</baseline>
+      <target-post-story>50-100ms actual, less than 100ms perceived</target-post-story>
+    </metric>
+    
+    <metric name="advanced-user-engagement" target="60-percent">
+      <measurement>Epic 4 session logs track advanced control usage</measurement>
+      <baseline>0% (no controls exist)</baseline>
+      <target-post-epic-3>60%+ of users who save custom presets engage with sliders</target-post-epic-3>
+    </metric>
+  </success-metrics>
+
+  <risks-and-mitigations>
+    <risk severity="medium">
+      <issue>Slider adjustments cause audio dropouts on low-end devices</issue>
+      <probability>low</probability>
+      <impact>Medium - degrades UX on budget phones</impact>
+      <mitigation>Existing useEffects already optimized in Epic 1/2. Test on 5-year-old Android device early. Use performance.measure() to identify bottlenecks. React 18 batching should prevent excessive renders.</mitigation>
+    </risk>
+    
+    <risk severity="low">
+      <issue>Ctrl+E conflicts with browser "Save Page" shortcut</issue>
+      <probability>very-low</probability>
+      <impact>Low - users can still click toggle</impact>
+      <mitigation>Call e.preventDefault() in keyboard handler. Document Ctrl+E in UI with kbd element. Fallback: click toggle button.</mitigation>
+    </risk>
+    
+    <risk severity="low">
+      <issue>Too many sliders overwhelming for casual users</issue>
+      <probability>medium</probability>
+      <impact>Low - advanced controls are opt-in (collapsed by default)</impact>
+      <mitigation>Drawer collapsed by default. Mode chips (Story 3-1) serve casual users. Advanced controls target "audio tinkerers" persona. Helper text guides experimentation.</mitigation>
+    </risk>
+  </risks-and-mitigations>
+
+  <implementation-notes>
+    <note type="key-insight">
+      <title>Live Binding Works Automatically</title>
+      <description>Epic 1 already has useEffects watching all 8 parameter states. Simply passing existing state/setters to AdvancedControls component enables live binding with ZERO new audio code. This is the power of React's declarative model.</description>
+    </note>
+    
+    <note type="architecture">
+      <title>No localStorage Writes Yet</title>
+      <description>Story 3-2 only adjusts in-memory state. Story 3-3 will add "Save Preset" button that writes to localStorage. This separation keeps stories focused and testable.</description>
+    </note>
+    
+    <note type="future-proofing">
+      <title>Sensor Lock for Epic 5</title>
+      <description>sensorLocked state hook and API prepare for Epic 5 adaptive mode. When heart rate sensors detect stress, Epic 5 will call window.audioControlsAPI.enableSensorMode() to lock sliders and auto-adjust parameters.</description>
+    </note>
+    
+    <note type="accessibility">
+      <title>Keyboard-First Design</title>
+      <description>Ctrl+E shortcut, roving tabindex on sliders, tooltips accessible via focus. All controls usable without mouse, following WCAG 2.1 AA keyboard navigation requirements.</description>
+    </note>
+  </implementation-notes>
+</story-context>

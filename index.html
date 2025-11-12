@@ -728,6 +728,221 @@
             'audio/x-wav'      // .wav (legacy)
         ];
 
+        // Helper: Get binaural frequency band name
+        const getBinauralBand = (freq) => {
+            if (freq < 4) return 'Delta';
+            if (freq < 8) return 'Theta';
+            if (freq < 14) return 'Alpha';
+            if (freq < 30) return 'Beta';
+            return 'Gamma';
+        };
+
+        // Helper: Get binaural frequency hint
+        const getBinauralHint = (freq) => {
+            if (freq < 4) return 'Deep sleep, healing';
+            if (freq < 8) return 'Deep relaxation, meditation';
+            if (freq < 14) return 'Calm focus, learning';
+            if (freq < 30) return 'Active focus, problem-solving';
+            return 'Peak alertness, high energy';
+        };
+
+        // Advanced Controls Component (Story 3-2)
+        const AdvancedControls = ({ 
+            // Parameter states (from existing Epic 1 hooks)
+            speed, setSpeed,
+            intensity, setIntensity,
+            spatialDepth, setSpatialDepth,
+            movementPattern, setMovementPattern,
+            binauralEnabled, setBinauralEnabled,
+            binauralFreq, setBinauralFreq,
+            noiseType, setNoiseType,
+            noiseVolume, setNoiseVolume,
+            // UI state
+            isExpanded, setIsExpanded,
+            sensorLocked, setSensorLocked,
+            setA11yAnnouncement
+        }) => {
+            return (
+                <details 
+                    open={isExpanded} 
+                    onToggle={(e) => setIsExpanded(e.target.open)}
+                    className="advanced-controls"
+                >
+                    <summary>
+                        ⚙️ Advanced Controls
+                        <kbd>Ctrl+E</kbd>
+                    </summary>
+                    
+                    <div className="controls-grid">
+                        {/* Rotation Speed Slider */}
+                        <label className="control-group">
+                            <span className="control-label">Rotation Speed</span>
+                            <div className="control-input">
+                                <input 
+                                    type="range" 
+                                    min="0" 
+                                    max="1" 
+                                    step="0.05" 
+                                    value={speed} 
+                                    onChange={(e) => setSpeed(parseFloat(e.target.value))} 
+                                    disabled={sensorLocked}
+                                    aria-label="Rotation speed"
+                                />
+                                <output>{speed.toFixed(2)}</output>
+                            </div>
+                            <span className="control-hint">How fast sound orbits your head</span>
+                        </label>
+                        
+                        {/* Intensity Slider */}
+                        <label className="control-group">
+                            <span className="control-label">Intensity</span>
+                            <div className="control-input">
+                                <input 
+                                    type="range" 
+                                    min="0" 
+                                    max="1" 
+                                    step="0.05" 
+                                    value={intensity} 
+                                    onChange={(e) => setIntensity(parseFloat(e.target.value))} 
+                                    disabled={sensorLocked}
+                                    aria-label="Intensity"
+                                />
+                                <output>{intensity.toFixed(2)}</output>
+                            </div>
+                            <span className="control-hint">Strength of 8D effect</span>
+                        </label>
+                        
+                        {/* Spatial Depth Slider */}
+                        <label className="control-group">
+                            <span className="control-label">Spatial Depth</span>
+                            <div className="control-input">
+                                <input 
+                                    type="range" 
+                                    min="0" 
+                                    max="1" 
+                                    step="0.05" 
+                                    value={spatialDepth} 
+                                    onChange={(e) => setSpatialDepth(parseFloat(e.target.value))} 
+                                    disabled={sensorLocked}
+                                    aria-label="Spatial depth"
+                                />
+                                <output>{spatialDepth.toFixed(2)}</output>
+                            </div>
+                            <span className="control-hint">Front/back positioning</span>
+                        </label>
+                        
+                        {/* Movement Pattern Dropdown */}
+                        <label className="control-group">
+                            <span className="control-label">Movement Pattern</span>
+                            <div className="control-input">
+                                <select 
+                                    value={movementPattern} 
+                                    onChange={(e) => setMovementPattern(e.target.value)}
+                                    disabled={sensorLocked}
+                                    aria-label="Movement pattern"
+                                >
+                                    <option value="circle">Circle - Steady orbit</option>
+                                    <option value="figure8">Figure-8 - Gentle sway</option>
+                                    <option value="random">Random - Unpredictable</option>
+                                </select>
+                            </div>
+                            <span className="control-hint">Path sound travels around you</span>
+                        </label>
+                        
+                        {/* Binaural Beats Checkbox */}
+                        <label className="control-group checkbox-group">
+                            <input 
+                                type="checkbox" 
+                                checked={binauralEnabled} 
+                                onChange={(e) => setBinauralEnabled(e.target.checked)}
+                                disabled={sensorLocked}
+                                aria-label="Enable binaural beats"
+                            />
+                            <span className="control-label">Binaural Beats</span>
+                        </label>
+                        
+                        {/* Binaural Frequency Slider (conditional) */}
+                        {binauralEnabled && (
+                            <label className="control-group">
+                                <span className="control-label">Binaural Frequency</span>
+                                <div className="control-input">
+                                    <input 
+                                        type="range" 
+                                        min="0" 
+                                        max="40" 
+                                        step="1" 
+                                        value={binauralFreq} 
+                                        onChange={(e) => setBinauralFreq(parseInt(e.target.value))} 
+                                        disabled={sensorLocked}
+                                        aria-label="Binaural frequency"
+                                    />
+                                    <output>
+                                        {binauralFreq} Hz 
+                                        <span className="freq-band">({getBinauralBand(binauralFreq)})</span>
+                                    </output>
+                                </div>
+                                <span className="control-hint">{getBinauralHint(binauralFreq)}</span>
+                            </label>
+                        )}
+                        
+                        {/* Noise Type Dropdown */}
+                        <label className="control-group">
+                            <span className="control-label">Noise Type</span>
+                            <div className="control-input">
+                                <select 
+                                    value={noiseType} 
+                                    onChange={(e) => setNoiseType(e.target.value)}
+                                    disabled={sensorLocked}
+                                    aria-label="Noise type"
+                                >
+                                    <option value="pink">Pink - Balanced warmth</option>
+                                    <option value="white">White - Crisp static</option>
+                                    <option value="brown">Brown - Deep rumble</option>
+                                </select>
+                            </div>
+                            <span className="control-hint">Background noise texture</span>
+                        </label>
+                        
+                        {/* Noise Volume Slider */}
+                        <label className="control-group">
+                            <span className="control-label">Noise Volume</span>
+                            <div className="control-input">
+                                <input 
+                                    type="range" 
+                                    min="0" 
+                                    max="0.3" 
+                                    step="0.01" 
+                                    value={noiseVolume} 
+                                    onChange={(e) => setNoiseVolume(parseFloat(e.target.value))} 
+                                    disabled={sensorLocked}
+                                    aria-label="Noise volume"
+                                />
+                                <output>{noiseVolume.toFixed(2)}</output>
+                            </div>
+                            <span className="control-hint">Loudness of background noise</span>
+                        </label>
+                    </div>
+                    
+                    {/* Sensor Lock Notice */}
+                    {sensorLocked && (
+                        <div className="sensor-lock-notice" role="status" aria-live="polite">
+                            <span className="lock-icon">🔒</span>
+                            <span className="lock-message">Parameters locked by adaptive mode</span>
+                            <button 
+                                onClick={() => {
+                                    setSensorLocked(false);
+                                    setA11yAnnouncement('Adaptive mode disabled. Controls unlocked.');
+                                }}
+                                className="unlock-btn"
+                            >
+                                Unlock Manual Control
+                            </button>
+                        </div>
+                    )}
+                </details>
+            );
+        };
+
 function App() {
             const defaultMode = MODE_LIBRARY[0];
             const [playlist, setPlaylist] = useState([]);
@@ -758,6 +973,7 @@ function App() {
             const [showVisualizer, setShowVisualizer] = useState(true);
             const [modeIndex, setModeIndex] = useState(0);
             const [focusedModeIndex, setFocusedModeIndex] = useState(0);
+            const [activePresetId, setActivePresetId] = useState('focus'); // Story 3-1: Track active preset by ID
             const [ritualStatus, setRitualStatus] = useState('idle');
             const [ritualCountdown, setRitualCountdown] = useState(HERO_BREATH_DURATION);
             const [breathingPhase, setBreathingPhase] = useState(''); // 'inhale', 'hold-in', 'exhale', 'hold-out'
@@ -776,6 +992,10 @@ function App() {
             const [reducedMotion, setReducedMotion] = useState(false);
             const [dragActive, setDragActive] = useState(false);
             const [audioElementToken, setAudioElementToken] = useState(0);
+            
+            // Story 3-2: Advanced Controls UI state
+            const [isAdvancedControlsExpanded, setIsAdvancedControlsExpanded] = useState(false);
+            const [sensorLocked, setSensorLocked] = useState(false); // Epic 5 adaptive mode
             
             // File intake notifications
             const [toastMessage, setToastMessage] = useState('');
@@ -815,6 +1035,8 @@ function App() {
             const currentTrackIndexRef = useRef(currentTrackIndex);
             const playNextRef = useRef(() => {});
             const prevPlaylistLengthRef = useRef(playlist.length);
+            const urlValidationControllerRef = useRef(null);
+            const toastTimeoutRef = useRef(null);
 
             const cleanupBlobUrl = () => {
                 if (currentBlobUrlRef.current) {
@@ -971,6 +1193,13 @@ function App() {
                     setReducedMotion(true);
                 }
 
+                // Story 3-1: Load saved active preset with validation
+                const savedActivePreset = localStorage.getItem('activePresetId');
+                if (savedActivePreset) {
+                    const presetExists = MODE_LIBRARY.some(m => m.id === savedActivePreset);
+                    setActivePresetId(presetExists ? savedActivePreset : 'focus');
+                }
+
                 const savedPlaylist = localStorage.getItem('playlist');
                 if (savedPlaylist) {
                     try {
@@ -998,6 +1227,48 @@ function App() {
                     clearRitualTimers();
                 };
             }, []);
+
+            // Cleanup URL validation on unmount
+            useEffect(() => {
+                // Initialize controller ref
+                urlValidationControllerRef.current = {};
+                
+                return () => {
+                    // Mark component as unmounted to prevent setState after unmount
+                    urlValidationControllerRef.current = null;
+                    
+                    // Clear any pending toast timeout
+                    if (toastTimeoutRef.current) {
+                        clearTimeout(toastTimeoutRef.current);
+                        toastTimeoutRef.current = null;
+                    }
+                };
+            }, []);
+
+            // Story 3-1: Persist active preset selection
+            useEffect(() => {
+                try {
+                    localStorage.setItem('activePresetId', activePresetId);
+                } catch (err) {
+                    console.error('Failed to persist activePresetId:', err);
+                }
+            }, [activePresetId]);
+
+            // Story 3-1: Apply preset parameters when activePresetId changes
+            useEffect(() => {
+                const preset = MODE_LIBRARY.find(m => m.id === activePresetId);
+                if (preset) {
+                    setSpeed(preset.preset.speed);
+                    setIntensity(preset.preset.intensity);
+                    setSpatialDepth(preset.preset.spatialDepth);
+                    setMovementPattern(preset.preset.movement);
+                    setBinauralEnabled(preset.preset.binaural.enabled);
+                    setBinauralFreq(preset.preset.binaural.freq);
+                    setNoiseType(preset.preset.noise.type);
+                    setNoiseVolume(preset.preset.noise.volume);
+                    setVisualWaveGain(preset.preset.noise.volume);
+                }
+            }, [activePresetId]);
 
             useEffect(() => {
                 const serialized = playlist
@@ -1062,6 +1333,24 @@ function App() {
                     return () => clearTimeout(timer);
                 }
             }, [a11yAnnouncement]);
+
+            // Story 3-2: Keyboard shortcut (Ctrl+E) to toggle advanced controls
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+                        e.preventDefault();
+                        setIsAdvancedControlsExpanded(prev => !prev);
+                        setA11yAnnouncement(
+                            isAdvancedControlsExpanded 
+                                ? 'Advanced controls collapsed' 
+                                : 'Advanced controls expanded'
+                        );
+                    }
+                };
+                
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [isAdvancedControlsExpanded]);
 
             useEffect(() => {
                 const audio = audioElementRef.current;
@@ -1132,20 +1421,51 @@ function App() {
                 return normalized;
             };
 
+            // Story 3-1: Log preset changes for Epic 4 session tracking
+            const logPresetChange = (newPresetId) => {
+                const event = {
+                    event: 'PRESET_CHANGED',
+                    presetId: newPresetId,
+                    previousPresetId: activePresetId,
+                    timestamp: Date.now(),
+                    trackId: currentTrackIndex !== null ? playlist[currentTrackIndex].id : null
+                };
+                console.log('[SessionLogger]', event);
+                // E4 integration point - future: dispatch to IndexedDB logger
+                // window.dispatchEvent(new CustomEvent('preset-changed', { detail: event }));
+            };
+
+            // Story 3-2: Epic 5 API for adaptive mode (sensor lock)
+            const enableSensorMode = () => {
+                setSensorLocked(true);
+                setA11yAnnouncement('Adaptive mode enabled. Controls locked.');
+                showToast('Adaptive mode active', 'info');
+            };
+
+            const disableSensorMode = () => {
+                setSensorLocked(false);
+                setA11yAnnouncement('Adaptive mode disabled. Controls unlocked.');
+                showToast('Manual control restored', 'info');
+            };
+
+            // Expose API for Epic 5 integration
+            useEffect(() => {
+                window.audioControlsAPI = {
+                    enableSensorMode,
+                    disableSensorMode
+                };
+                return () => {
+                    delete window.audioControlsAPI;
+                };
+            }, []);
+
             const setActiveMode = (index) => {
                 const normalized = focusModeChip(index);
                 const mode = MODE_LIBRARY[normalized];
                 setModeIndex(normalized);
+                applyPreset(mode.preset, mode.id);
                 setHeroMessage(`${mode.label} preset queued. Press Start to begin.`);
-                setSpeed(mode.preset.speed);
-                setIntensity(mode.preset.intensity);
-                setSpatialDepth(mode.preset.spatialDepth);
-                setMovementPattern(mode.preset.movement);
-                setBinauralEnabled(mode.preset.binaural.enabled);
-                setBinauralFreq(mode.preset.binaural.freq);
-                setNoiseType(mode.preset.noise.type);
-                setNoiseVolume(mode.preset.noise.volume);
-                setVisualWaveGain(mode.preset.noise.volume);
+                setA11yAnnouncement(`${mode.label} mode selected`);
             };
 
             const handleModeKeyDown = (event, index) => {
@@ -1427,87 +1747,95 @@ function App() {
 
             // Toast notification helper
             const showToast = (message, type = 'info') => {
+                // Clear any existing timeout
+                if (toastTimeoutRef.current) {
+                    clearTimeout(toastTimeoutRef.current);
+                }
+                
                 setToastMessage(message);
                 setToastType(type);
                 
                 // Auto-dismiss after 5 seconds
-                setTimeout(() => {
+                toastTimeoutRef.current = setTimeout(() => {
                     setToastMessage('');
+                    toastTimeoutRef.current = null;
                 }, 5000);
             };
 
             const addLocalFiles = (files) => {
                 const fileArray = Array.from(files);
                 
-                // Show progress indicator for large batches
-                if (fileArray.length > 5) {
-                    setIsProcessingFiles(true);
-                    setHeroMessage(`Adding ${fileArray.length} tracks...`);
-                }
-                
-                // Validate and filter files
-                const validFiles = [];
-                const rejectedFiles = [];
-                
-                fileArray.forEach(file => {
-                    const validation = validateFile(file);
-                    if (validation.valid) {
-                        validFiles.push(file);
-                    } else {
-                        rejectedFiles.push({ 
-                            name: file.name, 
-                            reason: validation.reason 
-                        });
+                try {
+                    // Show progress indicator for large batches
+                    if (fileArray.length > 5) {
+                        setIsProcessingFiles(true);
+                        setHeroMessage(`Adding ${fileArray.length} tracks...`);
                     }
-                });
-                
-                // Create playlist tracks from valid files
-                const newTracks = validFiles.map((file, index) => {
-                    // Remove any audio extension, not just .mp3
-                    const baseName = file.name.replace(/\.(mp3|wav|ogg)$/i, '');
-                    return {
-                        id: Date.now() + index,
-                        name: baseName,
-                        source: 'local',
-                        file: file,
-                        url: null,
-                        metadata: {
-                            size: file.size,
-                            type: file.type,
-                            lastModified: file.lastModified
+                    
+                    // Validate and filter files
+                    const validFiles = [];
+                    const rejectedFiles = [];
+                    
+                    fileArray.forEach(file => {
+                        const validation = validateFile(file);
+                        if (validation.valid) {
+                            validFiles.push(file);
+                        } else {
+                            rejectedFiles.push({ 
+                                name: file.name, 
+                                reason: validation.reason 
+                            });
                         }
-                    };
-                });
-                
-                // Update playlist
-                if (newTracks.length > 0) {
-                    setPlaylist(prev => [...prev, ...newTracks]);
-                    setNeedsAudio(false);
+                    });
                     
-                    const trackWord = newTracks.length === 1 ? 'track' : 'tracks';
-                    setHeroMessage(`Added ${newTracks.length} ${trackWord}. Pick a ritual and press Start.`);
-                    setA11yAnnouncement(`${newTracks.length} ${trackWord} added to playlist`);
-                }
-                
-                // Show rejection toast if needed
-                if (rejectedFiles.length > 0) {
-                    const emptyCount = rejectedFiles.filter(f => f.reason === 'empty').length;
-                    const unsupportedCount = rejectedFiles.filter(f => f.reason === 'unsupported').length;
+                    // Create playlist tracks from valid files
+                    const newTracks = validFiles.map((file, index) => {
+                        // Remove any audio extension, not just .mp3
+                        const baseName = file.name.replace(/\.(mp3|wav|ogg)$/i, '');
+                        return {
+                            id: Date.now() + index,
+                            name: baseName,
+                            source: 'local',
+                            file: file,
+                            url: null,
+                            metadata: {
+                                size: file.size,
+                                type: file.type,
+                                lastModified: file.lastModified
+                            }
+                        };
+                    });
                     
-                    let message = '';
-                    if (emptyCount > 0) {
-                        message += `${emptyCount} empty file${emptyCount > 1 ? 's' : ''} rejected. `;
+                    // Update playlist
+                    if (newTracks.length > 0) {
+                        setPlaylist(prev => [...prev, ...newTracks]);
+                        setNeedsAudio(false);
+                        
+                        const trackWord = newTracks.length === 1 ? 'track' : 'tracks';
+                        setHeroMessage(`Added ${newTracks.length} ${trackWord}. Pick a ritual and press Start.`);
+                        setA11yAnnouncement(`${newTracks.length} ${trackWord} added to playlist`);
                     }
-                    if (unsupportedCount > 0) {
-                        message += `${unsupportedCount} unsupported file${unsupportedCount > 1 ? 's' : ''} rejected. Use MP3, WAV, or OGG.`;
-                    }
                     
-                    showToast(message, 'warning');
-                    setA11yAnnouncement(message);
+                    // Show rejection toast if needed
+                    if (rejectedFiles.length > 0) {
+                        const emptyCount = rejectedFiles.filter(f => f.reason === 'empty').length;
+                        const unsupportedCount = rejectedFiles.filter(f => f.reason === 'unsupported').length;
+                        
+                        let message = '';
+                        if (emptyCount > 0) {
+                            message += `${emptyCount} empty file${emptyCount > 1 ? 's' : ''} rejected. `;
+                        }
+                        if (unsupportedCount > 0) {
+                            message += `${unsupportedCount} unsupported file${unsupportedCount > 1 ? 's' : ''} rejected. Use MP3, WAV, or OGG.`;
+                        }
+                        
+                        showToast(message, 'warning');
+                        setA11yAnnouncement(message);
+                    }
+                } finally {
+                    // Always hide progress indicator, even if errors occur
+                    setIsProcessingFiles(false);
                 }
-                
-                // Hide progress indicator
-                setIsProcessingFiles(false);
             };
 
             const handleDrop = (e) => {
@@ -1627,48 +1955,61 @@ function App() {
                 setIsValidatingUrl(true);
                 setHeroMessage('Validating stream URL...');
                 
-                // 4. HEAD request validation
-                const validation = await validateStreamUrl(url);
-                
-                setIsValidatingUrl(false);
-                
-                if (!validation.valid) {
-                    let message = '';
+                // 4. HEAD request validation with cleanup tracking
+                try {
+                    const validation = await validateStreamUrl(url);
                     
-                    switch (validation.reason) {
-                        case 'cors':
-                            message = 'Stream blocked by CORS. Use direct MP3 link or enable server CORS.';
-                            break;
-                        case 'timeout':
-                            message = 'Request timeout (5s). Server unreachable or slow.';
-                            break;
-                        case 'unreachable':
-                            message = `Stream unreachable (${validation.status}). Check URL and try again.`;
-                            break;
-                        default:
-                            message = 'Unable to validate stream. Check URL.';
+                    // Check if component still mounted
+                    if (!urlValidationControllerRef.current) {
+                        return; // Component unmounted during validation
                     }
                     
-                    showToast(message, 'error');
-                    setA11yAnnouncement(message);
-                    setHeroMessage('Stream validation failed. Try another URL.');
-                    return;
+                    setIsValidatingUrl(false);
+                    
+                    if (!validation.valid) {
+                        let message = '';
+                        
+                        switch (validation.reason) {
+                            case 'cors':
+                                message = 'Stream blocked by CORS. Use direct MP3 link or enable server CORS.';
+                                break;
+                            case 'timeout':
+                                message = 'Request timeout (5s). Server unreachable or slow.';
+                                break;
+                            case 'unreachable':
+                                message = `Stream unreachable (${validation.status}). Check URL and try again.`;
+                                break;
+                            default:
+                                message = 'Unable to validate stream. Check URL.';
+                        }
+                        
+                        showToast(message, 'error');
+                        setA11yAnnouncement(message);
+                        setHeroMessage('Stream validation failed. Try another URL.');
+                        return;
+                    }
+                    
+                    // 5. Add validated URL to playlist
+                    const newTrack = {
+                        id: Date.now(),
+                        name: 'Remote Track',
+                        source: 'url',
+                        url: url,
+                        originalUrl: url
+                    };
+                    
+                    setPlaylist(prev => [...prev, newTrack]);
+                    setUrlInput('');
+                    setNeedsAudio(false);
+                    setHeroMessage('Stream validated and added. Start your ritual to hear it.');
+                    setA11yAnnouncement('Stream added to playlist');
+                } catch (err) {
+                    // Handle unexpected errors
+                    if (urlValidationControllerRef.current) {
+                        setIsValidatingUrl(false);
+                        showToast('Validation error. Please try again.', 'error');
+                    }
                 }
-                
-                // 5. Add validated URL to playlist
-                const newTrack = {
-                    id: Date.now(),
-                    name: 'Remote Track',
-                    source: 'url',
-                    url: url,
-                    originalUrl: url
-                };
-                
-                setPlaylist(prev => [...prev, newTrack]);
-                setUrlInput('');
-                setNeedsAudio(false);
-                setHeroMessage('Stream validated and added. Start your ritual to hear it.');
-                setA11yAnnouncement('Stream added to playlist');
             };
 
             const playTrack = (index) => {
@@ -2004,32 +2345,32 @@ function App() {
                 }
             };
 
-            const applyPreset = (preset) => {
-                switch(preset) {
-                    case 'focus':
-                        setSpeed(0.4);
-                        setIntensity(0.7);
-                        setSpatialDepth(0.5);
-                        setBinauralEnabled(true);
-                        setBinauralFreq(14);
-                        break;
-                    case 'energy':
-                        setSpeed(1.0);
-                        setIntensity(0.9);
-                        setSpatialDepth(0.8);
-                        setBinauralEnabled(true);
-                        setBinauralFreq(40);
-                        break;
-                    case 'relax':
-                        setSpeed(0.3);
-                        setIntensity(0.6);
-                        setSpatialDepth(0.4);
-                        setBinauralEnabled(true);
-                        setBinauralFreq(8);
-                        break;
-                }
+            // Story 3-1: Apply preset configuration to all audio parameters
+            const applyPreset = (preset, presetId) => {
+                performance.mark('preset-apply-start');
                 
-                // Restart rotation with new settings
+                // Batch all parameter updates (React 18 auto-batches in event handlers)
+                setSpeed(preset.speed);
+                setIntensity(preset.intensity);
+                setSpatialDepth(preset.spatialDepth);
+                setMovementPattern(preset.movement);
+                setBinauralEnabled(preset.binaural.enabled);
+                setBinauralFreq(preset.binaural.freq);
+                setNoiseType(preset.noise.type);
+                setNoiseVolume(preset.noise.volume);
+                setVisualWaveGain(preset.noise.volume);
+                
+                // Update active preset tracking
+                setActivePresetId(presetId);
+                
+                // Log preset change event
+                logPresetChange(presetId);
+                
+                performance.mark('preset-apply-end');
+                const measure = performance.measure('preset-apply', 'preset-apply-start', 'preset-apply-end');
+                console.log(`[Performance] Preset applied in ${measure.duration.toFixed(2)}ms`);
+                
+                // Restart rotation with new settings if playing
                 if (isPlaying) {
                     startRotation();
                 }
@@ -2263,10 +2604,11 @@ return (
                                         key={mode.id}
                                         id={`mode-tab-${mode.id}`}
                                         role="tab"
-                                        aria-selected={modeIndex === index}
+                                        aria-selected={activePresetId === mode.id}
+                                        aria-current={activePresetId === mode.id ? 'step' : undefined}
                                         tabIndex={focusedModeIndex === index ? 0 : -1}
                                         ref={(el) => (modeRefs.current[index] = el)}
-                                        data-selected={modeIndex === index}
+                                        data-selected={activePresetId === mode.id}
                                         className="mode-chip"
                                         style={{ '--chip-accent': mode.accent }}
                                         onClick={() => setActiveMode(index)}
@@ -2512,7 +2854,7 @@ return (
                                             id="file-picker"
                                             ref={fileInputRef}
                                             type="file"
-                                            accept="audio/mpeg,.mp3"
+                                            accept="audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg"
                                             multiple
                                             className="sr-only"
                                             aria-label="Browse audio files"

@@ -1,0 +1,1343 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<epic-context>
+  <metadata>
+    <epic-id>epic-3</epic-id>
+    <epic-name>Preset &amp; Mode Orchestration</epic-name>
+    <generated-date>2024-11-11</generated-date>
+    <status>contexted</status>
+    <priority>high</priority>
+    <dependencies>
+      <dependency>epic-1</dependency>
+      <dependency>epic-2</dependency>
+    </dependencies>
+  </metadata>
+
+  <problem-statement>
+    <overview>
+      Users want two-tap access to proven sound configurations while retaining deep control over audio parameters. The current MODE_LIBRARY provides three hardcoded presets (Focus, Calm, Energize), but users cannot save their own discoveries, restore their last successful configuration, or organize personalized ritual stacks. This forces re-configuration every session, breaking the "calm companion" promise.
+    </overview>
+    
+    <current-pain-points>
+      <pain-point severity="high">
+        <issue>No persistent custom presets</issue>
+        <impact>Users who discover ideal settings (e.g., theta 6 Hz + brown noise + slow figure-eight) must manually recreate them each session, leading to frustration and abandonment.</impact>
+        <evidence>Epic 2 retrospective: "Users want quick modes plus deep control." PRD FR5 explicitly requires preset CRUD with auto-restore.</evidence>
+      </pain-point>
+      
+      <pain-point severity="high">
+        <issue>No auto-restore per track</issue>
+        <impact>When replaying a track, the audio graph resets to default preset instead of remembering what configuration worked previously.</impact>
+        <evidence>PRD Success Criteria: "≥80% preset reuse rate" impossible without auto-restore.</evidence>
+      </pain-point>
+      
+      <pain-point severity="medium">
+        <issue>Advanced controls hidden with no learning path</issue>
+        <impact>Users unaware that sliders exist miss opportunities to personalize experience. No progressive disclosure from quick modes to advanced tweaking.</impact>
+        <evidence>PRD Journey 2 "Advanced Audio Tinkering" assumes discoverable controls drawer.</evidence>
+      </pain-point>
+      
+      <pain-point severity="medium">
+        <issue>No visual preset organization</issue>
+        <impact>Users with multiple presets cannot reorder, tag, or quickly compare configurations, reducing preset adoption.</impact>
+        <evidence>PRD: "Preset appears in carousel with description and magic tag (e.g., 'Deep Orbit')."</evidence>
+      </pain-point>
+    </current-pain-points>
+    
+    <user-stories-context>
+      <persona>Neurodivergent professional</persona>
+      <need>Start focus session in ≤2 taps, using last successful preset</need>
+      <goal>Avoid cognitive overhead of re-configuring audio every time</goal>
+      
+      <persona>Parent/Caregiver</persona>
+      <need>Create "bedtime" preset for child, ensure it auto-applies</need>
+      <goal>Consistency reduces anxiety for child with autism</goal>
+      
+      <persona>Audio tinkerer</persona>
+      <need>Tweak binaural freq, save as "Deep Flow", share with family</need>
+      <goal>Experiment without fear of losing working configuration</goal>
+    </user-stories-context>
+  </problem-statement>
+
+  <solution-approach>
+    <epic-goal>
+      Deliver quick-mode presets (Focus/Calm/Energize) with one-tap activation, advanced controls drawer for live parameter tweaking, and full preset CRUD with auto-restore per track. Achieve ≥80% preset reuse rate and &lt;100 ms parameter update latency.
+    </epic-goal>
+    
+    <success-metrics>
+      <metric name="preset-reuse-rate" target="≥80%" measurement="% of sessions using saved or default preset"/>
+      <metric name="parameter-latency" target="&lt;100ms" measurement="Time from slider change to audio effect"/>
+      <metric name="preset-adoption" target="≥60%" measurement="% of users who save ≥1 custom preset"/>
+      <metric name="auto-restore-success" target="≥90%" measurement="% of track replays that correctly restore last preset"/>
+    </success-metrics>
+    
+    <stories>
+      <story id="3-1" priority="must-have">
+        <title>Quick Mode Presets</title>
+        <summary>Three default presets (Focus/Calm/Energize) activate with one tap, immediately updating audio graph with predefined parameters.</summary>
+        <acceptance-criteria>
+          <criterion>Tapping Focus/Calm/Energize mode chip applies preset values (speed, intensity, spatialDepth, movement, binaural, noise) to audio graph.</criterion>
+          <criterion>Selected mode highlights visually with accent color and aria-current="true" for screen readers.</criterion>
+          <criterion>Preset change logs preset ID for session tracking (E4 dependency).</criterion>
+          <criterion>Default presets remain editable via settings panel (allows caregiver customization).</criterion>
+          <criterion>Mode change &lt;100 ms parameter update latency.</criterion>
+        </acceptance-criteria>
+      </story>
+      
+      <story id="3-2" priority="must-have">
+        <title>Advanced Controls Drawer &amp; Live Binding</title>
+        <summary>Expandable drawer exposes sliders for rotation speed, movement pattern, binaural frequency, noise type/volume. Changes reflect instantly in audio graph.</summary>
+        <acceptance-criteria>
+          <criterion>Drawer toggle button accessible via keyboard (Tab + Enter).</criterion>
+          <criterion>Sliders for: speed (0-1), intensity (0-1), spatialDepth (0-1), movement (dropdown: circle/figure8/random), binauralFreq (0-40 Hz), noiseType (dropdown: pink/white/brown), noiseVolume (0-0.5).</criterion>
+          <criterion>onChange updates audio graph immediately (&lt;20 ms to Web Audio API, &lt;100 ms perceived by user).</criterion>
+          <criterion>Values persist in current preset (not saved to storage until user clicks "Save Preset").</criterion>
+          <criterion>Sensor lock icon appears when adaptive mode (E5) overrides manual control.</criterion>
+        </acceptance-criteria>
+      </story>
+      
+      <story id="3-3" priority="must-have">
+        <title>Custom Preset CRUD &amp; Auto-Restore</title>
+        <summary>Users save, rename, reorder, delete custom presets. Each playlist track stores last-used preset ID for auto-restore on replay.</summary>
+        <acceptance-criteria>
+          <criterion>Save button in advanced controls creates new preset in localStorage/IndexedDB with auto-generated or user-provided name.</criterion>
+          <criterion>Preset list shows default + custom presets with edit/delete actions.</criterion>
+          <criterion>Reordering presets via drag/drop or arrows updates display order.</criterion>
+          <criterion>Playlist track schema includes `lastPresetId` field, auto-populated when playback starts.</criterion>
+          <criterion>Replaying track from playlist restores `lastPresetId` preset before audio starts.</criterion>
+          <criterion>Deleting preset falls back to "Focus" default gracefully (no crashes).</criterion>
+          <criterion>Export/import preset JSON for sharing (stretch goal).</criterion>
+        </acceptance-criteria>
+      </story>
+    </stories>
+  </solution-approach>
+
+  <technical-architecture>
+    <current-state-analysis>
+      <code-location file="index.html" lines="666-717">
+        <description>MODE_LIBRARY constant defines three hardcoded presets</description>
+        <current-structure>
+          <![CDATA[
+const MODE_LIBRARY = [
+  {
+    id: 'focus',
+    label: 'Focus',
+    short: 'Deep work',
+    description: 'Steady orbit + beta beats...',
+    heroCopy: 'Steady pulses...',
+    accent: 'var(--accent-focus)',
+    preset: {
+      speed: 0.55,
+      intensity: 0.85,
+      spatialDepth: 0.45,
+      movement: 'circle',
+      binaural: { enabled: true, freq: 14 },
+      noise: { type: 'pink', volume: 0.08 }
+    },
+    highlights: ['Beta 14 Hz pulses', 'Low drift orbit', 'Pink noise cushion']
+  },
+  // ... calm, energize
+];
+          ]]>
+        </current-structure>
+        <issues>
+          <issue>Hardcoded array cannot be extended at runtime</issue>
+          <issue>No storage mechanism for user presets</issue>
+          <issue>No preset-to-track association</issue>
+        </issues>
+      </code-location>
+      
+      <code-location file="index.html" lines="738-755">
+        <description>State hooks for current mode and audio parameters</description>
+        <current-hooks>
+          <![CDATA[
+const [modeIndex, setModeIndex] = useState(0);
+const [speed, setSpeed] = useState(defaultMode.preset.speed);
+const [intensity, setIntensity] = useState(defaultMode.preset.intensity);
+const [spatialDepth, setSpatialDepth] = useState(defaultMode.preset.spatialDepth);
+const [movementPattern, setMovementPattern] = useState(defaultMode.preset.movement);
+const [binauralEnabled, setBinauralEnabled] = useState(defaultMode.preset.binaural.enabled);
+const [binauralFreq, setBinauralFreq] = useState(defaultMode.preset.binaural.freq);
+const [noiseType, setNoiseType] = useState(defaultMode.preset.noise.type);
+const [noiseVolume, setNoiseVolume] = useState(defaultMode.preset.noise.volume);
+          ]]>
+        </current-hooks>
+        <observations>
+          <observation>Individual state hooks for each parameter - good for live binding</observation>
+          <observation>Initialized from defaultMode (MODE_LIBRARY[0]) - needs preset restoration logic</observation>
+          <observation>No preset state tracking (which preset is active)</observation>
+        </observations>
+      </code-location>
+      
+      <code-location file="index.html" lines="733-735">
+        <description>Playlist state</description>
+        <current-structure>
+          <![CDATA[
+const [playlist, setPlaylist] = useState([]);
+const [currentTrackIndex, setCurrentTrackIndex] = useState(null);
+          ]]>
+        </current-structure>
+        <playlist-schema>
+          <![CDATA[
+// Current track structure (from Epic 2):
+{
+  id: Date.now() + index,
+  name: 'Track Name',
+  source: 'local' | 'url',
+  file: File | null,
+  url: string | null,
+  metadata: {
+    size: number,
+    type: string,
+    lastModified: number
+  }
+}
+          ]]>
+        </playlist-schema>
+        <required-additions>
+          <addition>Add `lastPresetId` field to track schema</addition>
+          <addition>Add `preferredPresetId` for user-pinned preset per track</addition>
+        </required-additions>
+      </code-location>
+      
+      <code-location file="index.html" lines="2306-2351">
+        <description>Mode selection UI (chip navigation)</description>
+        <current-implementation>
+          <![CDATA[
+<div className="mode-selector" role="tablist">
+  {MODE_LIBRARY.map((mode, idx) => (
+    <button
+      key={mode.id}
+      role="tab"
+      className="mode-chip"
+      aria-selected={modeIndex === idx}
+      aria-current={modeIndex === idx ? 'true' : undefined}
+      onClick={() => {
+        setModeIndex(idx);
+        applyPreset(mode.preset);
+        setHeroMessage(mode.heroCopy);
+      }}
+    >
+      {mode.label}
+    </button>
+  ))}
+</div>
+          ]]>
+        </current-implementation>
+        <observations>
+          <observation>onClick calls applyPreset(mode.preset) - preset application logic exists</observation>
+          <observation>aria-selected and aria-current correctly implemented</observation>
+          <observation>Hardcoded to MODE_LIBRARY - needs to support custom presets</observation>
+        </observations>
+      </code-location>
+    </current-state-analysis>
+
+    <proposed-implementation>
+      <phase-1 story="3-1" title="Quick Mode Presets">
+        <tasks>
+          <task id="3-1-1" priority="high">
+            <title>Extract applyPreset() function</title>
+            <description>Create helper function that takes preset object and updates all audio parameter states</description>
+            <implementation>
+              <![CDATA[
+const applyPreset = (preset, presetId) => {
+  setSpeed(preset.speed);
+  setIntensity(preset.intensity);
+  setSpatialDepth(preset.spatialDepth);
+  setMovementPattern(preset.movement);
+  setBinauralEnabled(preset.binaural.enabled);
+  setBinauralFreq(preset.binaural.freq);
+  setNoiseType(preset.noise.type);
+  setNoiseVolume(preset.noise.volume);
+  
+  // Track active preset for session logging
+  setActivePresetId(presetId);
+  
+  // Trigger audio graph updates (existing useEffects handle this)
+};
+              ]]>
+            </implementation>
+            <testing>
+              <test>Unit test: verify all 8 parameters update correctly</test>
+              <test>Integration: verify audio graph reflects changes within 100ms</test>
+              <test>Regression: verify no audio dropouts during preset switch</test>
+            </testing>
+          </task>
+          
+          <task id="3-1-2" priority="high">
+            <title>Add activePresetId state</title>
+            <description>Track which preset is currently active for UI highlighting and logging</description>
+            <implementation>
+              <![CDATA[
+const [activePresetId, setActivePresetId] = useState('focus');
+              ]]>
+            </implementation>
+            <usage>
+              <![CDATA[
+// In mode chip:
+aria-selected={mode.id === activePresetId}
+
+// In session logging (E4 integration point):
+logSessionStart({
+  trackId: currentTrack.id,
+  presetId: activePresetId,
+  timestamp: Date.now()
+});
+              ]]>
+            </usage>
+          </task>
+          
+          <task id="3-1-3" priority="medium">
+            <title>Implement editable default presets</title>
+            <description>Allow users to customize Focus/Calm/Energize defaults via settings panel</description>
+            <storage-strategy>
+              <![CDATA[
+// localStorage key: 'default-presets'
+localStorage.setItem('default-presets', JSON.stringify({
+  focus: { ...customizedFocusPreset },
+  calm: { ...customizedCalmPreset },
+  energize: { ...customizedEnergizePreset }
+}));
+
+// On load:
+const savedDefaults = JSON.parse(localStorage.getItem('default-presets') || '{}');
+const MODE_LIBRARY = [
+  {
+    id: 'focus',
+    label: 'Focus',
+    preset: savedDefaults.focus || DEFAULT_FOCUS_PRESET,
+    // ...
+  },
+  // ...
+];
+              ]]>
+            </storage-strategy>
+            <ui-location>Settings panel (new section "Customize Default Modes")</ui-location>
+          </task>
+          
+          <task id="3-1-4" priority="high">
+            <title>Add preset change logging hook</title>
+            <description>Emit preset change events for session tracking</description>
+            <implementation>
+              <![CDATA[
+const logPresetChange = (presetId) => {
+  // E4 integration point - will be connected to IndexedDB logger
+  console.log('Preset changed:', {
+    presetId,
+    timestamp: Date.now(),
+    trackId: currentTrackIndex !== null ? playlist[currentTrackIndex].id : null
+  });
+  
+  // Future: dispatchEvent(new CustomEvent('preset-changed', { detail: { presetId } }));
+};
+
+// In applyPreset:
+const applyPreset = (preset, presetId) => {
+  // ... parameter updates ...
+  logPresetChange(presetId);
+};
+              ]]>
+            </implementation>
+          </task>
+        </tasks>
+        
+        <testing-strategy>
+          <test-case id="TC-3-1-1">
+            <title>Quick mode application</title>
+            <steps>
+              <step>Load app → verify Focus preset applied by default</step>
+              <step>Click Calm chip → verify all 8 parameters update</step>
+              <step>Monitor audio graph → verify changes apply within 100ms</step>
+              <step>Check aria-selected → verify Calm chip highlighted</step>
+            </steps>
+            <expected>All parameters update, audio graph reflects change, no dropouts</expected>
+          </test-case>
+          
+          <test-case id="TC-3-1-2">
+            <title>Keyboard navigation</title>
+            <steps>
+              <step>Tab to mode selector → verify focus visible</step>
+              <step>Arrow right → verify focus moves to Calm</step>
+              <step>Enter → verify Calm preset applies</step>
+            </steps>
+            <expected>Keyboard navigation works, screen reader announces mode change</expected>
+          </test-case>
+          
+          <test-case id="TC-3-1-3">
+            <title>Editable defaults persistence</title>
+            <steps>
+              <step>Open settings → customize Focus preset (e.g., change binaural to 12 Hz)</step>
+              <step>Save → verify localStorage updated</step>
+              <step>Refresh page → verify Focus preset loads with 12 Hz</step>
+            </steps>
+            <expected>Customized defaults persist across sessions</expected>
+          </test-case>
+        </testing-strategy>
+      </phase-1>
+
+      <phase-2 story="3-2" title="Advanced Controls Drawer &amp; Live Binding">
+        <tasks>
+          <task id="3-2-1" priority="high">
+            <title>Create AdvancedControls component</title>
+            <description>Expandable drawer with sliders for all 8 audio parameters</description>
+            <component-structure>
+              <![CDATA[
+const AdvancedControls = ({ 
+  speed, setSpeed,
+  intensity, setIntensity,
+  spatialDepth, setSpatialDepth,
+  movementPattern, setMovementPattern,
+  binauralEnabled, setBinauralEnabled,
+  binauralFreq, setBinauralFreq,
+  noiseType, setNoiseType,
+  noiseVolume, setNoiseVolume,
+  isExpanded, setIsExpanded,
+  sensorLocked
+}) => {
+  return (
+    <details open={isExpanded} onToggle={(e) => setIsExpanded(e.target.open)}>
+      <summary>Advanced Controls</summary>
+      <div className="controls-grid">
+        <label>
+          Rotation Speed
+          <input type="range" min="0" max="1" step="0.05" 
+                 value={speed} 
+                 onChange={(e) => setSpeed(parseFloat(e.target.value))} 
+                 disabled={sensorLocked} />
+          <span>{speed.toFixed(2)}</span>
+        </label>
+        
+        <label>
+          Intensity
+          <input type="range" min="0" max="1" step="0.05" 
+                 value={intensity} 
+                 onChange={(e) => setIntensity(parseFloat(e.target.value))} 
+                 disabled={sensorLocked} />
+          <span>{intensity.toFixed(2)}</span>
+        </label>
+        
+        <label>
+          Spatial Depth
+          <input type="range" min="0" max="1" step="0.05" 
+                 value={spatialDepth} 
+                 onChange={(e) => setSpatialDepth(parseFloat(e.target.value))} 
+                 disabled={sensorLocked} />
+          <span>{spatialDepth.toFixed(2)}</span>
+        </label>
+        
+        <label>
+          Movement Pattern
+          <select value={movementPattern} 
+                  onChange={(e) => setMovementPattern(e.target.value)}
+                  disabled={sensorLocked}>
+            <option value="circle">Circle</option>
+            <option value="figure8">Figure 8</option>
+            <option value="random">Random</option>
+          </select>
+        </label>
+        
+        <label>
+          Binaural Beats
+          <input type="checkbox" 
+                 checked={binauralEnabled} 
+                 onChange={(e) => setBinauralEnabled(e.target.checked)} 
+                 disabled={sensorLocked} />
+        </label>
+        
+        {binauralEnabled && (
+          <label>
+            Binaural Frequency (Hz)
+            <input type="range" min="0" max="40" step="1" 
+                   value={binauralFreq} 
+                   onChange={(e) => setBinauralFreq(parseInt(e.target.value))} 
+                   disabled={sensorLocked} />
+            <span>{binauralFreq} Hz ({getBinauralDescription(binauralFreq)})</span>
+          </label>
+        )}
+        
+        <label>
+          Noise Type
+          <select value={noiseType} 
+                  onChange={(e) => setNoiseType(e.target.value)}
+                  disabled={sensorLocked}>
+            <option value="pink">Pink</option>
+            <option value="white">White</option>
+            <option value="brown">Brown</option>
+          </select>
+        </label>
+        
+        <label>
+          Noise Volume
+          <input type="range" min="0" max="0.5" step="0.01" 
+                 value={noiseVolume} 
+                 onChange={(e) => setNoiseVolume(parseFloat(e.target.value))} 
+                 disabled={sensorLocked} />
+          <span>{(noiseVolume * 100).toFixed(0)}%</span>
+        </label>
+        
+        {sensorLocked && (
+          <div className="sensor-lock-notice" role="status">
+            🔒 Parameters locked by adaptive mode
+            <button onClick={disableSensorMode}>Unlock</button>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+};
+              ]]>
+            </component-structure>
+            <accessibility>
+              <requirement>All sliders have visible labels and value readouts</requirement>
+              <requirement>Disabled state announced to screen readers</requirement>
+              <requirement>Keyboard shortcuts: Ctrl+E to toggle drawer</requirement>
+            </accessibility>
+          </task>
+          
+          <task id="3-2-2" priority="high">
+            <title>Add live parameter binding</title>
+            <description>Ensure onChange events update state immediately, triggering audio graph changes via existing useEffects</description>
+            <performance-requirement>
+              <target>onChange → setState: &lt;5 ms</target>
+              <target>setState → audio graph update: &lt;20 ms (Web Audio API)</target>
+              <target>Total perceived latency: &lt;100 ms</target>
+            </performance-requirement>
+            <existing-hooks-leverage>
+              <![CDATA[
+// These useEffects already exist and will handle audio updates:
+useEffect(() => {
+  if (rotationNodesRef.current) {
+    // Update rotation speed
+  }
+}, [speed]);
+
+useEffect(() => {
+  if (gainChainRef.current) {
+    // Update intensity
+  }
+}, [intensity]);
+
+// ... etc for each parameter
+              ]]>
+            </existing-hooks-leverage>
+            <notes>No new audio code needed - existing Epic 1/2 useEffects already bind parameters to Web Audio nodes</notes>
+          </task>
+          
+          <task id="3-2-3" priority="medium">
+            <title>Add sensor lock UI</title>
+            <description>Show lock icon and disable controls when adaptive mode (E5) takes over</description>
+            <state-addition>
+              <![CDATA[
+const [sensorLocked, setSensorLocked] = useState(false);
+
+// E5 integration point - adaptive engine will call:
+const enableSensorMode = () => {
+  setSensorLocked(true);
+  setA11yAnnouncement('Adaptive mode enabled. Controls locked.');
+};
+
+const disableSensorMode = () => {
+  setSensorLocked(false);
+  setA11yAnnouncement('Adaptive mode disabled. Controls unlocked.');
+};
+              ]]>
+            </state-addition>
+          </task>
+          
+          <task id="3-2-4" priority="low">
+            <title>Add parameter presets hints</title>
+            <description>Show helper text for parameter combinations (e.g., "Try 0.3 speed + figure8 for deep focus")</description>
+            <ui-enhancement>Tooltip or inline suggestion based on current values</ui-enhancement>
+          </task>
+        </tasks>
+        
+        <testing-strategy>
+          <test-case id="TC-3-2-1">
+            <title>Slider live binding</title>
+            <steps>
+              <step>Open advanced controls drawer</step>
+              <step>Adjust rotation speed slider from 0.5 to 0.8</step>
+              <step>Observe audio analyzer → verify rotation speed increases</step>
+              <step>Measure latency → should be &lt;100 ms perceived</step>
+            </steps>
+            <expected>Audio graph updates smoothly, no audio dropouts</expected>
+          </test-case>
+          
+          <test-case id="TC-3-2-2">
+            <title>Sensor lock state</title>
+            <steps>
+              <step>Enable sensor mode (mock E5 integration)</step>
+              <step>Verify all sliders disabled</step>
+              <step>Verify lock icon visible</step>
+              <step>Click "Unlock" → verify controls re-enabled</step>
+            </steps>
+            <expected>Locked state prevents manual edits, unlock restores control</expected>
+          </test-case>
+          
+          <test-case id="TC-3-2-3">
+            <title>Keyboard accessibility</title>
+            <steps>
+              <step>Tab to advanced controls → verify summary focused</step>
+              <step>Enter → verify drawer expands</step>
+              <step>Tab through sliders → verify focus visible</step>
+              <step>Arrow keys on slider → verify value changes</step>
+            </steps>
+            <expected>Full keyboard navigation, screen reader announces changes</expected>
+          </test-case>
+        </testing-strategy>
+      </phase-2>
+
+      <phase-3 story="3-3" title="Custom Preset CRUD &amp; Auto-Restore">
+        <tasks>
+          <task id="3-3-1" priority="high">
+            <title>Design preset storage schema</title>
+            <description>Define localStorage/IndexedDB structure for custom presets</description>
+            <schema>
+              <![CDATA[
+// localStorage key: 'custom-presets'
+{
+  "custom-preset-1": {
+    "id": "custom-preset-1",
+    "name": "Deep Flow",
+    "description": "My perfect focus state",
+    "createdAt": 1699999999999,
+    "lastUsedAt": 1700000000000,
+    "preset": {
+      "speed": 0.4,
+      "intensity": 0.75,
+      "spatialDepth": 0.5,
+      "movement": "figure8",
+      "binaural": { "enabled": true, "freq": 10 },
+      "noise": { "type": "brown", "volume": 0.1 }
+    },
+    "tags": ["focus", "work"],
+    "color": "#6366f1"
+  },
+  // ...
+}
+
+// Playlist track schema addition:
+{
+  id: ...,
+  name: ...,
+  source: ...,
+  lastPresetId: "custom-preset-1",  // NEW
+  preferredPresetId: null,           // NEW - user can pin a preset to track
+  metadata: { ... }
+}
+              ]]>
+            </schema>
+            <migration>
+              <![CDATA[
+// On first load with Epic 3, ensure existing tracks get lastPresetId field:
+const migratePlaylist = (oldPlaylist) => {
+  return oldPlaylist.map(track => ({
+    ...track,
+    lastPresetId: track.lastPresetId || 'focus',  // Default to focus
+    preferredPresetId: track.preferredPresetId || null
+  }));
+};
+              ]]>
+            </migration>
+          </task>
+          
+          <task id="3-3-2" priority="high">
+            <title>Implement preset CRUD operations</title>
+            <description>Create, read, update, delete custom presets with localStorage persistence</description>
+            <helpers>
+              <![CDATA[
+const loadCustomPresets = () => {
+  try {
+    const saved = localStorage.getItem('custom-presets');
+    return saved ? JSON.parse(saved) : {};
+  } catch (err) {
+    console.error('Failed to load custom presets:', err);
+    return {};
+  }
+};
+
+const saveCustomPreset = (preset) => {
+  const customPresets = loadCustomPresets();
+  const id = `custom-preset-${Date.now()}`;
+  customPresets[id] = {
+    id,
+    ...preset,
+    createdAt: Date.now(),
+    lastUsedAt: Date.now()
+  };
+  localStorage.setItem('custom-presets', JSON.stringify(customPresets));
+  return id;
+};
+
+const updateCustomPreset = (id, updates) => {
+  const customPresets = loadCustomPresets();
+  if (customPresets[id]) {
+    customPresets[id] = { ...customPresets[id], ...updates };
+    localStorage.setItem('custom-presets', JSON.stringify(customPresets));
+  }
+};
+
+const deleteCustomPreset = (id) => {
+  const customPresets = loadCustomPresets();
+  delete customPresets[id];
+  localStorage.setItem('custom-presets', JSON.stringify(customPresets));
+  
+  // Update any tracks using this preset to fallback
+  setPlaylist(prev => prev.map(track => ({
+    ...track,
+    lastPresetId: track.lastPresetId === id ? 'focus' : track.lastPresetId,
+    preferredPresetId: track.preferredPresetId === id ? null : track.preferredPresetId
+  })));
+};
+
+const getAllPresets = () => {
+  const defaults = MODE_LIBRARY.map(mode => ({
+    id: mode.id,
+    name: mode.label,
+    description: mode.description,
+    preset: mode.preset,
+    isDefault: true
+  }));
+  
+  const custom = Object.values(loadCustomPresets()).map(p => ({
+    ...p,
+    isDefault: false
+  }));
+  
+  return [...defaults, ...custom];
+};
+              ]]>
+            </helpers>
+          </task>
+          
+          <task id="3-3-3" priority="high">
+            <title>Build preset save UI</title>
+            <description>Add "Save Preset" button in advanced controls with name/description form</description>
+            <component>
+              <![CDATA[
+const SavePresetDialog = ({ currentParameters, onSave, onCancel }) => {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  
+  const handleSave = () => {
+    const preset = {
+      name,
+      description,
+      preset: {
+        speed: currentParameters.speed,
+        intensity: currentParameters.intensity,
+        spatialDepth: currentParameters.spatialDepth,
+        movement: currentParameters.movementPattern,
+        binaural: { 
+          enabled: currentParameters.binauralEnabled, 
+          freq: currentParameters.binauralFreq 
+        },
+        noise: { 
+          type: currentParameters.noiseType, 
+          volume: currentParameters.noiseVolume 
+        }
+      }
+    };
+    
+    const id = saveCustomPreset(preset);
+    onSave(id);
+    showToast(`Preset "${name}" saved`, 'success');
+    setA11yAnnouncement(`Preset ${name} saved`);
+  };
+  
+  return (
+    <dialog open>
+      <h2>Save Custom Preset</h2>
+      <label>
+        Name
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} 
+               placeholder="e.g., Deep Flow" required />
+      </label>
+      <label>
+        Description (optional)
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} 
+                  placeholder="My perfect focus state" />
+      </label>
+      <div className="dialog-actions">
+        <button onClick={handleSave} disabled={!name.trim()}>Save</button>
+        <button onClick={onCancel}>Cancel</button>
+      </div>
+    </dialog>
+  );
+};
+              ]]>
+            </component>
+            <trigger>
+              <![CDATA[
+// In AdvancedControls:
+<button onClick={() => setShowSaveDialog(true)} className="save-preset-btn">
+  💾 Save Preset
+</button>
+
+{showSaveDialog && (
+  <SavePresetDialog 
+    currentParameters={{ speed, intensity, ... }}
+    onSave={(id) => {
+      setShowSaveDialog(false);
+      setActivePresetId(id);
+    }}
+    onCancel={() => setShowSaveDialog(false)}
+  />
+)}
+              ]]>
+            </trigger>
+          </task>
+          
+          <task id="3-3-4" priority="high">
+            <title>Build preset list UI</title>
+            <description>Show all presets (default + custom) with edit/delete actions</description>
+            <component>
+              <![CDATA[
+const PresetList = ({ presets, activePresetId, onSelect, onEdit, onDelete }) => {
+  return (
+    <div className="preset-list" role="list">
+      {presets.map(preset => (
+        <div 
+          key={preset.id} 
+          className={`preset-item ${preset.id === activePresetId ? 'active' : ''}`}
+          role="listitem"
+        >
+          <button 
+            className="preset-select-btn"
+            onClick={() => onSelect(preset.id)}
+            aria-current={preset.id === activePresetId ? 'true' : undefined}
+          >
+            <span className="preset-name">{preset.name}</span>
+            <span className="preset-description">{preset.description}</span>
+          </button>
+          
+          {!preset.isDefault && (
+            <div className="preset-actions">
+              <button onClick={() => onEdit(preset.id)} aria-label={`Edit ${preset.name}`}>
+                ✏️
+              </button>
+              <button onClick={() => onDelete(preset.id)} aria-label={`Delete ${preset.name}`}>
+                🗑️
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+              ]]>
+            </component>
+          </task>
+          
+          <task id="3-3-5" priority="high">
+            <title>Implement auto-restore on track replay</title>
+            <description>When user plays track, restore lastPresetId before audio starts</description>
+            <implementation>
+              <![CDATA[
+const playTrack = (index) => {
+  const track = playlist[index];
+  if (!track) return;
+  
+  // Auto-restore last preset for this track
+  const presetId = track.preferredPresetId || track.lastPresetId || 'focus';
+  const allPresets = getAllPresets();
+  const preset = allPresets.find(p => p.id === presetId);
+  
+  if (preset) {
+    applyPreset(preset.preset, preset.id);
+    setHeroMessage(`Restored "${preset.name}" preset`);
+    setA11yAnnouncement(`Playing ${track.name} with ${preset.name} preset`);
+  }
+  
+  // ... existing playback logic ...
+  
+  setCurrentTrackIndex(index);
+  setIsPlaying(true);
+};
+
+// Update lastPresetId when user changes preset during playback:
+useEffect(() => {
+  if (currentTrackIndex !== null && activePresetId) {
+    setPlaylist(prev => prev.map((track, idx) => 
+      idx === currentTrackIndex 
+        ? { ...track, lastPresetId: activePresetId }
+        : track
+    ));
+  }
+}, [activePresetId, currentTrackIndex]);
+              ]]>
+            </implementation>
+          </task>
+          
+          <task id="3-3-6" priority="medium">
+            <title>Add preset reordering</title>
+            <description>Allow drag/drop or arrow buttons to reorder preset list</description>
+            <approach>Store preset order array in localStorage: ['focus', 'calm', 'custom-preset-1', ...]</approach>
+            <ui>Drag handle or ↑↓ buttons next to each preset</ui>
+          </task>
+          
+          <task id="3-3-7" priority="low">
+            <title>Export/import preset JSON</title>
+            <description>Allow users to share presets via JSON file</description>
+            <implementation>
+              <![CDATA[
+const exportPreset = (presetId) => {
+  const preset = loadCustomPresets()[presetId];
+  const json = JSON.stringify(preset, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${preset.name.replace(/\s+/g, '-')}.preset.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const importPreset = (file) => {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const preset = JSON.parse(e.target.result);
+      const id = saveCustomPreset(preset);
+      showToast(`Imported "${preset.name}"`, 'success');
+    } catch (err) {
+      showToast('Invalid preset file', 'error');
+    }
+  };
+  reader.readAsText(file);
+};
+              ]]>
+            </implementation>
+          </task>
+        </tasks>
+        
+        <testing-strategy>
+          <test-case id="TC-3-3-1">
+            <title>Save custom preset</title>
+            <steps>
+              <step>Open advanced controls → adjust parameters</step>
+              <step>Click "Save Preset" → enter name "Deep Flow"</step>
+              <step>Save → verify toast confirmation</step>
+              <step>Open preset list → verify "Deep Flow" appears</step>
+              <step>Refresh page → verify preset persists</step>
+            </steps>
+            <expected>Custom preset saves to localStorage and appears in list</expected>
+          </test-case>
+          
+          <test-case id="TC-3-3-2">
+            <title>Auto-restore preset on track replay</title>
+            <steps>
+              <step>Play Track 1 → select "Calm" preset</step>
+              <step>Play Track 2 → select "Deep Flow" preset</step>
+              <step>Replay Track 1 → verify "Calm" preset auto-restores</step>
+              <step>Check audio parameters → verify match Calm preset values</step>
+            </steps>
+            <expected>Each track remembers last used preset and restores on replay</expected>
+          </test-case>
+          
+          <test-case id="TC-3-3-3">
+            <title>Delete preset graceful fallback</title>
+            <steps>
+              <step>Create custom preset "Test"</step>
+              <step>Play track → assign "Test" preset</step>
+              <step>Delete "Test" preset</step>
+              <step>Replay track → verify falls back to "Focus" preset</step>
+              <step>Verify no crashes or errors</step>
+            </steps>
+            <expected>Deleting preset doesn't break tracks using it</expected>
+          </test-case>
+          
+          <test-case id="TC-3-3-4">
+            <title>Preset list keyboard navigation</title>
+            <steps>
+              <step>Tab to preset list → verify first item focused</step>
+              <step>Arrow down → verify focus moves to next preset</step>
+              <step>Enter → verify preset applies</step>
+              <step>Tab to edit button → Enter → verify edit dialog opens</step>
+            </steps>
+            <expected>Full keyboard access to preset management</expected>
+          </test-case>
+        </testing-strategy>
+      </phase-3>
+    </proposed-implementation>
+  </technical-architecture>
+
+  <integration-points>
+    <epic-1-dependencies>
+      <dependency type="ui-layout">
+        <requirement>Mode selector chips already exist - extend to support custom presets</requirement>
+        <location>index.html lines 2306-2351</location>
+        <action>Modify mode selector to render MODE_LIBRARY + custom presets</action>
+      </dependency>
+      
+      <dependency type="state-hooks">
+        <requirement>Audio parameter state hooks already initialized</requirement>
+        <location>index.html lines 738-755</location>
+        <action>Use existing setSpeed, setIntensity, etc. hooks for preset application</action>
+      </dependency>
+      
+      <dependency type="hero-message">
+        <requirement>setHeroMessage() used for user feedback</requirement>
+        <action>Call setHeroMessage when preset changes or saves</action>
+      </dependency>
+    </epic-1-dependencies>
+    
+    <epic-2-dependencies>
+      <dependency type="playlist-schema">
+        <requirement>Playlist tracks need lastPresetId field</requirement>
+        <action>Add migration to extend track schema with preset association</action>
+      </dependency>
+      
+      <dependency type="toast-system">
+        <requirement>showToast() already exists for user notifications</requirement>
+        <location>index.html lines 1447-1462</location>
+        <action>Use for preset save confirmations and error messages</action>
+      </dependency>
+      
+      <dependency type="playback-hooks">
+        <requirement>playTrack() function exists and starts audio</requirement>
+        <action>Insert preset restoration logic before audio starts</action>
+      </dependency>
+    </epic-2-dependencies>
+    
+    <epic-4-dependencies>
+      <dependency type="session-logging">
+        <requirement>Session logs need presetId field</requirement>
+        <status>forward-looking</status>
+        <action>Epic 3 provides activePresetId state that E4 will log</action>
+      </dependency>
+    </epic-4-dependencies>
+    
+    <epic-5-dependencies>
+      <dependency type="sensor-lock">
+        <requirement>Advanced controls need sensorLocked state for adaptive mode</requirement>
+        <status>forward-looking</status>
+        <action>Epic 3 builds lock UI, E5 will control sensorLocked state</action>
+      </dependency>
+      
+      <dependency type="adaptive-presets">
+        <requirement>E5 needs to call applyPreset() when sensor thresholds trigger</requirement>
+        <status>forward-looking</status>
+        <action>Epic 3 exposes applyPreset helper for E5 to invoke</action>
+      </dependency>
+    </epic-5-dependencies>
+  </integration-points>
+
+  <risks-and-mitigations>
+    <risk severity="high">
+      <issue>Preset updates causing audio dropouts</issue>
+      <probability>medium</probability>
+      <impact>High - breaks core value proposition</impact>
+      <mitigation>
+        <strategy>Leverage existing useEffect hooks that already handle parameter updates smoothly</strategy>
+        <strategy>Add regression test: switch presets 50 times, verify 0 dropouts</strategy>
+        <strategy>Test on low-end devices (5-year-old Android phone)</strategy>
+      </mitigation>
+      <contingency>If dropouts occur, batch parameter updates and apply during silent gap</contingency>
+    </risk>
+    
+    <risk severity="medium">
+      <issue>localStorage quota exceeded with many presets</issue>
+      <probability>low</probability>
+      <impact>Medium - users lose ability to save presets</impact>
+      <mitigation>
+        <strategy>Limit custom presets to 50 per profile</strategy>
+        <strategy>Show storage usage indicator when >40 presets exist</strategy>
+        <strategy>Implement preset export to offload to user's filesystem</strategy>
+      </mitigation>
+      <contingency>Migrate to IndexedDB if localStorage limits hit</contingency>
+    </risk>
+    
+    <risk severity="medium">
+      <issue>Preset schema changes break saved presets</issue>
+      <probability>medium</probability>
+      <impact>Medium - users lose custom presets on upgrade</impact>
+      <mitigation>
+        <strategy>Version preset schema (add schemaVersion: 1 field)</strategy>
+        <strategy>Write migration function to upgrade old presets</strategy>
+        <strategy>Test migration with mock v1 presets before release</strategy>
+      </mitigation>
+      <contingency>Provide preset export before schema change, import after upgrade</contingency>
+    </risk>
+    
+    <risk severity="low">
+      <issue>Users create too many presets, can't find the right one</issue>
+      <probability>medium</probability>
+      <impact>Low - UX annoyance, not blocker</impact>
+      <mitigation>
+        <strategy>Add search/filter to preset list</strategy>
+        <strategy>Show "last used" date, allow sorting by usage frequency</strategy>
+        <strategy>Implement preset tags for organization</strategy>
+      </mitigation>
+    </risk>
+  </risks-and-mitigations>
+
+  <success-metrics-detail>
+    <metric name="preset-reuse-rate">
+      <target>≥80%</target>
+      <measurement-method>
+        <![CDATA[
+// Track in E4 session logs:
+const sessions = await getSessionLogs();
+const sessionsWithPreset = sessions.filter(s => s.presetId !== null);
+const reuseRate = (sessionsWithPreset.length / sessions.length) * 100;
+
+// Success: reuseRate >= 80
+        ]]>
+      </measurement-method>
+      <current-baseline>0% (no preset tracking exists)</current-baseline>
+      <milestone-targets>
+        <milestone date="week-1">20% (basic preset selection working)</milestone>
+        <milestone date="week-2">50% (auto-restore working)</milestone>
+        <milestone date="week-3">80% (users trust and reuse presets)</milestone>
+      </milestone-targets>
+    </metric>
+    
+    <metric name="parameter-latency">
+      <target>&lt;100ms</target>
+      <measurement-method>
+        <![CDATA[
+// Performance mark on slider onChange:
+performance.mark('parameter-change-start');
+
+// Performance mark in useEffect after audio node update:
+performance.mark('parameter-change-end');
+
+const latency = performance.measure('param-latency', 
+  'parameter-change-start', 'parameter-change-end');
+
+// Success: latency.duration < 100
+        ]]>
+      </measurement-method>
+      <current-baseline>~50ms (existing parameter hooks already fast)</current-baseline>
+      <acceptable-range>50-100ms</acceptable-range>
+    </metric>
+    
+    <metric name="preset-adoption">
+      <target>≥60%</target>
+      <measurement-method>
+        <![CDATA[
+// Track localStorage:
+const customPresets = loadCustomPresets();
+const users = getUniqueUsers(); // From E4 profiles
+const usersWithPresets = users.filter(u => 
+  Object.keys(customPresets).some(id => id.includes(u.id))
+);
+const adoptionRate = (usersWithPresets.length / users.length) * 100;
+
+// Success: adoptionRate >= 60
+        ]]>
+      </measurement-method>
+      <current-baseline>0% (no custom presets exist)</current-baseline>
+    </metric>
+    
+    <metric name="auto-restore-success">
+      <target>≥90%</target>
+      <measurement-method>
+        <![CDATA[
+// Log in playTrack() function:
+const presetRestored = !!playlist[index].lastPresetId;
+const presetValid = getAllPresets().some(p => p.id === playlist[index].lastPresetId);
+
+// Track success rate:
+const sessions = await getSessionLogs();
+const restoredSessions = sessions.filter(s => s.presetRestoredSuccessfully);
+const restoreRate = (restoredSessions.length / sessions.length) * 100;
+
+// Success: restoreRate >= 90
+        ]]>
+      </measurement-method>
+    </metric>
+  </success-metrics-detail>
+
+  <accessibility-requirements>
+    <wcag-compliance level="AA">
+      <criterion id="1.3.1">Info and Relationships</criterion>
+      <requirement>Preset list uses semantic list markup, edit/delete buttons have aria-label</requirement>
+      
+      <criterion id="2.1.1">Keyboard</criterion>
+      <requirement>All preset management functions accessible via keyboard (Tab, Enter, Arrow keys)</requirement>
+      
+      <criterion id="2.4.7">Focus Visible</criterion>
+      <requirement>Focused preset, slider, button has visible focus indicator</requirement>
+      
+      <criterion id="3.2.4">Consistent Identification</criterion>
+      <requirement>Save/Edit/Delete actions use consistent icons and labels across UI</requirement>
+      
+      <criterion id="4.1.3">Status Messages</criterion>
+      <requirement>Preset save confirmations announced via aria-live, toast notifications</requirement>
+    </wcag-compliance>
+    
+    <screen-reader-support>
+      <requirement>Preset name and description announced when focused</requirement>
+      <requirement>Slider values announced as they change</requirement>
+      <requirement>Locked state announced when sensor mode active</requirement>
+      <requirement>Active preset announced with aria-current="true"</requirement>
+    </screen-reader-support>
+    
+    <keyboard-shortcuts>
+      <shortcut key="Ctrl+E">Toggle advanced controls drawer</shortcut>
+      <shortcut key="Ctrl+S">Save current parameters as preset</shortcut>
+      <shortcut key="1-3">Quick select Focus/Calm/Energize (when focus on mode selector)</shortcut>
+    </keyboard-shortcuts>
+  </accessibility-requirements>
+
+  <performance-considerations>
+    <target metric="preset-switch-latency" value="<100ms" priority="high">
+      <strategy>Leverage existing useEffect hooks - no new audio code needed</strategy>
+      <strategy>Batch setState calls using functional updates</strategy>
+      <measurement>Performance.measure() on applyPreset()</measurement>
+    </target>
+    
+    <target metric="localStorage-read-latency" value="<10ms" priority="medium">
+      <strategy>Load custom presets once on mount, cache in state</strategy>
+      <strategy>Only write to localStorage on save/delete/update</strategy>
+      <measurement>console.time() around loadCustomPresets()</measurement>
+    </target>
+    
+    <target metric="preset-list-render" value="<50ms" priority="low">
+      <strategy>Limit to 50 presets max</strategy>
+      <strategy>Virtual scrolling if list exceeds 20 items</strategy>
+      <measurement>React DevTools Profiler on PresetList component</measurement>
+    </target>
+  </performance-considerations>
+
+  <testing-pyramid>
+    <unit-tests count="12" coverage-target="90%">
+      <test>applyPreset() updates all 8 parameter states</test>
+      <test>saveCustomPreset() writes to localStorage correctly</test>
+      <test>loadCustomPresets() handles corrupted JSON gracefully</test>
+      <test>deleteCustomPreset() removes preset and updates tracks</test>
+      <test>getAllPresets() merges defaults + custom correctly</test>
+      <test>Preset schema validation rejects invalid structures</test>
+      <test>Migration function upgrades v1 presets to v2</test>
+      <test>Export preset generates valid JSON</test>
+      <test>Import preset validates before saving</test>
+      <test>Preset reordering updates localStorage order array</test>
+      <test>Auto-restore picks preferredPresetId over lastPresetId</test>
+      <test>Sensor lock disables all sliders</test>
+    </unit-tests>
+    
+    <integration-tests count="8">
+      <test>Mode chip click applies preset and updates audio graph</test>
+      <test>Slider onChange triggers audio parameter change</test>
+      <test>Save preset dialog creates new preset in list</test>
+      <test>Preset delete removes from list and localStorage</test>
+      <test>Track replay restores correct preset before audio starts</test>
+      <test>Preset change during playback updates track.lastPresetId</test>
+      <test>Advanced controls expand/collapse preserves state</test>
+      <test>Keyboard shortcuts work (Ctrl+E, Ctrl+S)</test>
+    </integration-tests>
+    
+    <manual-tests count="10">
+      <test>Smoke test: Create, apply, save, delete preset</test>
+      <test>Regression: Switch presets 50 times, verify 0 audio dropouts</test>
+      <test>Accessibility: Navigate preset list with keyboard only</test>
+      <test>Accessibility: Use screen reader to verify announcements</test>
+      <test>Performance: Measure applyPreset() latency on low-end device</test>
+      <test>Storage: Create 50 presets, verify localStorage usage</test>
+      <test>Edge case: Delete preset currently in use</test>
+      <test>Edge case: Import malformed preset JSON</test>
+      <test>UX: Verify sensor lock icon appears and controls disable</test>
+      <test>Cross-browser: Test on Chrome, Firefox, Safari</test>
+    </manual-tests>
+  </testing-pyramid>
+
+  <future-enhancements>
+    <enhancement priority="medium" epic="4">
+      <title>Preset effectiveness scoring</title>
+      <description>E4 session logs can track "felt better" rate per preset, surfacing in insights dashboard</description>
+      <value>Users discover which presets actually help vs. placebo</value>
+    </enhancement>
+    
+    <enhancement priority="low" epic="5">
+      <title>Adaptive preset suggestions</title>
+      <description>E5 sensor engine can suggest preset changes based on HR/HRV patterns</description>
+      <value>Proactive support: "Your HR is elevated, try Calm preset?"</value>
+    </enhancement>
+    
+    <enhancement priority="low" epic="6">
+      <title>Preset sharing community</title>
+      <description>Future: Upload/download presets from public gallery (requires backend)</description>
+      <value>Users discover presets from neurodivergent community</value>
+    </enhancement>
+    
+    <enhancement priority="low">
+      <title>Preset scheduling</title>
+      <description>Auto-switch to Energize at 2pm, Calm at 8pm</description>
+      <value>Circadian rhythm support for ADHD users</value>
+    </enhancement>
+  </future-enhancements>
+
+  <definition-of-done>
+    <story id="3-1">
+      <checklist>
+        <item>✅ applyPreset() helper extracts and applies all 8 parameters</item>
+        <item>✅ activePresetId state tracks current preset</item>
+        <item>✅ Mode chips highlight selected preset with aria-current</item>
+        <item>✅ Preset change logs presetId for E4 integration</item>
+        <item>✅ Default presets editable via settings panel</item>
+        <item>✅ Unit tests pass (5/5)</item>
+        <item>✅ Manual smoke test: Switch between Focus/Calm/Energize</item>
+        <item>✅ Accessibility: Keyboard navigation works, screen reader announces</item>
+        <item>✅ Performance: Preset switch <100ms latency</item>
+      </checklist>
+    </story>
+    
+    <story id="3-2">
+      <checklist>
+        <item>✅ AdvancedControls component renders all 8 sliders/dropdowns</item>
+        <item>✅ Slider onChange updates parameter state immediately</item>
+        <item>✅ Audio graph reflects changes <100ms perceived latency</item>
+        <item>✅ Sensor lock UI disables controls when sensorLocked=true</item>
+        <item>✅ Drawer expand/collapse via keyboard (Enter on summary)</item>
+        <item>✅ Unit tests pass (3/3)</item>
+        <item>✅ Integration test: Slider change → audio graph update</item>
+        <item>✅ Accessibility: All sliders have labels, value readouts</item>
+        <item>✅ No audio dropouts during parameter tweaking</item>
+      </checklist>
+    </story>
+    
+    <story id="3-3">
+      <checklist>
+        <item>✅ Preset CRUD helpers implemented and tested</item>
+        <item>✅ SavePresetDialog UI complete with validation</item>
+        <item>✅ PresetList component shows defaults + custom presets</item>
+        <item>✅ Edit/delete actions work, update localStorage</item>
+        <item>✅ Track schema includes lastPresetId and preferredPresetId</item>
+        <item>✅ playTrack() restores preset before audio starts</item>
+        <item>✅ Preset change during playback updates lastPresetId</item>
+        <item>✅ Delete preset falls back gracefully (no crashes)</item>
+        <item>✅ Unit tests pass (7/7)</item>
+        <item>✅ Integration tests pass (5/5)</item>
+        <item>✅ Manual test: Create, save, apply, delete preset flow</item>
+        <item>✅ Accessibility: Keyboard access to all CRUD operations</item>
+        <item>✅ localStorage persistence verified across page refresh</item>
+        <item>✅ Export/import preset JSON (optional, nice-to-have)</item>
+      </checklist>
+    </story>
+  </definition-of-done>
+
+  <handoff-notes>
+    <for-story-drafting>
+      <note>Use this context to draft detailed story specs for 3-1, 3-2, 3-3</note>
+      <note>Each story spec should include: user story, AC, test scenarios, implementation guidance</note>
+      <note>Leverage existing Epic 2 story templates for consistency</note>
+    </for-story-drafting>
+    
+    <for-development>
+      <note>All existing Epic 1/2 code remains unchanged - Epic 3 extends, not replaces</note>
+      <note>Existing useEffect hooks for audio parameters already handle live updates</note>
+      <note>Toast system, a11yAnnouncement, and heroMessage helpers already exist</note>
+      <note>Follow Epic 2 patterns: try/finally for UI state, refs for cleanup, tests alongside code</note>
+    </for-development>
+    
+    <for-qa>
+      <note>Regression critical: Verify preset switching doesn't cause audio dropouts</note>
+      <note>Accessibility critical: Full keyboard nav + screen reader compatibility</note>
+      <note>Performance target: <100ms perceived latency on parameter changes</note>
+      <note>Manual test matrix provided in testing-strategy sections</note>
+    </for-qa>
+  </handoff-notes>
+</epic-context>
