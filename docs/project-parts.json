@@ -1,0 +1,17 @@
+{
+  "repository_type": "monolith",
+  "parts": [
+    {
+      "id": "frontend",
+      "name": "mp3_to_8D Player",
+      "root_path": "/home/jeremyking/workspace/mpe_8d",
+      "project_type": "web",
+      "tech_stack": {
+        "framework": "React 18 (UMD)",
+        "language": "JavaScript + JSX",
+        "audio_engine": "Web Audio API"
+      }
+    }
+  ],
+  "integration_points": []
+}

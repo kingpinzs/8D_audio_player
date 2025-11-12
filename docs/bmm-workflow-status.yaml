@@ -1,0 +1,58 @@
+# Workflow Status Template
+# This tracks progress through BMM methodology phases
+# Phase 3/4 (Implementation) is tracked separately in sprint-status.yaml
+
+# generated: {{generated}}
+# project: {{project_name}}
+# project_type: {{project_type}}
+# selected_track: {{selected_track}}
+# field_type: {{field_type}}
+# workflow_path: {{workflow_path_file}}
+
+# STATUS DEFINITIONS:
+# ==================
+# Initial Status (before completion):
+#   - required: Must be completed to progress
+#   - optional: Can be completed but not required
+#   - recommended: Strongly suggested but not required
+#   - conditional: Required only if certain conditions met (e.g., if_has_ui)
+#
+# Completion Status:
+#   - {file-path}: File created/found (e.g., "docs/product-brief.md")
+#   - skipped: Optional/conditional workflow that was skipped
+
+generated: "2025-11-11"
+project: "mp3_to_8D"
+project_type: "software"
+selected_track: "method"
+field_type: "brownfield"
+workflow_path: "method-brownfield.yaml"
+
+workflow_status:
+  # Prerequisite: Documentation
+  document-project: docs/index.md  # agent: analyst
+
+  # Phase 0: Discovery (Optional)
+  brainstorm-project: docs/bmm-brainstorming-session-2025-11-11.md  # agent: analyst
+  research: docs/bmm-research-technical-2025-11-11.md  # agent: analyst
+
+  # Phase 1: Planning
+  prd: docs/PRD.md  # agent: pm
+  validate-prd: docs/validate-prd-report-2025-11-12.md  # agent: pm
+  create-design: docs/create-design.md  # agent: ux-designer
+  create-epics-and-stories: docs/create-epics-and-stories.md  # agent: pm
+
+  # Phase 2: Solutioning
+  create-architecture: docs/architecture.md  # agent: architect
+  validate-architecture: optional  # agent: architect
+  solutioning-gate-check: docs/implementation-readiness-report-2025-11-12.md  # agent: architect
+
+  # Phase 3: Implementation
+  sprint-planning: .bmad-ephemeral/sprint-status.yaml  # agent: sm
+
+user_description: >
+  I need to make one main html file that contains all the features and a working UI and fix the bugs of the audio output. 8d-audio-live-v3.html is the latest but it has the audio bugs in it and 8d-audio-live-v2.html does not seem like it has the bug in it. I need a production ready page that will allow drag and drop mp3s or stream like Pandora etc so all sound is 8d if I choose so.
+
+brainstorm_requested: true
+research_requested: true
+product_brief_requested: false

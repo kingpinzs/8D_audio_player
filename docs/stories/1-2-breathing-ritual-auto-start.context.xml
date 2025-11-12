@@ -1,0 +1,366 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-key>1-2-breathing-ritual-auto-start</story-key>
+    <epic>E1</epic>
+    <story-id>1-2</story-id>
+    <title>Breathing Ritual &amp; Auto-Start</title>
+    <status>ready-for-dev</status>
+    <generated>2025-11-11</generated>
+  </metadata>
+
+  <user-story>
+    <as-a>user</as-a>
+    <i-want>a 4-2-4 breathing animation before audio</i-want>
+    <so-that>I ease into focus without fiddling with controls</so-that>
+  </user-story>
+
+  <acceptance-criteria>
+    <criterion id="AC1">
+      <title>Guided 20 s ritual gates playback</title>
+      <description>Pressing `Start` on any mode triggers a 4-2-4 animation (visual pulse + textual cadence) for 20 seconds, hides advanced controls until completion, and automatically plays the currently selected preset/track (or opens Add Audio when the playlist is empty). Hero copy and aria-live updates announce inhale/hold/exhale states, and completing the ritual fires `FOCUS_RITUAL_COMPLETED` with elapsed time.</description>
+      <sources>docs/create-epics-and-stories.md:37-41, docs/PRD.md:93-98, docs/create-design.md:46-52, docs/architecture.md:82-86</sources>
+    </criterion>
+    <criterion id="AC2">
+      <title>Skip preference persists locally</title>
+      <description>A clearly labeled Skip control near the hero lets users bypass the ritual. Choosing skip immediately starts playback, logs `RITUAL_SKIPPED`, and stores a reversible preference in `localStorage` so future sessions honor the choice without extra taps while remaining profile-aware. Resetting the flag restores the ritual flow.</description>
+      <sources>docs/create-epics-and-stories.md:37-41, docs/architecture.md:101-109, docs/create-design.md:32-35,104-105</sources>
+    </criterion>
+    <criterion id="AC3">
+      <title>Reduced-motion fallback &amp; announcements</title>
+      <description>Detect `prefers-reduced-motion` plus the hero's manual toggle to swap the animation for a static countdown with gradient fade, silenced chimes, and 5-second textual updates. Visualizer/orbit throttles accordingly, ensuring WCAG-compliant focus and keyboard control.</description>
+      <sources>docs/PRD.md:43-54, docs/create-design.md:10-15,49-52,109-115</sources>
+    </criterion>
+    <criterion id="AC4">
+      <title>Telemetry + insights integration</title>
+      <description>Ritual start/skip/complete events update `SessionLogger` so `timeToFocusMs` and preset/mode metadata enter IndexedDB, unlocking insights after five sessions. Events should be replay-safe (idempotent) and exposed to the debug panel/event bus.</description>
+      <sources>docs/PRD.md:57-66, docs/architecture.md:82-87, docs/create-design.md:100-107</sources>
+    </criterion>
+    <criterion id="AC5">
+      <title>Definition of done / QA</title>
+      <description>Media-query simulation plus manual Chrome desktop + Firefox mobile smoke confirm the animation, skip persistence, and reduced-motion fallback; hero tap targets remain ≥48 px and the flow satisfies the two-tap activation KPI.</description>
+      <sources>docs/create-epics-and-stories.md:37-41, docs/PRD.md:43-48, docs/create-design.md:10-15,109-114</sources>
+    </criterion>
+  </acceptance-criteria>
+
+  <tasks>
+    <task id="T1" ac-ref="AC1">
+      <title>Implement guided ritual flow + autoplay handoff</title>
+      <subtasks>
+        <subtask>Build ritual state machine controlling hero UI, aria-live messages, and advanced-controls lockout</subtask>
+        <subtask>Trigger `play()`/preset application after countdown and show Add Audio prompt when playlist empty</subtask>
+      </subtasks>
+    </task>
+    <task id="T2" ac-ref="AC2 AC3">
+      <title>Persist skip + reduced-motion preferences</title>
+      <subtasks>
+        <subtask>Wire Skip + Restore controls to `localStorage`-backed hook and event bus logs</subtask>
+        <subtask>Sync prefers-reduced-motion media query + toggle, swapping in static countdown assets and disabling motion-heavy components</subtask>
+      </subtasks>
+    </task>
+    <task id="T3" ac-ref="AC4 AC5">
+      <title>Telemetry + QA validation</title>
+      <subtasks>
+        <subtask>Emit `RITUAL_STARTED`, `RITUAL_SKIPPED`, `FOCUS_RITUAL_COMPLETED` with metadata and write to `SessionLogger`</subtask>
+        <subtask>Execute Chrome desktop + Firefox mobile ritual runs, media-query tests, and document results in Dev Agent Record</subtask>
+      </subtasks>
+    </task>
+  </tasks>
+
+  <artifacts>
+    <docs>
+      <artifact>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>FR4 – Focus Ritual &amp; Mode Launch</section>
+        <snippet>Guided breathing animation (with skip option) precedes playback; advanced controls hidden until ritual completes. Start Focus triggers a 20-second animation, auto-starts audio, and logs ritual completion; reduced-motion mode replaces animation with static countdown.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>Experience Principles &amp; Primary Journeys</section>
+        <snippet>Journey 1 – Quick Focus Launch: User opens PWA → sees Focus/Calm/Energize cards. Tap "Start Focus" → breathing halo animation begins (with reduced-motion fallback). Audio starts automatically with last-used preset.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/create-design.md</path>
+        <title>Design Specification</title>
+        <section>4.1 Start Focus/Calm Ritual</section>
+        <snippet>Press `Start Focus`: 4-2-4 breathing animation (ring pulses + textual cadence) begins; hero copy reads "Breathe In…". After 20 s (or when skipped), selected preset auto-applies; if playlist empty, show Add Audio modal instead of silence. Reduced-motion preference stored locally swaps animation for gradient fade + textual countdown.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/create-design.md</path>
+        <title>Design Specification</title>
+        <section>Experience Pillars &amp; Guardrails</section>
+        <snippet>Two-tap calm – Users reach audio in ≤2 taps/10 seconds, with breathing ritual easing them in and reduced-motion fallbacks available.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>3.5 Session Logging &amp; Insights</section>
+        <snippet>`SessionLogger` listens for `PLAYBACK_STARTED`, `FOCUS_RITUAL_COMPLETED`, `SESSION_ENDED`, `EMOJI_SUBMITTED` events. IndexedDB `sessions` store schema: `{id, profileId, presetId, trackId, startTs, endTs, timeToFocusMs, emoji, notes, hrAvg, hrDelta, sensorEvents[]}`.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>4. Data Persistence &amp; Synchronization</section>
+        <snippet>`localStorage`: Quick flags (theme, reduced-motion override, ritual skip preference). Synchronous reads on startup only. `IndexedDB.sessions`: Session telemetry &amp; emoji feedback. Bound to profileId; cap at 500 entries per profile with pruning job.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/create-epics-and-stories.md</path>
+        <title>Epics and Stories</title>
+        <section>S1.2 – Breathing Ritual &amp; Auto-Start</section>
+        <snippet>Tapping Start Focus triggers 20 s animation followed by automatic playback; skip action persists preference; reduced-motion users see static countdown. DoD: Media-query tests plus localStorage flag verified.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/stories/1-1-consolidated-shell-and-navigation.md</path>
+        <title>Story 1-1 (Completed)</title>
+        <section>Learnings from Previous Story</section>
+        <snippet>Reuse the consolidated shell and RitualHero grid already implemented in `index.html`, including roving tabindex mode chips and ≥48 px tap targets. Maintain Pa11y ≥95 posture and keyboard order validated in S1.1 when adding new controls to the hero.</snippet>
+      </artifact>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>startRitual</symbol>
+        <lines>1489-1510</lines>
+        <reason>Existing ritual starter function - needs 4-2-4 breathing animation integration instead of simple countdown</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>skipRitual</symbol>
+        <lines>1512-1519</lines>
+        <reason>Skip function exists but needs localStorage persistence for preference storage (AC2)</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>launchRitualPlayback</symbol>
+        <lines>1469-1487</lines>
+        <reason>Auto-start playback handler - target for ritual completion and skip paths</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>clearRitualTimers</symbol>
+        <lines>822-830</lines>
+        <reason>Timer cleanup utility - needs integration with new breathing state machine</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>ritualStatus</symbol>
+        <lines>667</lines>
+        <reason>State hook managing ritual phases ('idle', 'breathing') - expand for 4-2-4 phases (inhale/hold/exhale)</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>ritualCountdown</symbol>
+        <lines>668</lines>
+        <reason>Countdown timer state - maintain for reduced-motion static countdown (AC3)</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>reducedMotion</symbol>
+        <lines>673</lines>
+        <reason>Reduced-motion toggle state - use to swap breathing animation for static countdown (AC3)</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>hero-animation</symbol>
+        <lines>198-240</lines>
+        <reason>Existing CSS animation for breathing ring - enhance with 4-2-4 keyframes (2s in, 1s hold, 2s out, 1s hold)</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>hero-countdown</symbol>
+        <lines>1693-1704</lines>
+        <reason>Ritual countdown UI with aria-live announcements - extend with 4-2-4 phase text prompts</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>HERO_BREATH_DURATION</symbol>
+        <lines>636</lines>
+        <reason>20-second ritual duration constant - matches AC1 requirement</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>MODE_LIBRARY</symbol>
+        <lines>640-658</lines>
+        <reason>Focus/Calm/Energize mode definitions - ritual must work across all three modes (AC1)</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <note>This is a single-file HTML app using React 18 UMD build loaded via CDN. No package.json found - dependencies managed externally.</note>
+      <library name="React" version="18.x" source="CDN" />
+      <library name="Babel Standalone" version="latest" source="CDN" notes="JSX transformation in browser" />
+      <library name="Web Audio API" version="native" notes="AudioContext, GainNode, StereoPannerNode, AnalyserNode" />
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface>
+      <name>localStorage ritual skip preference</name>
+      <kind>browser API</kind>
+      <signature>localStorage.setItem('skipBreathingRitual', 'true')</signature>
+      <path>browser localStorage</path>
+      <notes>Store skip preference (AC2). Check on mount to bypass ritual if previously skipped. Reversible via reset action.</notes>
+    </interface>
+    <interface>
+      <name>prefers-reduced-motion media query</name>
+      <kind>CSS media query</kind>
+      <signature>window.matchMedia('(prefers-reduced-motion: reduce)')</signature>
+      <path>browser MediaQueryList API</path>
+      <notes>Detect OS/browser reduced-motion setting (AC3). Combine with manual toggle state to determine animation vs static countdown.</notes>
+    </interface>
+    <interface>
+      <name>SessionLogger event bus</name>
+      <kind>telemetry interface</kind>
+      <signature>SessionLogger.emit('FOCUS_RITUAL_COMPLETED', { presetId, modeId, timeToFocusMs, skipped: boolean })</signature>
+      <path>docs/architecture.md:82-87</path>
+      <notes>Emit ritual lifecycle events (AC4): RITUAL_STARTED, RITUAL_SKIPPED, FOCUS_RITUAL_COMPLETED. Store in IndexedDB sessions store with idempotent handling.</notes>
+    </interface>
+    <interface>
+      <name>IndexedDB sessions store</name>
+      <kind>database schema</kind>
+      <signature>{id, profileId, presetId, trackId, startTs, endTs, timeToFocusMs, emoji, notes, hrAvg, hrDelta, sensorEvents[]}</signature>
+      <path>docs/architecture.md:101-109</path>
+      <notes>Persist ritual telemetry (AC4). Cap at 500 entries per profile with pruning job. Enable insights dashboard after 5+ sessions.</notes>
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint>
+      <title>Preserve v2 audio graph stability</title>
+      <description>Story 1-1 merged v2 audio stability with v3 UI. Do not modify Web Audio graph connections or gain structures. Ritual completion must call existing `launchRitualPlayback()` function to start playback.</description>
+      <source>docs/stories/1-1-consolidated-shell-and-navigation.md:49-61</source>
+    </constraint>
+    <constraint>
+      <title>Two-tap activation KPI</title>
+      <description>Start button → ritual (or skip) → playback must not exceed two primary interactions. Skip preference persistence ensures returning users maintain two-tap promise even with ritual enabled.</description>
+      <source>docs/PRD.md:43-48, docs/create-design.md:10-15</source>
+    </constraint>
+    <constraint>
+      <title>Accessibility posture (Pa11y ≥95)</title>
+      <description>New breathing UI elements must maintain keyboard accessibility and ARIA announcements. Hero tap targets ≥48px. Breathing phase updates announced via aria-live regions. Maintain Story 1-1's roving tabindex pattern for mode chips.</description>
+      <source>docs/stories/1-1-consolidated-shell-and-navigation.md:14-31,54-56</source>
+    </constraint>
+    <constraint>
+      <title>Inline React architecture</title>
+      <description>Entire app lives in single `index.html` file with inline React JSX transformed by Babel standalone. No build step. All ritual logic must be hooks/components within the existing structure.</description>
+      <source>docs/source-tree-analysis.md:3-46</source>
+    </constraint>
+    <constraint>
+      <title>4-2-4 breathing cadence specification</title>
+      <description>Breathing animation uses 4-second cycles: 2s inhale, 1s hold, 2s exhale, 1s hold. Repeat 5 times over 20 seconds. Visual ring expansion/contraction synchronized with text prompts ("Breathe In...", "Hold...", "Breathe Out...").</description>
+      <source>docs/create-design.md:46-52</source>
+    </constraint>
+    <constraint>
+      <title>Reduced-motion compliance</title>
+      <description>When `prefers-reduced-motion: reduce` detected OR manual toggle enabled, replace animated breathing ring with static countdown (20, 19, 18...). Disable CSS animations. Visualizer throttles to 10fps or disables entirely per architecture spec.</description>
+      <source>docs/architecture.md:115-120, docs/create-design.md:49-52</source>
+    </constraint>
+  </constraints>
+
+  <tests>
+    <standards>
+      <paragraph>
+        Manual smoke testing required: Chrome desktop + Firefox mobile. Media-query simulation via DevTools to test reduced-motion fallback. Pa11y accessibility audit to verify ≥95 score maintained from Story 1-1. Keyboard navigation testing for ritual controls and skip button. localStorage persistence verified via browser DevTools Application tab. IndexedDB sessions store inspected to confirm telemetry events written with correct structure.
+      </paragraph>
+    </standards>
+
+    <locations>
+      <location>docs/test-artifacts/</location>
+      <location>Manual testing checklist in story file Dev Agent Record section</location>
+    </locations>
+
+    <ideas>
+      <idea ac-ref="AC1">
+        <description>Test breathing animation triggers on Start button click</description>
+        <approach>Click Start Focus/Calm/Energize, verify 20s countdown begins, visual ring animates with 4-2-4 cadence, hero text updates with breathing prompts, playback auto-starts after completion</approach>
+      </idea>
+      <idea ac-ref="AC1">
+        <description>Test empty playlist scenario shows Add Audio prompt</description>
+        <approach>Clear playlist, start ritual, verify Add Audio modal launches instead of attempting silent playback</approach>
+      </idea>
+      <idea ac-ref="AC2">
+        <description>Test skip preference persistence across sessions</description>
+        <approach>Click Skip during ritual, verify localStorage flag set, reload page, start new ritual, confirm ritual bypassed automatically, verify playback starts immediately</approach>
+      </idea>
+      <idea ac-ref="AC2">
+        <description>Test skip preference reset restores ritual</description>
+        <approach>After setting skip preference, clear localStorage flag, verify next Start button triggers full ritual again</approach>
+      </idea>
+      <idea ac-ref="AC3">
+        <description>Test reduced-motion media query detection</description>
+        <approach>Enable OS-level reduced-motion, reload app, start ritual, verify static countdown displays instead of animated ring, text updates every 5s per spec</approach>
+      </idea>
+      <idea ac-ref="AC3">
+        <description>Test manual reduced-motion toggle</description>
+        <approach>Click reduced-motion toggle in header, start ritual, verify animation swapped for static countdown regardless of OS setting</approach>
+      </idea>
+      <idea ac-ref="AC4">
+        <description>Test ritual telemetry events logged to IndexedDB</description>
+        <approach>Open IndexedDB inspector, start ritual, verify RITUAL_STARTED event written, complete ritual, verify FOCUS_RITUAL_COMPLETED event with timeToFocusMs and preset metadata, skip ritual, verify RITUAL_SKIPPED event</approach>
+      </idea>
+      <idea ac-ref="AC5">
+        <description>Test hero tap target sizes meet 48px minimum</description>
+        <approach>Inspect Start button and Skip button in DevTools, verify min-height/min-width ≥48px, test touch targets on mobile Firefox</approach>
+      </idea>
+      <idea ac-ref="AC5">
+        <description>Test keyboard accessibility for ritual controls</description>
+        <approach>Tab to Start button, press Enter/Space to trigger ritual, Tab to Skip button during breathing, press Enter to skip, verify focus states visible and navigation logical</approach>
+      </idea>
+      <idea ac-ref="AC5">
+        <description>Run Pa11y accessibility audit</description>
+        <approach>Execute `npx pa11y http://localhost:8001/index.html`, verify 0 WCAG 2.1 AA violations, maintain ≥95 accessibility score from Story 1-1 baseline</approach>
+      </idea>
+    </ideas>
+  </tests>
+
+  <open-questions>
+    <question>
+      <text>Should the skip preference be scoped per profile/mode or remain global across Focus/Calm/Energize?</text>
+      <source>docs/architecture.md:159-161</source>
+      <impact>Affects localStorage key structure and skip preference UI labeling</impact>
+    </question>
+    <question>
+      <text>Can we reuse the ritual animation assets for Calm/Energize with different palettes, or do we need unique motion curves per design?</text>
+      <source>docs/create-design.md:46-52</source>
+      <impact>May require mode-specific CSS keyframes or color palette customization</impact>
+    </question>
+  </open-questions>
+
+  <dev-notes>
+    <note>
+      Keep "two-tap calm" principle by ensuring Start → ritual (or skip) → playback never exceeds two primary interactions even when Add Audio modal intervenes.
+    </note>
+    <note>
+      Gate advanced controls and preset drawers until ritual completion unless Expert mode is explicitly enabled in future stories.
+    </note>
+    <note>
+      Event bus consumers (debug panel, insights) rely on consistent payloads, so define a shared `RitualEventPayload` type early.
+    </note>
+    <note>
+      Reuse the consolidated shell and RitualHero grid already implemented in `index.html`, including roving tabindex mode chips and ≥48 px tap targets, to avoid duplicating layout logic.
+    </note>
+    <note>
+      Maintain Pa11y ≥95 posture and keyboard order validated in S1.1 when adding new controls to the hero.
+    </note>
+    <note>
+      The unified experience still ships as standalone `index.html` with inline React/Babel scripts, so ritual logic should live alongside existing hooks until the bundler migration occurs.
+    </note>
+    <note>
+      Audio graph helpers originate from `8d-audio-live-v2.html`; continue to call into those functions after the ritual completes to preserve stability.
+    </note>
+  </dev-notes>
+</story-context>

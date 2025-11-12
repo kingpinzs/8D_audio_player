@@ -1,0 +1,7 @@
+# CIS Module Configuration
+# Generated for brainstorming workflow
+
+output_folder: '{project-root}/docs'
+user_name: Jeremy
+communication_language: English
+document_output_language: English

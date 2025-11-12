@@ -1,0 +1,396 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-key>1-3-personalization-accessibility-toggles</story-key>
+    <epic>E1</epic>
+    <story-id>1-3</story-id>
+    <title>Personalization &amp; Accessibility Toggles</title>
+    <status>ready-for-dev</status>
+    <generated>2025-11-11</generated>
+  </metadata>
+
+  <user-story>
+    <as-a>caregiver</as-a>
+    <i-want>high-contrast, dark mode, and reduced-motion toggles within reach</i-want>
+    <so-that>the UI stays sensory-safe and accessible for neurodivergent users</so-that>
+  </user-story>
+
+  <acceptance-criteria>
+    <criterion id="AC1">
+      <title>Toggles visible and accessible</title>
+      <description>High-contrast, dark mode, and reduced-motion toggles appear in the header section, are keyboard accessible, and maintain ≥48px tap targets. Toggles positioned consistently in header-actions area alongside existing dark mode/reduced-motion buttons.</description>
+      <sources>docs/create-epics-and-stories.md:48-53, docs/PRD.md:43-54, docs/create-design.md:10-15</sources>
+    </criterion>
+    <criterion id="AC2">
+      <title>State persistence per profile</title>
+      <description>Toggle states persist in localStorage and are restored on page load. When profile support is added (future epic), settings can be scoped per profile. localStorage keys follow established patterns: `darkMode`, `reducedMotion`, `highContrast`.</description>
+      <sources>docs/architecture.md:101-109, docs/stories/1-2-breathing-ritual-auto-start.md:133-146</sources>
+    </criterion>
+    <criterion id="AC3">
+      <title>Accessibility announcements</title>
+      <description>Toggle state changes are announced to assistive technologies via aria-live regions. Each toggle has proper ARIA labels and aria-pressed states. Focus indicators remain visible and meet WCAG 2.1 AA standards.</description>
+      <sources>docs/PRD.md:43-54, docs/architecture.md:115-120, docs/stories/1-1-consolidated-shell-and-navigation.md:14-31</sources>
+    </criterion>
+    <criterion id="AC4">
+      <title>High-contrast theme WCAG AA compliance</title>
+      <description>High-contrast mode increases text contrast ratios to meet WCAG AA standards (≥4.5:1 for normal text, ≥3:1 for large text). Visual verification via color contrast analyzer. Theme implemented via CSS custom properties and `body.high-contrast` class following existing pattern.</description>
+      <sources>docs/PRD.md:43-54, docs/create-design.md:10-15,109-114</sources>
+    </criterion>
+    <criterion id="AC5">
+      <title>Keyboard shortcuts documented</title>
+      <description>Keyboard shortcuts for common actions are documented in help overlay or accessibility panel. Focus indicators remain visible and meet WCAG standards. Tab order follows logical reading sequence established in Story 1-1.</description>
+      <sources>docs/PRD.md:43-54, docs/stories/1-1-consolidated-shell-and-navigation.md:54-56</sources>
+    </criterion>
+  </acceptance-criteria>
+
+  <tasks>
+    <task id="T1" ac-ref="AC1">
+      <title>Implement accessibility toggle UI in header</title>
+      <subtasks>
+        <subtask>Add high-contrast toggle button with icon and label in header-actions</subtask>
+        <subtask>Verify existing dark mode toggle positioning and styling</subtask>
+        <subtask>Verify existing reduced-motion toggle positioning and styling</subtask>
+        <subtask>Ensure all toggle buttons meet ≥48px tap target minimum</subtask>
+        <subtask>Implement keyboard navigation (Tab/Enter/Space) for new high-contrast toggle</subtask>
+      </subtasks>
+    </task>
+    <task id="T2" ac-ref="AC2">
+      <title>Persist toggle states in localStorage</title>
+      <subtasks>
+        <subtask>Create state hook for highContrast toggle with default value</subtask>
+        <subtask>Wire localStorage persistence for highContrast (read on mount, write on change)</subtask>
+        <subtask>Verify existing darkMode and reducedMotion localStorage persistence works</subtask>
+        <subtask>Add migration notes/comments for future profile-scoped settings</subtask>
+      </subtasks>
+    </task>
+    <task id="T3" ac-ref="AC3">
+      <title>Add accessibility announcements</title>
+      <subtasks>
+        <subtask>Wire aria-pressed states for all toggle buttons (dark mode, reduced-motion, high-contrast)</subtask>
+        <subtask>Add aria-live region for toggle state change announcements</subtask>
+        <subtask>Test with screen reader (NVDA on Windows or VoiceOver on macOS/iOS)</subtask>
+        <subtask>Verify focus indicators visible on all interactive elements</subtask>
+      </subtasks>
+    </task>
+    <task id="T4" ac-ref="AC4">
+      <title>Implement high-contrast theme</title>
+      <subtasks>
+        <subtask>Define high-contrast CSS custom properties (text, backgrounds, borders) in body.high-contrast selector</subtask>
+        <subtask>Apply high-contrast class to body element when toggle active</subtask>
+        <subtask>Test contrast ratios with browser DevTools or WebAIM contrast checker</subtask>
+        <subtask>Verify WCAG AA compliance (≥4.5:1 normal, ≥3:1 large text)</subtask>
+        <subtask>Test with Pa11y accessibility audit and maintain ≥95 score</subtask>
+      </subtasks>
+    </task>
+    <task id="T5" ac-ref="AC5">
+      <title>Document keyboard shortcuts and test</title>
+      <subtasks>
+        <subtask>Create keyboard shortcuts reference (inline help comment or future modal stub)</subtask>
+        <subtask>Document Focus/Calm/Energize mode selection shortcuts (arrow keys from Story 1-1)</subtask>
+        <subtask>Document playback control shortcuts (Space for Play/Pause if applicable)</subtask>
+        <subtask>Test keyboard navigation flow end-to-end (mode selection → toggles → playback)</subtask>
+        <subtask>Verify focus order follows logical reading sequence per Story 1-1</subtask>
+      </subtasks>
+    </task>
+  </tasks>
+
+  <artifacts>
+    <docs>
+      <artifact>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>Experience Principles &amp; Guardrails</section>
+        <snippet>Accessibility-first UI – Large tap targets, reduced-motion/high-contrast toggles, and calm visuals designed for neurodivergent comfort. WCAG 2.1 AA compliance required.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>MVP Scope</section>
+        <snippet>Accessibility + personalization toggles (dark mode, reduced motion, high contrast) surfaced near hero controls.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/create-design.md</path>
+        <title>Design Specification</title>
+        <section>Experience Pillars &amp; Guardrails</section>
+        <snippet>Sensory-safe defaults – High-contrast mode, reduced-motion toggle, and breathing ritual skip ensure neurodivergent users stay in control.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>4. Data Persistence &amp; Synchronization</section>
+        <snippet>`localStorage`: Quick flags (theme, reduced-motion override, ritual skip preference). Synchronous reads on startup only.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>5. Non-Functional Requirements Mapping</section>
+        <snippet>Accessibility (≥95) – Shared token system controlling contrast, font sizes; Pa11y/axe in CI; roving tabindex for mode chips; ARIA labels for ritual states and emoji inputs.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/create-epics-and-stories.md</path>
+        <title>Epics and Stories</title>
+        <section>S1.3 – Personalization &amp; Accessibility Toggles</section>
+        <snippet>Expose high-contrast, dark mode, and reduced-motion toggles within the hero section to ensure the unified UI remains sensory-safe and accessible for neurodivergent users and caregivers. DoD: Pa11y audit passes, contrast ratios verified.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/stories/1-1-consolidated-shell-and-navigation.md</path>
+        <title>Story 1-1 (Completed)</title>
+        <section>Learnings from Previous Story</section>
+        <snippet>Roving tabindex pattern established for mode chips, ≥48px tap targets validated, Pa11y score ≥95 baseline set. Maintain keyboard navigation patterns and accessibility posture when adding new controls.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/stories/1-2-breathing-ritual-auto-start.md</path>
+        <title>Story 1-2 (Completed)</title>
+        <section>Dev Notes - Learnings from Previous Story</section>
+        <snippet>localStorage persistence pattern: Use try-catch wrapped localStorage for quota safety. Dark mode and reduced-motion toggles already implemented in header (index.html:1789-1809). Reuse this UI pattern and positioning for new high-contrast toggle.</snippet>
+      </artifact>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>index.html</path>
+        <kind>style</kind>
+        <symbol>:root CSS variables</symbol>
+        <lines>12-27</lines>
+        <reason>Light theme CSS custom properties - base for high-contrast theme extension</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>style</kind>
+        <symbol>body.dark-mode CSS variables</symbol>
+        <lines>29-39</lines>
+        <reason>Dark mode CSS custom properties - pattern to follow for body.high-contrast selector</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>header-actions toggle buttons</symbol>
+        <lines>1789-1809</lines>
+        <reason>Existing dark mode and reduced-motion toggle buttons - add high-contrast toggle here</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>darkMode state hook</symbol>
+        <lines>689</lines>
+        <reason>Dark mode state with localStorage initialization pattern - replicate for highContrast</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>reducedMotion state hook</symbol>
+        <lines>673</lines>
+        <reason>Reduced-motion state pattern - verify persistence and aria-pressed wiring</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>toggleDarkMode function</symbol>
+        <lines>715-726</lines>
+        <reason>Dark mode toggle handler with localStorage persistence - pattern for highContrast toggle</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>useEffect for darkMode persistence</symbol>
+        <lines>781-792</lines>
+        <reason>Effect hook applying body class and localStorage write - replicate for highContrast</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>mode-chips keyboard navigation</symbol>
+        <lines>1820-1850</lines>
+        <reason>Roving tabindex pattern from Story 1-1 - ensure toggle keyboard nav doesn't conflict</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <note>This is a single-file HTML app using React 18 UMD build loaded via CDN. No package.json found - dependencies managed externally.</note>
+      <library name="React" version="18.x" source="CDN" />
+      <library name="ReactDOM" version="18.x" source="CDN" />
+      <library name="Babel Standalone" version="latest" source="CDN" notes="JSX transformation in browser" />
+      <library name="Web Audio API" version="native" notes="AudioContext, GainNode, StereoPannerNode, AnalyserNode - not directly impacted by this story" />
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface>
+      <name>localStorage theme persistence</name>
+      <kind>browser API</kind>
+      <signature>localStorage.setItem('highContrast', 'true')</signature>
+      <path>browser localStorage</path>
+      <notes>Store high-contrast preference (AC2). Check on mount to restore state. Use try-catch for quota safety per Story 1-2 pattern.</notes>
+    </interface>
+    <interface>
+      <name>CSS custom properties theming</name>
+      <kind>CSS variables</kind>
+      <signature>body.high-contrast { --text-primary: #000; --bg-1: #fff; ... }</signature>
+      <path>index.html:12-39</path>
+      <notes>Define high-contrast palette following existing :root and body.dark-mode pattern (AC4). Ensure WCAG AA contrast ratios.</notes>
+    </interface>
+    <interface>
+      <name>ARIA toggle states</name>
+      <kind>accessibility API</kind>
+      <signature>&lt;button aria-pressed={highContrast} aria-label="Toggle high contrast mode"&gt;</signature>
+      <path>index.html:1789-1809</path>
+      <notes>Expose toggle state to assistive tech (AC3). Match pattern from existing dark mode/reduced-motion buttons.</notes>
+    </interface>
+    <interface>
+      <name>aria-live announcements</name>
+      <kind>accessibility API</kind>
+      <signature>&lt;div aria-live="polite" role="status"&gt;High contrast mode enabled&lt;/div&gt;</signature>
+      <path>docs/stories/1-1-consolidated-shell-and-navigation.md</path>
+      <notes>Announce toggle state changes to screen readers (AC3). Can reuse existing announcement region or create dedicated one.</notes>
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint>
+      <title>Preserve v2 audio graph stability</title>
+      <description>Story 1-1 and 1-2 established audio graph and ritual flow. Do not modify Web Audio connections. Theme changes only affect CSS custom properties and body classes.</description>
+      <source>docs/stories/1-1-consolidated-shell-and-navigation.md:49-61, docs/stories/1-2-breathing-ritual-auto-start.md:49-61</source>
+    </constraint>
+    <constraint>
+      <title>Accessibility posture (Pa11y ≥95)</title>
+      <description>New toggle buttons and high-contrast theme must maintain Pa11y score ≥95 established in Story 1-1. All interactive elements keyboard accessible. Focus indicators visible. ARIA labels and pressed states required.</description>
+      <source>docs/stories/1-1-consolidated-shell-and-navigation.md:14-31, docs/architecture.md:115-120</source>
+    </constraint>
+    <constraint>
+      <title>Tap target minimum (≥48px)</title>
+      <description>All toggle buttons must meet ≥48px minimum tap target size for accessibility. Verified in Story 1-1 for mode chips and Start button - maintain same standard for new high-contrast toggle.</description>
+      <source>docs/PRD.md:43-48, docs/stories/1-1-consolidated-shell-and-navigation.md:14-31</source>
+    </constraint>
+    <constraint>
+      <title>Inline React architecture</title>
+      <description>Entire app lives in single `index.html` file with inline React JSX transformed by Babel standalone. No build step. All theme logic must be hooks/effects within the existing App component structure.</description>
+      <source>docs/source-tree-analysis.md:3-46, docs/architecture.md:115-120</source>
+    </constraint>
+    <constraint>
+      <title>WCAG 2.1 AA contrast compliance</title>
+      <description>High-contrast mode must meet WCAG 2.1 AA standards: ≥4.5:1 for normal text, ≥3:1 for large text (18pt+ or 14pt+ bold). Verify with color contrast analyzer or browser DevTools contrast checker.</description>
+      <source>docs/PRD.md:43-54, docs/architecture.md:115-120</source>
+    </constraint>
+    <constraint>
+      <title>localStorage pattern from Story 1-2</title>
+      <description>Follow established localStorage pattern: try-catch wrapped setItem/removeItem, synchronous read on mount with fallback defaults, quota safety handling per Story 1-2 implementation.</description>
+      <source>docs/stories/1-2-breathing-ritual-auto-start.md:133-146</source>
+    </constraint>
+    <constraint>
+      <title>CSS theming pattern</title>
+      <description>High-contrast theme should use CSS custom properties defined in body.high-contrast selector, following pattern from body.dark-mode. Apply/remove class via useEffect watching highContrast state, mirroring dark mode implementation.</description>
+      <source>index.html:29-39, index.html:781-792</source>
+    </constraint>
+  </constraints>
+
+  <tests>
+    <standards>
+      <paragraph>
+        Manual smoke testing required: Chrome desktop + Firefox mobile. Test all three toggles (dark mode, reduced-motion, high-contrast) in isolation and combination. Pa11y accessibility audit to verify ≥95 score maintained. Keyboard navigation testing for all toggle buttons. Screen reader testing (NVDA/VoiceOver) to verify aria-live announcements and aria-pressed states. Color contrast analyzer verification for high-contrast theme WCAG AA compliance. localStorage persistence verified via browser DevTools Application tab across page reloads.
+      </paragraph>
+    </standards>
+
+    <locations>
+      <location>docs/test-artifacts/</location>
+      <location>Manual testing checklist in story file Dev Agent Record section</location>
+    </locations>
+
+    <ideas>
+      <idea ac-ref="AC1">
+        <description>Test high-contrast toggle visible in header</description>
+        <approach>Verify new high-contrast toggle button appears in header-actions alongside existing dark mode and reduced-motion toggles, has visible icon/label, meets ≥48px tap target</approach>
+      </idea>
+      <idea ac-ref="AC1">
+        <description>Test keyboard navigation to toggles</description>
+        <approach>Tab through header controls, verify focus reaches all three toggle buttons (dark mode, reduced-motion, high-contrast), press Enter/Space to activate, verify focus indicator visible</approach>
+      </idea>
+      <idea ac-ref="AC2">
+        <description>Test high-contrast preference persistence</description>
+        <approach>Enable high-contrast mode, verify body.high-contrast class applied, reload page, verify state restored from localStorage, disable toggle, verify localStorage cleared and class removed</approach>
+      </idea>
+      <idea ac-ref="AC2">
+        <description>Test existing dark mode and reduced-motion persistence</description>
+        <approach>Toggle dark mode and reduced-motion, verify localStorage entries created, reload page, confirm both states restored correctly</approach>
+      </idea>
+      <idea ac-ref="AC3">
+        <description>Test aria-pressed states on toggle buttons</description>
+        <approach>Inspect toggle buttons in DevTools, verify aria-pressed="true" when active and aria-pressed="false" when inactive for all three toggles</approach>
+      </idea>
+      <idea ac-ref="AC3">
+        <description>Test screen reader announcements</description>
+        <approach>Enable screen reader (NVDA/VoiceOver), toggle high-contrast mode, verify announcement like "High contrast mode enabled" or "High contrast mode disabled" via aria-live region</approach>
+      </idea>
+      <idea ac-ref="AC4">
+        <description>Test high-contrast theme contrast ratios</description>
+        <approach>Enable high-contrast mode, use browser DevTools contrast checker or WebAIM tool to verify all text meets ≥4.5:1 (normal) or ≥3:1 (large) against backgrounds</approach>
+      </idea>
+      <idea ac-ref="AC4">
+        <description>Test high-contrast theme visual appearance</description>
+        <approach>Enable high-contrast mode, visually verify increased contrast across all UI sections (header, mode chips, hero, playlist, controls), take screenshots for documentation</approach>
+      </idea>
+      <idea ac-ref="AC5">
+        <description>Test keyboard navigation flow end-to-end</description>
+        <approach>Start from page load, Tab through mode chips → toggles → Start button → playlist controls, verify logical focus order, no keyboard traps, all elements reachable</approach>
+      </idea>
+      <idea ac-ref="AC5">
+        <description>Run Pa11y accessibility audit</description>
+        <approach>Execute `npx pa11y http://localhost:8000/index.html`, verify 0 WCAG 2.1 AA violations, maintain ≥95 accessibility score from Story 1-1/1-2 baseline</approach>
+      </idea>
+      <idea ac-ref="AC1 AC4">
+        <description>Test toggle combinations</description>
+        <approach>Test all combinations: dark mode + high-contrast, reduced-motion + high-contrast, all three enabled. Verify no visual conflicts, contrast ratios maintained, animations properly disabled when reduced-motion active</approach>
+      </idea>
+    </ideas>
+  </tests>
+
+  <open-questions>
+    <question>
+      <text>Should high-contrast mode override dark mode, or should they be composable (high-contrast variants for both light and dark themes)?</text>
+      <source>index.html:29-39</source>
+      <impact>Affects CSS custom properties structure - may need body.dark-mode.high-contrast selector if composable</impact>
+    </question>
+    <question>
+      <text>Should keyboard shortcuts for toggles be added (e.g., Alt+D for dark mode, Alt+H for high-contrast)?</text>
+      <source>docs/PRD.md:43-54</source>
+      <impact>May require additional keydown handlers and documentation in AC5 keyboard shortcuts reference</impact>
+    </question>
+    <question>
+      <text>Should toggle state changes trigger telemetry events for insights about accessibility feature usage?</text>
+      <source>docs/architecture.md:82-87</source>
+      <impact>Could inform future UX improvements but adds event bus complexity - defer to future story?</impact>
+    </question>
+  </open-questions>
+
+  <dev-notes>
+    <note>
+      Reuse the header-actions area and toggle button styling from existing dark mode/reduced-motion toggles (index.html:1789-1809) to maintain visual consistency.
+    </note>
+    <note>
+      Follow localStorage persistence pattern from Story 1-2: try-catch wrapper, synchronous read on mount with fallback default, write on toggle change (index.html:715-726, :781-792).
+    </note>
+    <note>
+      CSS custom properties pattern: Define body.high-contrast selector with increased contrast values, apply/remove class via useEffect watching highContrast state, matching dark mode implementation.
+    </note>
+    <note>
+      High-contrast palette guidance: Use pure black (#000) or near-black on pure white (#fff) backgrounds, avoid gradients or semi-transparent overlays, ensure all UI chrome (borders, dividers) meets 3:1 minimum.
+    </note>
+    <note>
+      ARIA announcements: Can reuse aria-live region if one exists from ritual flow (Story 1-2), or create dedicated region in header for theme/accessibility announcements.
+    </note>
+    <note>
+      Maintain Pa11y ≥95 score: Run audit after implementation, address any new violations (likely none if following established patterns), document results in Dev Agent Record.
+    </note>
+    <note>
+      Keyboard shortcuts documentation (AC5): Create inline HTML comment or stub modal component for future keyboard shortcuts reference. Document mode chip arrow navigation from Story 1-1, playback controls if applicable.
+    </note>
+    <note>
+      Focus indicators: Verify visible focus rings on all toggle buttons and interactive elements. May need to enhance default browser focus styles with custom outline for high-contrast mode.
+    </note>
+    <note>
+      Testing priority: Focus on high-contrast theme implementation and WCAG AA verification (AC4), as dark mode/reduced-motion toggles already implemented and verified in previous stories.
+    </note>
+    <note>
+      Profile scoping (AC2 future work): Add TODO comments where localStorage keys are defined to indicate future migration path when profile support added (Epic 4 or later).
+    </note>
+  </dev-notes>
+</story-context>

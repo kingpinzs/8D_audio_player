@@ -1,0 +1,562 @@
+            const setupAudioGraph = (audioElement) => {
+                const context = audioContextRef.current;
+                
+                // Resume context if suspended
+                if (context.state === 'suspended') {
+                    context.resume();
+                }
+                
+                // Clean up existing nodes
+                if (sourceNodeRef.current) {
+                    sourceNodeRef.current.disconnect();
+                }
+                if (oscillatorLeftRef.current) {
+                    oscillatorLeftRef.current.stop();
+                    oscillatorLeftRef.current.disconnect();
+                }
+                if (oscillatorRightRef.current) {
+                    oscillatorRightRef.current.stop();
+                    oscillatorRightRef.current.disconnect();
+                }
+                if (noiseNodeRef.current) {
+                    noiseNodeRef.current.stop();
+                    noiseNodeRef.current.disconnect();
+                }
+                if (rotationIntervalRef.current) {
+                    clearInterval(rotationIntervalRef.current);
+                }
+                
+                // Create audio source
+                const source = context.createMediaElementSource(audioElement);
+                sourceNodeRef.current = source;
+                
+                // Create splitter to separate stereo channels
+                const splitter = context.createChannelSplitter(2);
+                const merger = context.createChannelMerger(2);
+                
+                // Create gain nodes for MANUAL 8D panning (much more aggressive)
+                const leftToLeftGain = context.createGain();
+                const leftToRightGain = context.createGain();
+                const rightToLeftGain = context.createGain();
+                const rightToRightGain = context.createGain();
+                
+                // Store references for rotation
+                window.leftToLeftGain = leftToLeftGain;
+                window.leftToRightGain = leftToRightGain;
+                window.rightToLeftGain = rightToLeftGain;
+                window.rightToRightGain = rightToRightGain;
+                
+                // Create delay nodes for spatial depth
+                const delayLeft = context.createDelay();
+                const delayRight = context.createDelay();
+                delayLeft.delayTime.value = 0.05;
+                delayRight.delayTime.value = 0.05;
+                
+                const delayGainLeft = context.createGain();
+                const delayGainRight = context.createGain();
+                // Drastically reduced to 0.05 to prevent clipping
+                delayGainLeft.gain.value = 0.05 * spatialDepth;
+                delayGainRight.gain.value = 0.05 * spatialDepth;
+                
+                // Create cross-channel delays for depth
+                const crossDelayLeft = context.createDelay();
+                const crossDelayRight = context.createDelay();
+                crossDelayLeft.delayTime.value = 0.03;
+                crossDelayRight.delayTime.value = 0.03;
+                
+                const crossGainLeft = context.createGain();
+                const crossGainRight = context.createGain();
+                // Drastically reduced to 0.03 to prevent clipping
+                crossGainLeft.gain.value = 0.03 * spatialDepth;
+                crossGainRight.gain.value = 0.03 * spatialDepth;
+                
+                // Connect audio graph for AGGRESSIVE 8D effect
+                source.connect(splitter);
+                
+                // Left input channel routes
+                splitter.connect(leftToLeftGain, 0);
+                splitter.connect(leftToRightGain, 0);
+                
+                // Right input channel routes
+                splitter.connect(rightToLeftGain, 1);
+                splitter.connect(rightToRightGain, 1);
+                
+                // Connect to output channels with delays
+                leftToLeftGain.connect(merger, 0, 0);
+                leftToRightGain.connect(merger, 0, 1);
+                rightToLeftGain.connect(merger, 0, 0);
+                rightToRightGain.connect(merger, 0, 1);
+                
+                // Add echo/reverb for spatial depth
+                leftToLeftGain.connect(delayLeft);
+                delayLeft.connect(delayGainLeft);
+                delayGainLeft.connect(merger, 0, 0);
+                
+                rightToRightGain.connect(delayRight);
+                delayRight.connect(delayGainRight);
+                delayGainRight.connect(merger, 0, 1);
+                
+                // Add cross-channel delays
+                leftToLeftGain.connect(crossDelayRight);
+                crossDelayRight.connect(crossGainRight);
+                crossGainRight.connect(merger, 0, 1);
+                
+                rightToRightGain.connect(crossDelayLeft);
+                crossDelayLeft.connect(crossGainLeft);
+                crossGainLeft.connect(merger, 0, 0);
+                
+                // Create main gain and analyzer
+                const mainGain = context.createGain();
+                // Reduce master volume to 60% of user setting for extra headroom
+                mainGain.gain.value = volume * 0.6;
+                gainNodeRef.current = mainGain;
+                
+                const analyser = context.createAnalyser();
+                analyser.fftSize = 2048;
+                analyserRef.current = analyser;
+                
+                // Add a compressor to prevent clipping and distortion
+                const compressor = context.createDynamicsCompressor();
+                compressor.threshold.value = -24; // Start compressing even earlier
+                compressor.knee.value = 20; // Very smooth compression curve
+                compressor.ratio.value = 20; // Very strong compression
+                compressor.attack.value = 0.003; // Fast attack
+                compressor.release.value = 0.25; // Longer release for smoother sound
+                
+                // Add a final limiter to absolutely prevent clipping
+                const limiter = context.createDynamicsCompressor();
+                limiter.threshold.value = -6; // Hard ceiling
+                limiter.knee.value = 0; // Hard knee for brick-wall limiting
+                limiter.ratio.value = 20; // Maximum ratio
+                limiter.attack.value = 0.001; // Instant attack
+                limiter.release.value = 0.1; // Fast release
+                
+                // Connect to output with compressor AND limiter for maximum safety
+                merger.connect(mainGain);
+                mainGain.connect(compressor);
+                compressor.connect(limiter);
+                limiter.connect(analyser);
+                analyser.connect(context.destination);
+                
+                // Setup binaural beats if enabled
+                if (binauralEnabled) {
+                    setupBinauralBeats(context, mainGain);
+                }
+                
+                // Setup noise if enabled
+                if (noiseType !== 'none') {
+                    setupNoise(context, mainGain);
+                }
+                
+                // Start 8D rotation
+                startRotation();
+                
+                // Start visualization
+                if (showVisualizer) {
+                    visualize();
+                }
+            };
+
+            const startRotation = () => {
+                if (rotationIntervalRef.current) {
+                    clearInterval(rotationIntervalRef.current);
+                }
+                
+                let time = 0;
+                rotationIntervalRef.current = setInterval(() => {
+                    // Check if gain nodes exist
+                    if (!window.leftToLeftGain || !window.leftToRightGain || 
+                        !window.rightToLeftGain || !window.rightToRightGain) return;
+                    
+                    const angle = 2 * Math.PI * speed * time;
+                    let panPosition = 0;
+                    
+                    // Calculate pan position based on movement pattern
+                    switch(movementPattern) {
+                        case 'circle':
+                            panPosition = Math.sin(angle);
+                            break;
+                        case 'figure8':
+                            panPosition = Math.sin(angle) * Math.cos(angle / 2);
+                            break;
+                        case 'leftright':
+                            panPosition = Math.sin(angle);
+                            break;
+                        case 'frontback':
+                            panPosition = Math.cos(angle) * 0.5;
+                            break;
+                        case 'random':
+                            if (Math.random() > 0.9) {
+                                panPosition = (Math.random() * 2 - 1);
+                            }
+                            break;
+                    }
+                    
+                    // Apply intensity to pan position
+                    panPosition *= intensity;
+                    
+                    // SMOOTHED GAIN CHANGES - prevents crackling from instant changes
+                    const safetyFactor = 0.35; // Further reduced from 0.5 to 0.35
+                    const targetLeftGain = Math.max(0.001, Math.min(1, (1 - panPosition) * 0.5)) * safetyFactor;
+                    const targetRightGain = Math.max(0.001, Math.min(1, (1 + panPosition) * 0.5)) * safetyFactor;
+                    
+                    // Use linearRampToValueAtTime for smooth transitions (prevents clicks)
+                    const ctx = audioContextRef.current;
+                    if (!ctx) return;
+                    
+                    const now = ctx.currentTime;
+                    const rampTime = now + 0.05;
+                    
+                    window.leftToLeftGain.gain.setValueAtTime(window.leftToLeftGain.gain.value, now);
+                    window.leftToLeftGain.gain.linearRampToValueAtTime(targetLeftGain, rampTime);
+                    
+                    window.rightToRightGain.gain.setValueAtTime(window.rightToRightGain.gain.value, now);
+                    window.rightToRightGain.gain.linearRampToValueAtTime(targetRightGain, rampTime);
+                    
+                    // Cross-channel gains - drastically reduced
+                    const targetLeftToRight = Math.max(0.001, (1 - targetLeftGain) * 0.05 * safetyFactor);
+                    const targetRightToLeft = Math.max(0.001, (1 - targetRightGain) * 0.05 * safetyFactor);
+                    
+                    window.leftToRightGain.gain.setValueAtTime(window.leftToRightGain.gain.value, now);
+                    window.leftToRightGain.gain.linearRampToValueAtTime(targetLeftToRight, rampTime);
+                    
+                    window.rightToLeftGain.gain.setValueAtTime(window.rightToLeftGain.gain.value, now);
+                    window.rightToLeftGain.gain.linearRampToValueAtTime(targetRightToLeft, rampTime);
+                    
+                    time += 0.05;
+                }, 50);
+            };
+
+            const setupBinauralBeats = (context, destination) => {
+                const baseFreq = 200;
+                
+                const oscillatorLeft = context.createOscillator();
+                const oscillatorRight = context.createOscillator();
+                const merger = context.createChannelMerger(2);
+                const gainNode = context.createGain();
+                
+                oscillatorLeft.frequency.value = baseFreq;
+                oscillatorRight.frequency.value = baseFreq + binauralFreq;
+                
+                // Drastically reduced to 0.008 to prevent clipping
+                gainNode.gain.value = 0.008;
+                
+                // Connect left oscillator to left channel
+                oscillatorLeft.connect(merger, 0, 0);
+                // Connect right oscillator to right channel
+                oscillatorRight.connect(merger, 0, 1);
+                
+                merger.connect(gainNode);
+                gainNode.connect(context.destination);
+                
+                oscillatorLeft.start();
+                oscillatorRight.start();
+                
+                oscillatorLeftRef.current = oscillatorLeft;
+                oscillatorRightRef.current = oscillatorRight;
+            };
+
+            const setupNoise = (context, destination) => {
+                const bufferSize = 2 * context.sampleRate;
+                const noiseBuffer = context.createBuffer(1, bufferSize, context.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                
+                if (noiseType === 'white') {
+                    for (let i = 0; i < bufferSize; i++) {
+                        output[i] = Math.random() * 2 - 1;
+                    }
+                } else if (noiseType === 'pink') {
+                    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+                    for (let i = 0; i < bufferSize; i++) {
+                        const white = Math.random() * 2 - 1;
+                        b0 = 0.99886 * b0 + white * 0.0555179;
+                        b1 = 0.99332 * b1 + white * 0.0750759;
+                        b2 = 0.96900 * b2 + white * 0.1538520;
+                        b3 = 0.86650 * b3 + white * 0.3104856;
+                        b4 = 0.55000 * b4 + white * 0.5329522;
+                        b5 = -0.7616 * b5 - white * 0.0168980;
+                        output[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+                        output[i] *= 0.11;
+                        b6 = white * 0.115926;
+                    }
+                }
+                
+                const noise = context.createBufferSource();
+                noise.buffer = noiseBuffer;
+                noise.loop = true;
+                
+                const noiseGain = context.createGain();
+                noiseGain.gain.value = noiseVolume;
+                
+                noise.connect(noiseGain);
+                noiseGain.connect(context.destination);
+                noise.start();
+                
+                noiseNodeRef.current = noise;
+            };
+
+            const visualize = () => {
+                if (!analyserRef.current || !canvasRef.current) return;
+                
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const analyser = analyserRef.current;
+                
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                
+                const draw = () => {
+                    animationFrameRef.current = requestAnimationFrame(draw);
+                    
+                    analyser.getByteFrequencyData(dataArray);
+                    
+                    ctx.fillStyle = darkMode ? '#1a2332' : '#f8f9fa';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    const barWidth = (canvas.width / bufferLength) * 2.5;
+                    let x = 0;
+                    
+                    for (let i = 0; i < bufferLength; i++) {
+                        const barHeight = (dataArray[i] / 255) * canvas.height;
+                        
+                        const hue = (i / bufferLength) * 360;
+                        ctx.fillStyle = `hsl(${hue}, 70%, 60%)`;
+                        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                        
+                        x += barWidth + 1;
+                    }
+                };
+                
+                draw();
+            };
+
+            const addLocalFiles = (files) => {
+                const newTracks = Array.from(files).map((file, index) => {
+                    // Store the file object directly instead of creating blob URL
+                    return {
+                        id: Date.now() + index,
+                        name: file.name.replace('.mp3', ''),
+                        source: 'local',
+                        file: file, // Store file object
+                        url: null // We'll create URL when needed
+                    };
+                });
+                setPlaylist(prev => [...prev, ...newTracks]);
+            };
+
+            const handleDrop = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const files = e.dataTransfer.files;
+                if (files && files.length > 0) {
+                    addLocalFiles(files);
+                }
+            };
+
+            const handleDragOver = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            };
+
+            const handleDragEnter = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            };
+
+            const handleDragLeave = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            };
+
+            const addUrl = () => {
+                if (!urlInput.trim()) return;
+                
+                let source = 'url';
+                let name = 'Remote Track';
+                
+                if (urlInput.includes('youtube.com') || urlInput.includes('youtu.be')) {
+                    source = 'youtube';
+                    name = 'YouTube Track';
+                }
+                
+                const newTrack = {
+                    id: Date.now(),
+                    name: name,
+                    source: source,
+                    url: urlInput,
+                    originalUrl: urlInput
+                };
+                
+                setPlaylist(prev => [...prev, newTrack]);
+                setUrlInput('');
+            };
+
+            const playTrack = (index) => {
+                const track = playlist[index];
+                if (!track) return;
+                
+                // Create or reuse audio element
+                if (!audioElementRef.current) {
+                    audioElementRef.current = new Audio();
+                }
+                
+                const audio = audioElementRef.current;
+                
+                // Handle track ended
+                audio.onended = () => {
+                    playNext();
+                };
+                
+                // Handle different track sources
+                if (track.source === 'local' && track.file) {
+                    // For local files, create blob URL on-demand
+                    try {
+                        const blobUrl = URL.createObjectURL(track.file);
+                        audio.src = blobUrl;
+                    } catch (err) {
+                        console.error('Error creating blob URL:', err);
+                        alert('Error loading file. Please serve this HTML from a web server (see console for instructions).\n\nQuick fix: Run "python3 -m http.server 8000" in this folder, then open http://localhost:8000/8d-player-live.html');
+                        return;
+                    }
+                } else if (track.source === 'youtube') {
+                    alert('YouTube playback requires a backend server or YouTube API. Please use direct MP3 URLs or local files.');
+                    return;
+                } else if (track.url) {
+                    // For URL sources
+                    audio.src = track.url;
+                } else {
+                    alert('Invalid track source');
+                    return;
+                }
+                
+                audio.load();
+                
+                setCurrentTrackIndex(index);
+                
+                // Setup audio graph after loading
+                audio.addEventListener('loadedmetadata', () => {
+                    setupAudioGraph(audio);
+                    audio.play().then(() => {
+                        setIsPlaying(true);
+                    }).catch(err => {
+                        console.error('Playback error:', err);
+                        alert('Playback error. If you opened this from file://, please run a local web server.\n\nQuick fix: Run "python3 -m http.server 8000" in this folder');
+                    });
+                }, { once: true });
+            };
+
+            const togglePlayPause = () => {
+                if (!audioElementRef.current) {
+                    if (playlist.length > 0) {
+                        playTrack(0);
+                    }
+                    return;
+                }
+                
+                const audio = audioElementRef.current;
+                
+                if (isPlaying) {
+                    audio.pause();
+                    setIsPlaying(false);
+                } else {
+                    audio.play().then(() => {
+                        setIsPlaying(true);
+                    });
+                }
+            };
+
+            const playNext = () => {
+                if (currentTrackIndex === null) return;
+                const nextIndex = (currentTrackIndex + 1) % playlist.length;
+                playTrack(nextIndex);
+            };
+
+            const playPrevious = () => {
+                if (currentTrackIndex === null) return;
+                const prevIndex = currentTrackIndex === 0 ? playlist.length - 1 : currentTrackIndex - 1;
+                playTrack(prevIndex);
+            };
+
+            const removeFromPlaylist = (id) => {
+                setPlaylist(prev => prev.filter(track => track.id !== id));
+                if (currentTrackIndex !== null && playlist[currentTrackIndex]?.id === id) {
+                    setCurrentTrackIndex(null);
+                    if (audioElementRef.current) {
+                        audioElementRef.current.pause();
+                        setIsPlaying(false);
+                    }
+                }
+            };
+
+            const seekTo = (e) => {
+                if (!audioElementRef.current || !duration) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const percentage = x / rect.width;
+                audioElementRef.current.currentTime = percentage * duration;
+            };
+
+            const applyPreset = (preset) => {
+                switch(preset) {
+                    case 'focus':
+                        setSpeed(0.4);
+                        setIntensity(0.7);
+                        setSpatialDepth(0.5);
+                        setBinauralEnabled(true);
+                        setBinauralFreq(14);
+                        break;
+                    case 'energy':
+                        setSpeed(1.0);
+                        setIntensity(0.9);
+                        setSpatialDepth(0.8);
+                        setBinauralEnabled(true);
+                        setBinauralFreq(40);
+                        break;
+                    case 'relax':
+                        setSpeed(0.3);
+                        setIntensity(0.6);
+                        setSpatialDepth(0.4);
+                        setBinauralEnabled(true);
+                        setBinauralFreq(8);
+                        break;
+                }
+                
+                // Restart rotation with new settings
+                if (isPlaying) {
+                    startRotation();
+                }
+            };
+
+            // Update effects in real-time
+            useEffect(() => {
+                if (isPlaying) {
+                    startRotation();
+                }
+            }, [speed, intensity, movementPattern]);
+
+            useEffect(() => {
+                if (gainNodeRef.current) {
+                    // Apply same 60% reduction for extra headroom
+                    gainNodeRef.current.gain.value = volume * 0.6;
+                }
+            }, [volume]);
+
+            const formatTime = (seconds) => {
+                if (!seconds || isNaN(seconds)) return '0:00';
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            };
+
+            const getTotalDuration = () => {
+                return playlist.length * 3.5; // Estimate 3.5 minutes per track
+            };
+
+            const getBinauralDescription = (freq) => {
+                if (freq <= 4) return 'Delta (Sleep)';
+                if (freq <= 8) return 'Theta (Meditation)';
+                if (freq <= 14) return 'Alpha (Relaxation)';
+                if (freq <= 30) return 'Beta (Focus)';
+                return 'Gamma (Peak Focus)';
+            };
+

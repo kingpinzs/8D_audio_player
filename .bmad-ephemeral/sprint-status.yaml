@@ -1,0 +1,68 @@
+# generated: 2025-11-11 21:21:58Z
+# project: mp3_to_8D
+# project_key: mp3_to_8D
+# tracking_system: file-system
+# story_location: docs/stories
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic exists in epic file but not contexted
+#   - contexted: Epic tech context created (required before drafting stories)
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - drafted: Story file created in stories folder
+#   - ready-for-dev: Draft approved and story context created
+#   - in-progress: Developer actively working on implementation
+#   - review: Under SM review (via code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - completed: Retrospective has been done
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epics should be 'contexted' before stories can be 'drafted'
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically drafts next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
+
+generated: 2025-11-11 21:21:58Z
+project: mp3_to_8D
+project_key: mp3_to_8D
+tracking_system: file-system
+story_location: docs/stories
+
+development_status:
+  epic-1: backlog
+  1-1-consolidated-shell-and-navigation: done
+  1-2-breathing-ritual-auto-start: done
+  1-3-personalization-accessibility-toggles: done
+  epic-1-retrospective: completed
+  epic-2: contexted
+  2-1-drag-drop-file-picker-refactor: in-progress
+  2-2-streaming-url-validation-messaging: in-progress
+  2-3-audio-graph-regression-harness: in-progress
+  epic-2-retrospective: optional
+  epic-3: backlog
+  3-1-quick-mode-presets: backlog
+  3-2-advanced-controls-drawer-live-binding: backlog
+  3-3-custom-preset-crud-auto-restore: backlog
+  epic-3-retrospective: optional
+  epic-4: backlog
+  4-1-session-schema-lifecycle-hooks: backlog
+  4-2-emoji-check-in-notes-prompt: backlog
+  4-3-insights-dashboard-export: backlog
+  epic-4-retrospective: optional
+  epic-5: backlog
+  5-1-capability-detection-consent-ui: backlog
+  5-2-heart-rate-subscription-threshold-engine: backlog
+  5-3-sensor-informed-preset-adjustments: backlog
+  epic-5-retrospective: optional
+  epic-6: backlog
+  6-1-service-worker-offline-ux: backlog
+  6-2-manifest-install-flow: backlog
+  6-3-accessibility-observability-suite: backlog
+  epic-6-retrospective: optional

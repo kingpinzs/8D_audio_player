@@ -1,0 +1,451 @@
+return (
+                <div className="screen">
+                    <header className="app-header">
+                        <div>
+                            <p className="eyebrow">Unified Ritual Player</p>
+                            <h1>8D Ritual Shell</h1>
+                            <p className="hero-support">Stable v2 audio graph + v3 layout unified for Focus/Calm/Energize.</p>
+                        </div>
+                        <div className="header-actions">
+                            <button type="button" className="primary-btn" aria-label="Install unified ritual shell">
+                                📲 Install
+                            </button>
+                            <button
+                                type="button"
+                                onClick={toggleDarkMode}
+                                aria-pressed={darkMode}
+                                aria-label="Toggle dark mode"
+                            >
+                                {darkMode ? '☀️ Light mode' : '🌙 Dark mode'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setReducedMotion(!reducedMotion)}
+                                aria-pressed={reducedMotion}
+                                aria-label="Toggle reduced motion"
+                            >
+                                {reducedMotion ? 'Motion reduced' : 'Motion on'}
+                            </button>
+                        </div>
+                    </header>
+
+                    {showFileWarning && (
+                        <div className="alert-inline" role="alert">
+                            Web Audio needs to run over HTTP. From repo root run <code>python3 -m http.server 8000</code> then open http://localhost:8000/index.html.
+                        </div>
+                    )}
+
+                    <div className="main-grid">
+                        <section className="column-card panel" aria-label="Ritual selection">
+                            <div className="mode-tabs" role="tablist" aria-label="Ritual modes">
+                                {MODE_LIBRARY.map((mode, index) => (
+                                    <button
+                                        key={mode.id}
+                                        id={`mode-tab-${mode.id}`}
+                                        role="tab"
+                                        aria-selected={modeIndex === index}
+                                        tabIndex={focusedModeIndex === index ? 0 : -1}
+                                        ref={(el) => (modeRefs.current[index] = el)}
+                                        data-selected={modeIndex === index}
+                                        className="mode-chip"
+                                        style={{ '--chip-accent': mode.accent }}
+                                        onClick={() => setActiveMode(index)}
+                                        onKeyDown={(event) => handleModeKeyDown(event, index)}
+                                    >
+                                        <span>{mode.label}</span>
+                                        <small>{mode.short}</small>
+                                    </button>
+                                ))}
+                            </div>
+
+                            <article
+                                className="hero-card"
+                                id={`mode-panel-${selectedMode.id}`}
+                                role="tabpanel"
+                                aria-labelledby={`mode-tab-${selectedMode.id}`}
+                            >
+                                <p className="eyebrow">{selectedMode.label} ritual</p>
+                                <h2>{selectedMode.heroCopy}</h2>
+                                <div className="hero-message" aria-live="polite">{heroMessage}</div>
+                                {ritualStatus === 'breathing' && (
+                                    <div className="hero-countdown" aria-live="assertive">
+                                        {!reducedMotion && (
+                                            <div
+                                                className="hero-animation"
+                                                aria-hidden="true"
+                                                style={{ borderColor: selectedMode.accent }}
+                                            />
+                                        )}
+                                        <div>
+                                            <div className="hero-countdown__value">{ritualCountdown}s</div>
+                                            <p className="hero-support">4-2-4 cadence</p>
+                                        </div>
+                                    </div>
+                                )}
+                                <p className="hero-support">{selectedMode.description}</p>
+                                <div className="hero-actions">
+                                    <button type="button" className="primary-btn" onClick={startRitual}>
+                                        Start {selectedMode.label}
+                                    </button>
+                                    {ritualStatus === 'breathing' && (
+                                        <button type="button" className="ghost-btn" onClick={skipRitual}>
+                                            Skip breathing
+                                        </button>
+                                    )}
+                                </div>
+                                {needsAudio && (
+                                    <div className="alert-inline" role="alert">
+                                        Add a local file or stream to begin this ritual.
+                                    </div>
+                                )}
+                            </article>
+
+                            <div className="preset-grid">
+                                {selectedMode.highlights.map((highlight) => (
+                                    <div key={highlight} className="preset-card">
+                                        {highlight}
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+
+                        <section className="column-card">
+                            <article className="panel now-playing-card">
+                                <div className="playlist-header">
+                                    <div>
+                                        <p className="eyebrow">Now Playing</p>
+                                        <h2>{nowPlayingTrack ? nowPlayingTrack.name : 'No track selected'}</h2>
+                                    </div>
+                                    <span className="status-pill" style={{ borderColor: selectedMode.accent }}>
+                                        {selectedMode.label}
+                                    </span>
+                                </div>
+                                <div className="playlist-meta">
+                                    <span className="badge">{nowPlayingTrack ? nowPlayingTrack.source : 'playlist empty'}</span>
+                                    <span>{playlist.length} item{playlist.length === 1 ? '' : 's'}</span>
+                                </div>
+                                <div className="transport-controls" aria-label="Playback controls">
+                                    <button
+                                        type="button"
+                                        className="transport-button"
+                                        onClick={playPrevious}
+                                        aria-label="Play previous track"
+                                        disabled={playlist.length === 0}
+                                    >
+                                        ⏮
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="transport-button play"
+                                        onClick={togglePlayPause}
+                                        aria-label={isPlaying ? 'Pause playback' : 'Play'}
+                                        disabled={playlist.length === 0}
+                                    >
+                                        {isPlaying ? '⏸' : '▶️'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="transport-button"
+                                        onClick={playNext}
+                                        aria-label="Play next track"
+                                        disabled={playlist.length === 0}
+                                    >
+                                        ⏭
+                                    </button>
+                                </div>
+                                <div className="timeline">
+                                    <label htmlFor="timeline" className="eyebrow">Timeline</label>
+                                    <input
+                                        id="timeline"
+                                        type="range"
+                                        min="0"
+                                        max={duration || 0}
+                                        step="0.1"
+                                        value={Math.min(currentTime, duration || 0)}
+                                        onChange={handleSeekChange}
+                                        aria-valuetext={`${formatTime(currentTime)} of ${formatTime(duration)}`}
+                                        disabled={!duration}
+                                    />
+                                    <div className="timeline-labels">
+                                        <span>{formatTime(currentTime)}</span>
+                                        <span>{formatTime(duration)}</span>
+                                    </div>
+                                </div>
+                                <label htmlFor="volume" className="eyebrow">Volume</label>
+                                <input
+                                    id="volume"
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.01"
+                                    value={volume}
+                                    onChange={(e) => setVolume(parseFloat(e.target.value))}
+                                    aria-valuetext={`${Math.round(volume * 100)} percent`}
+                                />
+                                {showVisualizer && (
+                                    <canvas
+                                        ref={canvasRef}
+                                        width="600"
+                                        height="160"
+                                        role="img"
+                                        aria-label="Audio visualizer"
+                                    ></canvas>
+                                )}
+                            </article>
+
+                            <article className="panel intake-card">
+                                <div className="intake-tabs" role="tablist" aria-label="Audio intake options">
+                                    <button
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={intakeTab === 'files'}
+                                        className="intake-tab"
+                                        onClick={() => setIntakeTab('files')}
+                                    >
+                                        Files
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={intakeTab === 'stream'}
+                                        className="intake-tab"
+                                        disabled={!isOnline}
+                                        onClick={() => isOnline && setIntakeTab('stream')}
+                                    >
+                                        Stream
+                                    </button>
+                                </div>
+                                {intakeTab === 'files' ? (
+                                    <>
+                                        <p>Add MP3s via drag/drop or picker. Local tracks stay offline.</p>
+                                        <div
+                                            className={`drop-zone ${needsAudio ? 'drop-zone--attention' : ''}`}
+                                            onClick={() => {
+                                                if (fileInputRef.current) {
+                                                    fileInputRef.current.click();
+                                                }
+                                            }}
+                                            onDrop={handleDrop}
+                                            onDragOver={handleDragOver}
+                                            onDragEnter={handleDragEnter}
+                                            onDragLeave={handleDragLeave}
+                                            role="button"
+                                            tabIndex={0}
+                                            ref={dropZoneRef}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' && fileInputRef.current) {
+                                                    fileInputRef.current.click();
+                                                }
+                                            }}
+                                            aria-label="Add audio files"
+                                        >
+                                            <strong>📁 Drop files here</strong>
+                                            <span>or press Enter to browse</span>
+                                        </div>
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            accept="audio/mpeg,.mp3"
+                                            multiple
+                                            className="sr-only"
+                                            onChange={(e) => addLocalFiles(e.target.files)}
+                                        />
+                                    </>
+                                ) : (
+                                    <>
+                                        {!isOnline && (
+                                            <div className="alert-inline" role="alert">
+                                                Stream tab disabled while offline.
+                                            </div>
+                                        )}
+                                        <label htmlFor="stream-url" className="eyebrow">Direct MP3 URL</label>
+                                        <input
+                                            id="stream-url"
+                                            type="url"
+                                            placeholder="https://example.com/track.mp3"
+                                            value={urlInput}
+                                            onChange={(e) => setUrlInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && addUrl()}
+                                        />
+                                        <button type="button" className="primary-btn" onClick={addUrl} disabled={!urlInput.trim()}>
+                                            Add URL
+                                        </button>
+                                    </>
+                                )}
+                            </article>
+
+                            <article className="panel playlist-card">
+                                <div className="playlist-header">
+                                    <div>
+                                        <p className="eyebrow">Playlist</p>
+                                        <h3>{playlist.length} track{playlist.length === 1 ? '' : 's'}</h3>
+                                    </div>
+                                    <span>{playlistMinutes} min est.</span>
+                                </div>
+                                <ul className="playlist-list">
+                                    {playlist.length === 0 && (
+                                        <li>Add files or streams to populate the playlist.</li>
+                                    )}
+                                    {playlist.map((track, index) => (
+                                        <li key={track.id}>
+                                            <div
+                                                className="playlist-button"
+                                                role="button"
+                                                tabIndex={0}
+                                                aria-current={currentTrackIndex === index}
+                                                onClick={() => playTrack(index)}
+                                                onKeyDown={(event) => event.key === 'Enter' && playTrack(index)}
+                                            >
+                                                <span className="badge">{track.source}</span>
+                                                <div>
+                                                    <div>{track.name}</div>
+                                                    <div className="playlist-meta">
+                                                        <span>{selectedMode.label} preset</span>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    className="remove-btn"
+                                                    aria-label={`Remove ${track.name} from playlist`}
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        removeFromPlaylist(track.id);
+                                                    }}
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </article>
+
+                            <article className="panel advanced-controls">
+                                <p className="eyebrow">Advanced Controls</p>
+                                <div className="controls">
+                                    <div className="control-group">
+                                        <label htmlFor="speed">Rotation Speed</label>
+                                        <input
+                                            id="speed"
+                                            type="range"
+                                            min="0.1"
+                                            max="2.0"
+                                            step="0.1"
+                                            value={speed}
+                                            onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                                        />
+                                        <div className="value-display">{speed.toFixed(1)}x</div>
+                                    </div>
+                                    <div className="control-group">
+                                        <label htmlFor="intensity">Effect Intensity</label>
+                                        <input
+                                            id="intensity"
+                                            type="range"
+                                            min="0.0"
+                                            max="1.0"
+                                            step="0.1"
+                                            value={intensity}
+                                            onChange={(e) => setIntensity(parseFloat(e.target.value))}
+                                        />
+                                        <div className="value-display">{(intensity * 100).toFixed(0)}%</div>
+                                    </div>
+                                    <div className="control-group">
+                                        <label htmlFor="depth">Spatial Depth</label>
+                                        <input
+                                            id="depth"
+                                            type="range"
+                                            min="0.0"
+                                            max="1.0"
+                                            step="0.1"
+                                            value={spatialDepth}
+                                            onChange={(e) => setSpatialDepth(parseFloat(e.target.value))}
+                                        />
+                                        <div className="value-display">{(spatialDepth * 100).toFixed(0)}%</div>
+                                    </div>
+                                    <div className="control-group">
+                                        <label htmlFor="movement">Movement Pattern</label>
+                                        <select
+                                            id="movement"
+                                            value={movementPattern}
+                                            onChange={(e) => setMovementPattern(e.target.value)}
+                                        >
+                                            <option value="circle">🔄 Circle</option>
+                                            <option value="figure8">∞ Figure-8</option>
+                                            <option value="leftright">↔️ Left-Right</option>
+                                            <option value="frontback">↕️ Front-Back</option>
+                                            <option value="random">🎲 Random</option>
+                                        </select>
+                                    </div>
+                                    <div className="control-group">
+                                        <label>Binaural Beats {binauralEnabled && (
+                                            <span className="badge">{getBinauralDescription(binauralFreq)}</span>
+                                        )}</label>
+                                        <div className="checkbox-wrapper">
+                                            <input
+                                                id="binaural-toggle"
+                                                type="checkbox"
+                                                checked={binauralEnabled}
+                                                onChange={(e) => setBinauralEnabled(e.target.checked)}
+                                            />
+                                            <span>Enable</span>
+                                        </div>
+                                        {binauralEnabled && (
+                                            <>
+                                                <input
+                                                    type="range"
+                                                    min="1"
+                                                    max="40"
+                                                    step="1"
+                                                    value={binauralFreq}
+                                                    onChange={(e) => setBinauralFreq(parseInt(e.target.value, 10))}
+                                                    style={{ marginTop: '10px' }}
+                                                />
+                                                <div className="value-display">{binauralFreq}Hz</div>
+                                            </>
+                                        )}
+                                    </div>
+                                    <div className="control-group">
+                                        <label htmlFor="noise">Background Noise</label>
+                                        <select id="noise" value={noiseType} onChange={(e) => setNoiseType(e.target.value)}>
+                                            <option value="none">None</option>
+                                            <option value="white">White Noise</option>
+                                            <option value="pink">Pink Noise</option>
+                                        </select>
+                                        {noiseType !== 'none' && (
+                                            <>
+                                                <input
+                                                    type="range"
+                                                    min="0.0"
+                                                    max="0.5"
+                                                    step="0.05"
+                                                    value={noiseVolume}
+                                                    onChange={(e) => setNoiseVolume(parseFloat(e.target.value))}
+                                                    style={{ marginTop: '10px' }}
+                                                />
+                                                <div className="value-display">{(noiseVolume * 100).toFixed(0)}%</div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </article>
+                        </section>
+
+                        <aside className="column-card insights-column">
+                            <div className="panel insight-card">
+                                <p className="eyebrow">Focus confidence</p>
+                                <div className="insight-value">{focusConfidence}%</div>
+                                <p className="hero-support">Derived from preset + playlist depth.</p>
+                            </div>
+                            <div className="panel insight-card">
+                                <p className="eyebrow">Calm streak</p>
+                                <div className="insight-value">{streakMinutes} min</div>
+                                <p className="hero-support">Last {playlist.length || 0} sessions logged.</p>
+                            </div>
+                            <div className="panel sensor-card">
+                                <strong>Sensor readiness</strong>
+                                <p>{isOnline ? 'Optional BLE strap ready—pair via browser settings.' : 'Reconnect to the internet to enable streaming + sensors.'}</p>
+                            </div>
+                        </aside>
+                    </div>
+                </div>
+            );

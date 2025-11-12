@@ -1,0 +1,711 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Epic 2 Technical Context: Audio Intake & Graph Hardening
+Generated: 2025-11-11
+Epic: E2 – Audio Intake & Graph Hardening
+Status: ready-for-stories
+Project: mp3_to_8D
+-->
+
+<epic-context>
+  <metadata>
+    <epic-id>epic-2</epic-id>
+    <epic-name>Audio Intake &amp; Graph Hardening</epic-name>
+    <project>mp3_to_8D</project>
+    <generated-date>2025-11-11</generated-date>
+    <status>ready-for-stories</status>
+    <prerequisite-epics>
+      <prerequisite>epic-1</prerequisite>
+    </prerequisite-epics>
+  </metadata>
+
+  <problem-statement>
+    <core-issue>
+      v3 regressions in audio playback, drag/drop handling, and streaming URL support eroded user trust and broke the core value proposition. The stable v2 audio graph must be preserved while exposing the richer v3 UI and preset system.
+    </core-issue>
+    
+    <user-impact>
+      - Users experienced audio dropouts, clipping, and playback failures in v3
+      - Drag/drop zone failed to handle multiple files or provide progress feedback
+      - Streaming URLs lacked validation, showing cryptic errors instead of actionable guidance
+      - Analyzer visualizations stopped rendering or showed artifacts
+      - Parameter changes had perceptible latency (>200ms), breaking immersion
+    </user-impact>
+    
+    <business-risk>
+      Audio bugs directly undermine the "ritual player" positioning. If users cannot trust core playback, they will abandon the app regardless of advanced features (presets, sensors, insights).
+    </business-risk>
+  </problem-statement>
+
+  <scope>
+    <in-scope>
+      - Refactor drag/drop zone to handle multiple files with validation and progress
+      - Implement URL input validation with HEAD/GET checks and CORS detection
+      - Preserve v2 audio graph architecture (MediaElementSource → Gain staging → Rotation → Analyser)
+      - Ensure &lt;20ms parameter change latency for all audio controls
+      - Maintain 60fps analyzer rendering during active playback
+      - Create regression test harness comparing v2 baseline vs unified build
+      - Surface actionable error messages for unsupported MIME types and blocked streams
+      - Support local file playback offline for entire session (no blob URL expiry)
+    </in-scope>
+    
+    <out-of-scope>
+      - Proxy implementation for authenticated streaming services (Pandora, Spotify)
+      - Playlist persistence across browser restarts (deferred to Epic 3)
+      - Advanced audio effects beyond rotation, binaural, and noise (Epic 3)
+      - Mobile-specific optimizations (addressed in Epic 6)
+      - Service worker caching of audio files (Epic 6)
+    </out-of-scope>
+    
+    <constraints>
+      - MUST preserve v2 audio graph node topology exactly
+      - MUST NOT introduce build step or bundler (inline React remains)
+      - MUST achieve ≥95% success rate on valid MP3/WAV intake
+      - MUST maintain 0 audio bugs at Epic completion
+      - MUST keep parameter change latency &lt;20ms (PRD requirement)
+      - MUST NOT break accessibility patterns established in Epic 1
+    </constraints>
+  </scope>
+
+  <kpis>
+    <kpi name="audio-bug-count" target="0" measurement="Manual QA checklist + regression test log"/>
+    <kpi name="intake-success-rate" target="≥95%" measurement="Test matrix with 20 MP3/WAV samples"/>
+    <kpi name="analyzer-uptime" target="100%" measurement="During 10min continuous playback test"/>
+    <kpi name="parameter-latency" target="&lt;20ms" measurement="Chrome DevTools Performance profiler"/>
+    <kpi name="pa11y-score" target="≥95" measurement="Automated Pa11y audit (maintain Epic 1 standard)"/>
+  </kpis>
+
+  <dependencies>
+    <from-epic-1>
+      <dependency artifact="index.html" lines="720-760" description="React state hooks (playlist, currentTrackIndex, isPlaying, volume)"/>
+      <dependency artifact="index.html" lines="1350-1430" description="Existing drag/drop handlers and addLocalFiles function"/>
+      <dependency artifact="index.html" lines="1140-1250" description="setupAudioGraph function (needs v2 alignment)"/>
+      <dependency artifact="index.html" lines="1890-1900" description="aria-live announcement region for error messaging"/>
+      <dependency artifact="docs/data-models.md" lines="8-22" description="PlaylistTrack schema (id, name, source, file, url, originalUrl)"/>
+    </from-epic-1>
+    
+    <reference-artifacts>
+      <artifact path="8d-audio-live-v2.html" lines="634-850" description="PROVEN v2 audio graph topology (gold standard)"/>
+      <artifact path="audio-engine.js" lines="1-100" description="Gain staging helper (connectGainStaging, createBinauralNodes, createNoiseNode)"/>
+      <artifact path="tests/gain-staging.test.js" description="Existing test surface for audio-engine.js exports"/>
+      <artifact path="docs/architecture.md" lines="55-80" description="Audio Graph Subsystem specification"/>
+      <artifact path="docs/PRD.md" lines="120-135" description="FR2, FR3 acceptance criteria"/>
+    </reference-artifacts>
+    
+    <external-dependencies>
+      <dependency name="Web Audio API" constraint="Chrome/Edge/Firefox support"/>
+      <dependency name="File API" constraint="Drag/drop event interface, FileReader for validation"/>
+      <dependency name="Fetch API" constraint="HEAD/GET requests for URL validation"/>
+    </external-dependencies>
+  </dependencies>
+
+  <stories>
+    <story id="2-1" priority="HIGH" complexity="MEDIUM">
+      <title>Drag/Drop &amp; File Picker Refactor</title>
+      <summary>
+        Refactor drag/drop zone and file picker to handle multiple files, show progress, reject unsupported MIME types with toast notifications, and keep local files playable offline for the entire session.
+      </summary>
+      
+      <acceptance-criteria>
+        <criterion id="AC1">Drop zone accepts multiple MP3/WAV/OGG files simultaneously</criterion>
+        <criterion id="AC2">Progress indicator shows during file parsing (for &gt;5 files)</criterion>
+        <criterion id="AC3">Unsupported MIME types (e.g., .flac, .txt) trigger toast with guidance</criterion>
+        <criterion id="AC4">Local tracks remain playable offline until page refresh (no blob URL expiry)</criterion>
+        <criterion id="AC5">File metadata (name, size, type) parsed and displayed in playlist UI</criterion>
+        <criterion id="AC6">Helper tests cover edge cases (empty file, corrupt header, duplicate names)</criterion>
+      </acceptance-criteria>
+      
+      <technical-notes>
+        - Current implementation: index.html lines 1350-1430 (addLocalFiles, handleDrop)
+        - Store File objects in playlist.file field (already done, preserve this)
+        - Create object URLs lazily in playTrack (lines 1440-1470) to avoid memory leaks
+        - Validation: Check file.type against ['audio/mpeg', 'audio/wav', 'audio/ogg']
+        - Progress UI: Show spinner when files.length > 5, hide after playlist update
+        - Error messages: Use a11yAnnouncement state hook for screen reader compatibility
+      </technical-notes>
+      
+      <dod>
+        - Manual smoke test: Drop 10 MP3s, verify all queue and play sequentially
+        - Test invalid file: Drop .txt, see toast "Unsupported format. Use MP3, WAV, or OGG."
+        - Jest helper tests: Validate MIME check logic, metadata parser
+        - Pa11y audit: 0 new accessibility issues
+      </dod>
+    </story>
+
+    <story id="2-2" priority="HIGH" complexity="LOW">
+      <title>Streaming URL Validation &amp; Messaging</title>
+      <summary>
+        Implement URL input validation with HEAD/GET requests to detect CORS blocks, unreachable streams, and unsupported services. Surface actionable error messages (e.g., "Pandora requires proxy") while retaining other playlist items.
+      </summary>
+      
+      <acceptance-criteria>
+        <criterion id="AC1">URL input validates format before adding to playlist (basic regex check)</criterion>
+        <criterion id="AC2">HEAD request confirms URL is reachable (200-299 status)</criterion>
+        <criterion id="AC3">CORS errors trigger guidance message: "Stream blocked. Try direct MP3 link."</criterion>
+        <criterion id="AC4">YouTube/Spotify URLs show: "Requires authenticated proxy. See docs."</criterion>
+        <criterion id="AC5">Failed stream does not break playback of other tracks</criterion>
+        <criterion id="AC6">Test matrix covers: valid MP3 URL, CORS-blocked URL, 404, YouTube link</criterion>
+      </acceptance-criteria>
+      
+      <technical-notes>
+        - Current implementation: index.html lines 1407-1430 (addUrl function)
+        - Add async validation before setPlaylist: fetch(url, {method: 'HEAD', mode: 'cors'})
+        - Timeout: 5 seconds using AbortController
+        - Error mapping:
+          - TypeError (CORS): "Stream blocked by CORS. Use direct MP3 link."
+          - 404/500: "Stream unreachable. Check URL and try again."
+          - youtube.com/youtu.be: "YouTube playback requires proxy. See documentation."
+        - Use setA11yAnnouncement for error broadcasting (Epic 1 pattern)
+        - Fallback: Playlist continues even if one URL fails
+      </technical-notes>
+      
+      <dod>
+        - Manual test matrix (6 scenarios):
+          1. Valid MP3 URL: https://example.com/song.mp3 → adds to playlist
+          2. CORS-blocked stream → shows CORS message
+          3. 404 URL → shows unreachable message
+          4. YouTube URL → shows proxy required message
+          5. Empty input → ignored (no error)
+          6. Malformed URL (no protocol) → shows format error
+        - Jest helper tests: URL regex validation, error message mapping
+        - Pa11y audit: 0 new issues
+      </dod>
+    </story>
+
+    <story id="2-3" priority="CRITICAL" complexity="HIGH">
+      <title>Audio Graph Regression Harness</title>
+      <summary>
+        Preserve v2 audio graph topology exactly (MediaElementSource → Gain → Rotation → Analyser) with binaural/noise hooks, ensure &lt;20ms parameter latency, maintain 60fps analyzer rendering, and create automated regression test comparing v2 vs unified build.
+      </summary>
+      
+      <acceptance-criteria>
+        <criterion id="AC1">Audio graph matches v2 topology: source → splitter → rotation gains → merger → main gain → analyser → destination</criterion>
+        <criterion id="AC2">Binaural oscillators connect via dedicated gain nodes (as in v2 lines 780-850)</criterion>
+        <criterion id="AC3">Noise buffer nodes use v2 pink/white generation algorithm</criterion>
+        <criterion id="AC4">Parameter changes (speed, intensity, volume) apply in &lt;20ms (measured via Performance API)</criterion>
+        <criterion id="AC5">Analyzer renders at 60fps during playback (requestAnimationFrame loop)</criterion>
+        <criterion id="AC6">Regression script outputs comparison log: v2 vs unified build</criterion>
+        <criterion id="AC7">Zero audio dropouts, clipping, or artifacts during 10min continuous playback</criterion>
+      </acceptance-criteria>
+      
+      <technical-notes>
+        - Reference: 8d-audio-live-v2.html lines 634-850 (setupAudioGraph gold standard)
+        - Current: index.html lines 1140-1250 (needs alignment)
+        - Key differences to fix:
+          1. v2 uses leftToLeftGain/leftToRightGain/rightToLeftGain/rightToRightGain (manual panning)
+          2. v2 uses delay nodes with drastically reduced gains (0.05, 0.03) to prevent clipping
+          3. v2 applies 0.6 headroom multiplier to master gain
+          4. v2 stores rotation nodes in rotationNodesRef for live updates
+        - Integration with audio-engine.js:
+          - Use AudioEngine.connectGainStaging() after rotation nodes
+          - Use AudioEngine.createBinauralNodes() for binaural layer
+          - Use AudioEngine.createNoiseNode() for ambient noise
+        - Analyzer update loop: Already uses requestAnimationFrame (index.html ~1300), verify 60fps
+        - Performance measurement:
+          ```javascript
+          const t0 = performance.now();
+          // apply parameter change
+          const t1 = performance.now();
+          console.assert(t1 - t0 &lt; 20, 'Latency exceeded');
+          ```
+        - Regression harness:
+          - Manual checklist in tests/audio-regression.md
+          - Compare: v2 playback vs unified playback side-by-side
+          - Log: Volume consistency, rotation smoothness, analyzer continuity
+      </technical-notes>
+      
+      <dod>
+        - setupAudioGraph matches v2 topology exactly (code review vs v2 source)
+        - Automated latency test: Loop 100 parameter changes, assert all &lt;20ms
+        - Manual regression checklist:
+          1. Load same MP3 in v2 and unified → volume matches
+          2. Rotation speed=1.0 → panning cycle time matches v2
+          3. Analyzer shows identical waveform patterns
+          4. 10min playback → zero dropouts or artifacts
+        - Document results in tests/audio-regression-2025-11-11.md
+        - Pa11y audit: Maintain 0 issues (no regression)
+      </dod>
+    </story>
+  </stories>
+
+  <implementation-strategy>
+    <recommended-order>
+      <step priority="1" story="2-3" rationale="Establishes stable audio foundation; blocks other stories if graph is broken"/>
+      <step priority="2" story="2-1" rationale="Core functionality (drag/drop) depends on stable graph; high user visibility"/>
+      <step priority="3" story="2-2" rationale="Polish layer; errors can be refined after intake mechanics solid"/>
+    </recommended-order>
+    
+    <parallel-work-options>
+      - Story 2-1 and 2-2 can be worked in parallel if Story 2-3 is complete
+      - Prefer sequential to avoid merge conflicts in index.html (single-file architecture)
+    </parallel-work-options>
+    
+    <risk-mitigation>
+      <risk name="Audio graph changes break existing playback">
+        <mitigation>Create branch, test v2 comparison before merging</mitigation>
+      </risk>
+      <risk name="CORS validation adds latency to URL input">
+        <mitigation>5s timeout, async handling, do not block UI</mitigation>
+      </risk>
+      <risk name="File parsing crashes on corrupt MP3">
+        <mitigation>Wrap FileReader in try-catch, show user-friendly error</mitigation>
+      </risk>
+    </risk-mitigation>
+  </implementation-strategy>
+
+  <code-patterns>
+    <pattern name="Audio Graph Setup">
+      <description>Preserve v2 node topology exactly</description>
+      <example><![CDATA[
+// Reference: 8d-audio-live-v2.html lines 634-850
+const setupAudioGraph = (audioElement) => {
+  const context = audioContextRef.current;
+  if (context.state === 'suspended') context.resume();
+  
+  // Cleanup existing (v2 pattern)
+  disposeAudioGraph();
+  
+  // Source → Splitter
+  const source = context.createMediaElementSource(audioElement);
+  const splitter = context.createChannelSplitter(2);
+  const merger = context.createChannelMerger(2);
+  
+  // Manual rotation gains (v2 aggressive panning)
+  const leftToLeftGain = context.createGain();
+  const leftToRightGain = context.createGain();
+  const rightToLeftGain = context.createGain();
+  const rightToRightGain = context.createGain();
+  
+  // Delay for spatial depth (v2 values: 0.05, 0.03)
+  const delayLeft = context.createDelay();
+  delayLeft.delayTime.value = 0.05;
+  const delayGainLeft = context.createGain();
+  delayGainLeft.gain.value = 0.05 * spatialDepth; // v2 reduced gain
+  
+  // Connect graph
+  source.connect(splitter);
+  splitter.connect(leftToLeftGain, 0);
+  splitter.connect(leftToRightGain, 0);
+  splitter.connect(rightToLeftGain, 1);
+  splitter.connect(rightToRightGain, 1);
+  
+  leftToLeftGain.connect(merger, 0, 0);
+  leftToRightGain.connect(merger, 0, 1);
+  rightToLeftGain.connect(merger, 0, 0);
+  rightToRightGain.connect(merger, 0, 1);
+  
+  // Master gain with v2 headroom
+  const mainGain = context.createGain();
+  mainGain.gain.value = volume * 0.6; // v2 headroom multiplier
+  
+  // Analyser
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 2048;
+  
+  merger.connect(mainGain);
+  mainGain.connect(analyser);
+  analyser.connect(context.destination);
+  
+  // Store refs for rotation updates
+  rotationNodesRef.current = {
+    leftToLeftGain, leftToRightGain,
+    rightToLeftGain, rightToRightGain
+  };
+};
+      ]]></example>
+    </pattern>
+    
+    <pattern name="File Validation">
+      <description>MIME type check with user-friendly errors</description>
+      <example><![CDATA[
+const SUPPORTED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3'];
+
+const addLocalFiles = (files) => {
+  const validFiles = [];
+  const invalidFiles = [];
+  
+  Array.from(files).forEach(file => {
+    if (SUPPORTED_AUDIO_TYPES.includes(file.type)) {
+      validFiles.push(file);
+    } else {
+      invalidFiles.push(file.name);
+    }
+  });
+  
+  if (invalidFiles.length > 0) {
+    setA11yAnnouncement(
+      `Skipped ${invalidFiles.length} unsupported file(s). Use MP3, WAV, or OGG.`
+    );
+  }
+  
+  if (validFiles.length > 0) {
+    const newTracks = validFiles.map((file, index) => ({
+      id: Date.now() + index,
+      name: file.name.replace(/\.(mp3|wav|ogg)$/i, ''),
+      source: 'local',
+      file: file, // Store File object (no blob URL yet)
+      url: null
+    }));
+    
+    setPlaylist(prev => [...prev, ...newTracks]);
+    setHeroMessage(`Added ${newTracks.length} track(s). Pick a ritual and press Start.`);
+  }
+};
+      ]]></example>
+    </pattern>
+    
+    <pattern name="URL Validation">
+      <description>Async HEAD request with timeout and error mapping</description>
+      <example><![CDATA[
+const validateAndAddUrl = async () => {
+  const url = urlInput.trim();
+  if (!url) return;
+  
+  // Basic format check
+  if (!/^https?:\/\/.+/.test(url)) {
+    setA11yAnnouncement('Invalid URL format. Must start with http:// or https://');
+    return;
+  }
+  
+  // Detect known streaming services
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    setA11yAnnouncement('YouTube playback requires authenticated proxy. See documentation.');
+    return;
+  }
+  
+  if (url.includes('spotify.com') || url.includes('pandora.com')) {
+    setA11yAnnouncement('This service requires authentication. Use direct MP3 links.');
+    return;
+  }
+  
+  // Validate with HEAD request (5s timeout)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch(url, {
+      method: 'HEAD',
+      mode: 'cors',
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      setA11yAnnouncement(`Stream unreachable (${response.status}). Check URL and try again.`);
+      return;
+    }
+    
+    // Success: add to playlist
+    const newTrack = {
+      id: Date.now(),
+      name: 'Remote Stream',
+      source: 'url',
+      url: url,
+      originalUrl: url
+    };
+    
+    setPlaylist(prev => [...prev, newTrack]);
+    setUrlInput('');
+    setHeroMessage('Stream added. Start your ritual to hear it.');
+    
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      setA11yAnnouncement('Stream timed out. Check connection and try again.');
+    } else if (error.name === 'TypeError') {
+      setA11yAnnouncement('Stream blocked by CORS. Use direct MP3 link.');
+    } else {
+      setA11yAnnouncement('Failed to validate stream. Try a different URL.');
+    }
+  }
+};
+      ]]></example>
+    </pattern>
+    
+    <pattern name="Parameter Change Latency Measurement">
+      <description>Performance API for &lt;20ms validation</description>
+      <example><![CDATA[
+// In toggle or slider handler
+const updateSpeed = (newSpeed) => {
+  const t0 = performance.now();
+  
+  setSpeed(newSpeed);
+  // Audio parameter updates via AudioParam.value or gain adjustments
+  
+  const t1 = performance.now();
+  const latency = t1 - t0;
+  
+  if (latency > 20) {
+    console.warn(`Parameter latency exceeded: ${latency.toFixed(2)}ms`);
+  }
+  
+  // Optional: Log to telemetry
+  // SessionLogger.logEvent('parameter-change', { parameter: 'speed', latency });
+};
+      ]]></example>
+    </pattern>
+  </code-patterns>
+
+  <testing-strategy>
+    <manual-tests>
+      <test name="Drag/Drop Smoke Test">
+        <steps>
+          1. Open index.html in Chrome
+          2. Drag 5 MP3 files into drop zone
+          3. Verify all 5 appear in playlist
+          4. Play each track sequentially
+          5. Confirm no audio dropouts or errors
+        </steps>
+      </test>
+      
+      <test name="Invalid File Handling">
+        <steps>
+          1. Drag .txt, .flac, .zip files into drop zone
+          2. Verify toast message: "Skipped N unsupported file(s). Use MP3, WAV, or OGG."
+          3. Confirm screen reader announces error
+          4. Confirm playlist not corrupted
+        </steps>
+      </test>
+      
+      <test name="URL Validation Matrix">
+        <steps>
+          For each URL type:
+          - Valid MP3: https://example.com/song.mp3
+          - CORS-blocked: https://cors-blocked.com/stream
+          - 404: https://example.com/nonexistent.mp3
+          - YouTube: https://youtube.com/watch?v=xyz
+          - Malformed: example.com/song (no protocol)
+          
+          Verify:
+          1. Appropriate error message shown
+          2. Playlist not corrupted by failed entry
+          3. Other tracks continue playing
+        </steps>
+      </test>
+      
+      <test name="v2 Audio Regression Comparison">
+        <steps>
+          1. Load same MP3 in 8d-audio-live-v2.html (left browser tab)
+          2. Load same MP3 in index.html (right browser tab)
+          3. Play both simultaneously at volume=0.7
+          4. Compare:
+             - Volume consistency (should match)
+             - Rotation smoothness (visual analyzer)
+             - Spatial effect intensity (ear test)
+          5. Run for 10 minutes, note any dropouts or artifacts
+          6. Document results in tests/audio-regression-2025-11-11.md
+        </steps>
+      </test>
+      
+      <test name="Parameter Latency Validation">
+        <steps>
+          1. Open Chrome DevTools → Performance tab
+          2. Start recording
+          3. Adjust speed slider rapidly (10 changes in 5 seconds)
+          4. Stop recording
+          5. Inspect each parameter update event
+          6. Confirm all updates complete in &lt;20ms
+        </steps>
+      </test>
+      
+      <test name="Analyzer 60fps Rendering">
+        <steps>
+          1. Open Chrome DevTools → Performance tab
+          2. Start playback with analyzer visible
+          3. Record for 10 seconds
+          4. Analyze FPS counter
+          5. Confirm analyzer renders at 60fps (tolerance: 55-60fps)
+          6. If &lt;55fps, profile requestAnimationFrame loop for bottlenecks
+        </steps>
+      </test>
+    </manual-tests>
+    
+    <automated-tests>
+      <test name="MIME Type Validation" file="tests/file-validation.test.js">
+        <cases>
+          - Valid MP3: file.type = 'audio/mpeg' → accepted
+          - Valid WAV: file.type = 'audio/wav' → accepted
+          - Invalid TXT: file.type = 'text/plain' → rejected
+          - Empty type: file.type = '' → rejected
+        </cases>
+      </test>
+      
+      <test name="URL Format Validation" file="tests/url-validation.test.js">
+        <cases>
+          - Valid HTTP: 'http://example.com/song.mp3' → passes regex
+          - Valid HTTPS: 'https://example.com/song.mp3' → passes regex
+          - No protocol: 'example.com/song.mp3' → fails regex
+          - YouTube detection: 'https://youtube.com/watch' → detected
+        </cases>
+      </test>
+      
+      <test name="Audio Graph Integrity" file="tests/audio-graph.test.js">
+        <cases>
+          - setupAudioGraph creates all required nodes
+          - Rotation nodes stored in rotationNodesRef
+          - Analyser connected to destination
+          - Gain headroom = 0.6 multiplier applied
+        </cases>
+      </test>
+    </automated-tests>
+    
+    <accessibility-audit>
+      <tool>Pa11y</tool>
+      <command>pa11y http://localhost:8000/index.html --reporter json > tests/pa11y-epic-2.json</command>
+      <threshold>0 issues (maintain Epic 1 standard)</threshold>
+      <focus-areas>
+        - Drag/drop zone keyboard accessibility
+        - URL input error announcements
+        - Playlist item focus management
+      </focus-areas>
+    </accessibility-audit>
+  </testing-strategy>
+
+  <architectural-integration>
+    <preserve>
+      - v2 audio graph node topology (8d-audio-live-v2.html lines 634-850)
+      - Epic 1 accessibility patterns (aria-live, roving tabindex, body classes)
+      - Epic 1 state hook structure (playlist, isPlaying, volume, etc.)
+      - audio-engine.js export surface (tests depend on it)
+    </preserve>
+    
+    <extend>
+      - Add URL validation logic before playlist mutation
+      - Add file MIME validation in addLocalFiles
+      - Add performance measurement helpers for latency tracking
+      - Add regression test documentation structure
+    </extend>
+    
+    <refactor>
+      - Align setupAudioGraph to v2 topology (current: index.html 1140-1250)
+      - Consolidate error message mapping in dedicated helper
+      - Extract URL validation to async helper function
+    </refactor>
+    
+    <interfaces>
+      <interface name="PlaylistTrack" stability="stable">
+        <fields>
+          - id: number (stable key)
+          - name: string (user-facing label)
+          - source: 'local' | 'url' | 'youtube'
+          - file: File | undefined (local only)
+          - url: string | null (remote only)
+          - originalUrl: string | undefined (remote only)
+        </fields>
+        <notes>Schema from docs/data-models.md, no breaking changes</notes>
+      </interface>
+      
+      <interface name="AudioGraph Hooks" stability="evolving">
+        <exports>
+          - setupAudioGraph(audioElement): void
+          - disposeAudioGraph(): void
+          - updateRotation(angle): void
+        </exports>
+        <notes>May add latency measurement hooks, but existing surface preserved</notes>
+      </interface>
+      
+      <interface name="audio-engine.js" stability="frozen">
+        <exports>
+          - connectGainStaging(context, sourceNode, options): GainStagingReturn
+          - createBinauralNodes(context, destination, frequency, options): BinauralReturn
+          - createNoiseNode(context, type): NoiseReturn
+        </exports>
+        <notes>DO NOT modify signatures; tests in tests/gain-staging.test.js assume this surface</notes>
+      </interface>
+    </interfaces>
+  </architectural-integration>
+
+  <documentation-updates>
+    <required>
+      - tests/audio-regression-2025-11-11.md (new regression log)
+      - docs/development-guide.md (update QA checklist with v2 comparison steps)
+      - docs/quick-reference.md (add URL validation error codes)
+    </required>
+    
+    <optional>
+      - docs/architecture.md (expand Audio Graph Subsystem section with v2 alignment notes)
+      - README.md (add "Testing Audio Quality" section)
+    </optional>
+  </documentation-updates>
+
+  <handoff-notes>
+    <for-story-drafting>
+      This epic context provides complete technical foundation for drafting Stories 2-1, 2-2, and 2-3. Each story includes:
+      - Detailed acceptance criteria (6-7 per story)
+      - Technical implementation notes with line references
+      - Definition of Done with specific test cases
+      - Code pattern examples for consistency
+      
+      Recommended next steps:
+      1. Run "workflow create-story 2-3" (Audio Graph Regression - CRITICAL priority)
+      2. Run "workflow create-story 2-1" (Drag/Drop Refactor - HIGH priority)
+      3. Run "workflow create-story 2-2" (URL Validation - HIGH priority)
+      
+      Or start development directly:
+      1. Run "workflow story-context 2-3" to generate detailed context for Story 2-3
+      2. Run "workflow develop-story" to begin implementation
+    </for-story-drafting>
+    
+    <for-development>
+      Critical path: Story 2-3 (Audio Graph) MUST be completed before Stories 2-1 and 2-2 to avoid rework. The v2 audio graph is the foundation; intake mechanics depend on stable playback.
+      
+      Key reference files:
+      - Gold standard: 8d-audio-live-v2.html lines 634-850
+      - Current state: index.html lines 1140-1250
+      - Helper library: audio-engine.js (frozen interface)
+      - Data model: docs/data-models.md lines 8-22
+      
+      Testing workflow:
+      1. Serve repo: python3 -m http.server 8000
+      2. Open http://localhost:8000/index.html
+      3. Follow manual test matrix in this context
+      4. Run pa11y audit before marking story done
+      5. Document regression results in tests/audio-regression-2025-11-11.md
+    </for-development>
+    
+    <for-review>
+      Code review checklist for Epic 2 stories:
+      - [ ] setupAudioGraph matches v2 topology exactly (visual diff against v2 source)
+      - [ ] All parameter changes measured &lt;20ms (console logs or test output)
+      - [ ] File MIME validation uses SUPPORTED_AUDIO_TYPES constant
+      - [ ] URL validation includes 5s timeout with AbortController
+      - [ ] Error messages use setA11yAnnouncement for screen reader compatibility
+      - [ ] No new accessibility issues (pa11y audit clean)
+      - [ ] Regression test documented in tests/audio-regression-2025-11-11.md
+      - [ ] No breaking changes to audio-engine.js interface
+    </for-review>
+  </handoff-notes>
+
+  <lessons-from-epic-1>
+    <carry-forward>
+      - localStorage pattern: Try-catch wrapped, functional state setters
+      - Toggle pattern: State update → body class → persistence → announcement
+      - Accessibility first: Maintain aria-live, roving tabindex, ≥48px tap targets
+      - Code review before story-done: Prevents late-stage rework
+      - Single-file discipline: All React logic stays in index.html, no modules
+    </carry-forward>
+    
+    <apply-to-epic-2>
+      - Use setA11yAnnouncement for all error messages (drag/drop, URL validation)
+      - Document design decisions in comments (helps future maintainers)
+      - Test accessibility after every story (pa11y audit)
+      - Reference Epic 1 patterns when adding new UI components
+    </apply-to-epic-2>
+  </lessons-from-epic-1>
+
+  <success-criteria>
+    <epic-complete-when>
+      - All 3 stories (2-1, 2-2, 2-3) marked "done" in sprint-status.yaml
+      - Audio regression test log shows v2 parity
+      - Pa11y score ≥95 (0 issues preferred)
+      - Manual QA checklist 100% pass rate
+      - 0 known audio bugs
+      - ≥95% intake success rate on 20-file test matrix
+      - All KPIs met (documented in epic-2-completion.md)
+    </epic-complete-when>
+    
+    <user-facing-outcome>
+      Users can drag/drop multiple MP3s, paste streaming URLs with clear error guidance, and experience zero audio regressions compared to v2. The unified player now has reliable, trustworthy playback as its foundation.
+    </user-facing-outcome>
+  </success-criteria>
+</epic-context>

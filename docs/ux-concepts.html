@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mp3_to_8D – Concept A & Concept B</title>
+  <style>
+    :root {
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color-scheme: light dark;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #edf1ff 0%, #f8f9ff 40%, #ffffff 100%);
+      color: #131741;
+      min-height: 100vh;
+      padding: 40px 20px 80px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    p.lead {
+      text-align: center;
+      color: #5a5f95;
+      margin-bottom: 40px;
+    }
+    .concept-grid {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      gap: 40px;
+    }
+    .concept-card {
+      background: white;
+      border-radius: 32px;
+      box-shadow: 0 30px 60px rgba(58, 76, 204, 0.15);
+      padding: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .concept-card h2 {
+      margin: 0;
+      font-size: clamp(1.4rem, 2vw, 1.7rem);
+      color: #2c3685;
+    }
+    .screens {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      align-items: center;
+    }
+    .mock {
+      border-radius: 26px;
+      background: #f7f8ff;
+      padding: 20px;
+      position: relative;
+      min-height: 360px;
+      box-shadow: inset 0 0 0 1px rgba(44,54,133,0.08);
+    }
+    .mock::before {
+      content: attr(data-label);
+      position: absolute;
+      top: 15px;
+      left: 20px;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: rgba(44,54,133,0.7);
+    }
+    .phone-frame {
+      width: 250px;
+      height: 520px;
+      margin: 40px auto 0;
+      border-radius: 40px;
+      padding: 20px 18px;
+      background: #0f1425;
+      position: relative;
+      box-shadow: inset 0 0 0 8px #121830;
+    }
+    .phone-screen {
+      width: 100%;
+      height: 100%;
+      border-radius: 28px;
+      background: linear-gradient(180deg, #5b5fff 0%, #66ffd2 100%);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      color: white;
+    }
+    .desktop-frame {
+      border-radius: 28px;
+      background: #0e1333;
+      padding: 24px;
+      color: white;
+      height: 330px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .desktop-screen {
+      flex: 1;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.08);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .hero-panel {
+      background: rgba(0,0,0,0.15);
+      border-radius: 20px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .big-button {
+      border: none;
+      border-radius: 24px;
+      padding: 14px 26px;
+      font-size: 1rem;
+      font-weight: 600;
+      width: 100%;
+      color: #0f112b;
+    }
+    .big-button.primary { background: linear-gradient(135deg, #ffd75f, #fffcdb); color:#10152c; }
+    .big-button.secondary { background: rgba(255,255,255,0.25); color:#ffffff; }
+    .breathing-ring {
+      width: 130px;
+      height: 130px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.65), rgba(255,255,255,0));
+      animation: breathe 7s ease-in-out infinite;
+    }
+    @keyframes breathe {
+      0%, 100% { transform: scale(0.85); opacity: 0.6; }
+      50% { transform: scale(1.1); opacity: 1; }
+    }
+    .card-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .ritual-card {
+      background: rgba(255,255,255,0.9);
+      border-radius: 18px;
+      padding: 16px;
+      color: #1c2347;
+      font-weight: 600;
+    }
+    .advanced-panel {
+      background: rgba(15,20,53,0.9);
+      border-radius: 20px;
+      padding: 18px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .slider {
+      height: 60px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.12);
+    }
+    .notes {
+      margin: 0;
+      padding-left: 20px;
+      color: #4a4f80;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <h1>mp3_to_8D – High Fidelity Concepts</h1>
+  <p class="lead">Concept A (Calm Orbit) and Concept B (Card Stack Rituals). Phone mock is shown above the desktop mock for each.</p>
+
+  <div class="concept-grid">
+    <!-- Concept A -->
+    <section class="concept-card">
+      <h2>Concept A – Calm Orbit</h2>
+      <div class="screens">
+        <div class="mock" data-label="Phone">
+          <div class="phone-frame">
+            <div class="phone-screen" style="background: linear-gradient(180deg, #5b5fff 0%, #65ffd2 100%);">
+              <div style="text-align:center; font-weight:600; letter-spacing:0.12em;">FOCUS MODE</div>
+              <div class="breathing-ring"></div>
+              <button class="big-button primary">Start Focus</button>
+              <button class="big-button secondary">Calm Mode</button>
+              <div style="display:flex;gap:8px;justify-content:center;">
+                <span style="padding:8px 14px;border-radius:999px;background:rgba(0,0,0,0.15);">Focus</span>
+                <span style="padding:8px 14px;border-radius:999px;background:rgba(0,0,0,0.08);opacity:0.6;">Calm</span>
+                <span style="padding:8px 14px;border-radius:999px;background:rgba(0,0,0,0.08);opacity:0.6;">Energy</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mock" data-label="Desktop">
+          <div class="desktop-frame">
+            <div style="display:flex; gap:12px;">
+              <div style="flex:2; background:linear-gradient(135deg,#5b5fff,#65ffd2); border-radius:20px; padding:20px; display:flex; align-items:center; gap:20px;">
+                <div class="breathing-ring" style="width:110px;height:110px; animation-duration:9s;"></div>
+                <div>
+                  <button class="big-button primary" style="width:auto;">Start Focus</button>
+                  <p style="margin-top:10px;color:white;opacity:0.9;">Heart Rate: 82 → Calm Goal 70</p>
+                </div>
+              </div>
+              <div style="flex:1; background:rgba(255,255,255,0.08); border-radius:20px; padding:16px;">
+                <h3 style="margin:0 0 8px;font-size:0.9rem;letter-spacing:0.2em;opacity:0.7;">PRESETS</h3>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  <div style="background:rgba(255,255,255,0.15);padding:10px;border-radius:12px;">Deep Focus</div>
+                  <div style="background:rgba(255,255,255,0.08);padding:10px;border-radius:12px;">Calm Kid</div>
+                  <div style="background:rgba(255,255,255,0.08);padding:10px;border-radius:12px;">Energy Boost</div>
+                </div>
+              </div>
+            </div>
+            <div class="desktop-screen">
+              <div style="height:70px;background:rgba(255,255,255,0.08);border-radius:16px;"></div>
+              <div style="display:flex;gap:10px;">
+                <div style="flex:1;height:80px;background:rgba(255,255,255,0.08);border-radius:16px;"></div>
+                <div style="flex:1;height:80px;background:rgba(255,255,255,0.08);border-radius:16px;"></div>
+              </div>
+              <div style="height:70px;background:rgba(255,255,255,0.08);border-radius:16px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>Phone-first gradient orbit with breathing halo and giant “Start Focus” button.</li>
+        <li>Desktop hero combines biometric snapshot + presets drawer for multi-task workflows.</li>
+        <li>Guided breathing starts the ritual, then audio kicks in.</li>
+      </ul>
+    </section>
+
+    <!-- Concept B -->
+    <section class="concept-card">
+      <h2>Concept B – Card Stack Rituals</h2>
+      <div class="screens">
+        <div class="mock" data-label="Phone">
+          <div class="phone-frame">
+            <div class="phone-screen" style="background: linear-gradient(180deg, #0f182d 0%, #181b32 100%);">
+              <div class="card-stack">
+                <div class="ritual-card" style="background:linear-gradient(135deg,#ffe066,#ffb347);">Focus Ritual</div>
+                <div class="ritual-card" style="background:linear-gradient(135deg,#ff8a65,#ff6487);">Calm Reset</div>
+                <div class="ritual-card" style="background:linear-gradient(135deg,#65ffc4,#5b74ff);">Energy Boost</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.15);border-radius:18px;padding:16px;color:#fff;">
+                <div style="opacity:0.7;letter-spacing:0.08em;font-size:0.85rem;">ADVANCED CONTROLS</div>
+                <div style="display:flex;gap:10px;margin-top:10px;">
+                  <div style="flex:1;background:rgba(255,255,255,0.1);border-radius:12px;height:50px;"></div>
+                  <div style="flex:1;background:rgba(255,255,255,0.1);border-radius:12px;height:50px;"></div>
+                </div>
+              </div>
+              <button class="big-button primary" style="margin-top:auto;">Begin Ritual</button>
+            </div>
+          </div>
+        </div>
+        <div class="mock" data-label="Desktop">
+          <div class="desktop-frame" style="background:#0f1425;">
+            <div class="desktop-screen" style="background:rgba(255,255,255,0.04);">
+              <div style="display:flex;gap:12px;">
+                <div style="flex:1;background:linear-gradient(120deg,#ffe066,#ffb347);border-radius:22px;height:160px;"></div>
+                <div style="flex:1;background:linear-gradient(120deg,#ff8a65,#ff6487);border-radius:22px;height:160px;"></div>
+                <div style="flex:1;background:linear-gradient(120deg,#65ffc4,#5b74ff);border-radius:22px;height:160px;"></div>
+              </div>
+              <div class="advanced-panel">
+                <div class="slider"></div>
+                <div class="slider"></div>
+                <div class="slider"></div>
+                <div class="slider"></div>
+              </div>
+            </div>
+            <div style="background:rgba(255,255,255,0.04);border-radius:18px;padding:16px;">
+              <p style="margin:0;opacity:0.8;">Assistant Tip: “Try Calm Reset if HR>85 after 3 minutes.”</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>Mobile shows card-sized rituals for quick launches; advanced sliders live under the stack.</li>
+        <li>Desktop surfaces multiple rituals simultaneously and keeps pro controls visible.</li>
+        <li>Guided assistant surfaces real-time tips (“Need a break?”) based on telemetry.</li>
+      </ul>
+    </section>
+  </div>
+</body>
+</html>

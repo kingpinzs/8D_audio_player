@@ -1,0 +1,1045 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Story 2.3 Technical Context: Audio Graph Regression Harness
+Generated: 2025-11-11
+Story: 2-3-audio-graph-regression-harness
+Epic: E2 – Audio Intake & Graph Hardening
+Status: ready-for-dev
+Priority: CRITICAL
+Complexity: HIGH
+-->
+
+<story-context>
+  <metadata>
+    <story-id>2-3</story-id>
+    <story-name>Audio Graph Regression Harness</story-name>
+    <epic-id>epic-2</epic-id>
+    <epic-name>Audio Intake &amp; Graph Hardening</epic-name>
+    <project>mp3_to_8D</project>
+    <generated-date>2025-11-11</generated-date>
+    <status>ready-for-dev</status>
+    <priority>CRITICAL</priority>
+    <complexity>HIGH</complexity>
+  </metadata>
+
+  <summary>
+    Preserve the v2 audio graph topology exactly (MediaElementSource → Gain → Rotation → Analyser) with binaural/noise hooks, ensure &lt;20ms parameter latency, maintain 60fps analyzer rendering, and create automated regression test comparing v2 vs unified build.
+  </summary>
+
+  <user-story>
+    As a ritual player user,
+    I need the audio graph to deliver the same reliable, artifact-free playback as v2,
+    so that I can trust the unified player for my focus sessions without audio regressions.
+  </user-story>
+
+  <acceptance-criteria>
+    <criterion id="AC1" priority="CRITICAL">
+      <description>Audio graph matches v2 topology</description>
+      <details>
+        The setupAudioGraph function creates nodes in exact v2 order: source → splitter → rotation gains (leftToLeft, leftToRight, rightToLeft, rightToRight) → merger → main gain (with 0.6 headroom) → compressor → limiter → analyser → destination. Code review confirms 1:1 match with 8d-audio-live-v2.html lines 634-850.
+      </details>
+      <validation>
+        - Visual diff of setupAudioGraph vs v2 lines 634-850
+        - Node creation order matches exactly
+        - All 4 manual panning gains present (leftToLeft, leftToRight, rightToLeft, rightToRight)
+        - Delay nodes with v2 gain values (0.05, 0.03)
+        - Master gain applies 0.6 headroom multiplier
+        - rotationNodesRef stores all rotation gains
+      </validation>
+    </criterion>
+
+    <criterion id="AC2" priority="HIGH">
+      <description>Binaural oscillators integrate correctly</description>
+      <details>
+        Binaural beats connect via dedicated gain nodes following v2 pattern (lines 780-850). Frequency adjustments apply smoothly without clicks or pops. Integration uses AudioEngine.createBinauralNodes() helper.
+      </details>
+      <validation>
+        - Calls AudioEngine.createBinauralNodes(context, destination, binauralFreq, options)
+        - Binaural nodes connect to destination (NOT directly to context.destination)
+        - Frequency changes (7Hz → 14Hz) apply smoothly
+        - No clicking or phase artifacts
+        - Binaural enable/disable toggle works without errors
+      </validation>
+    </criterion>
+
+    <criterion id="AC3" priority="HIGH">
+      <description>Noise layer uses v2 algorithm</description>
+      <details>
+        Pink/white noise buffer generation follows v2 implementation. Noise volume control does not introduce clipping. Integration uses AudioEngine.createNoiseNode() helper.
+      </details>
+      <validation>
+        - Calls AudioEngine.createNoiseNode(context, destination, noiseType, noiseVolume)
+        - Pink noise uses v2 filter coefficients
+        - White noise uses Math.random() * 2 - 1
+        - Noise volume adjustments (0.0 → 0.5) do not clip
+        - Noise type switching (none → white → pink) works seamlessly
+        - Noise does not overpower music track
+      </validation>
+    </criterion>
+
+    <criterion id="AC4" priority="CRITICAL">
+      <description>Parameter changes apply in &lt;20ms</description>
+      <details>
+        Speed, intensity, volume, binaural frequency, and noise volume changes complete in &lt;20ms (measured via Performance API). 100-iteration automated test confirms consistent latency.
+      </details>
+      <validation>
+        - Performance.now() timing added to all parameter setters
+        - Automated test: 100 iterations, assert all &lt;20ms
+        - Console logs worst-case latency
+        - Test covers: speed, intensity, volume, binauralFreq, noiseVolume
+        - No parameter change exceeds 20ms threshold
+      </validation>
+    </criterion>
+
+    <criterion id="AC5" priority="MEDIUM">
+      <description>Analyzer renders at 60fps</description>
+      <details>
+        Analyzer canvas updates at 60fps during playback (requestAnimationFrame loop). Chrome DevTools Performance profiler confirms frame rate stays within 55-60fps tolerance over 10-second recording.
+      </details>
+      <validation>
+        - requestAnimationFrame loop present (index.html ~1300)
+        - Chrome DevTools Performance recording shows 55-60fps
+        - No frame drops during 10-second playback
+        - Reduced-motion mode throttles to 10fps (if implemented)
+        - Analyzer does not block audio processing
+      </validation>
+    </criterion>
+
+    <criterion id="AC6" priority="HIGH">
+      <description>Regression log documents v2 parity</description>
+      <details>
+        Manual side-by-side comparison of v2 vs unified build produces regression log in tests/audio-regression-2025-11-11.md covering volume consistency, rotation smoothness, analyzer patterns, and 10min stress test results.
+      </details>
+      <validation>
+        - File tests/audio-regression-2025-11-11.md exists
+        - Volume consistency test: PASS
+        - Rotation smoothness test: PASS
+        - Analyzer pattern test: PASS (with screenshots/observations)
+        - 10-minute stress test: PASS (zero artifacts)
+        - Overall assessment: READY FOR PRODUCTION
+      </validation>
+    </criterion>
+
+    <criterion id="AC7" priority="CRITICAL">
+      <description>Zero audio artifacts</description>
+      <details>
+        10-minute continuous playback produces zero dropouts, clipping, pops, clicks, or distortion. Tested with multiple MP3s at volume=0.7 and various rotation speeds.
+      </details>
+      <validation>
+        - Test 3 MP3s (different genres, bitrates)
+        - Each plays for 10 minutes at volume=0.7
+        - Rotation speeds: 0.5, 1.0, 2.0
+        - Zero dropouts logged
+        - Zero clipping, pops, clicks, or distortion
+        - CPU usage remains reasonable (&lt;50%)
+        - Memory consumption stable (no leaks)
+      </validation>
+    </criterion>
+  </acceptance-criteria>
+
+  <tasks>
+    <task-group id="TG1" name="Align setupAudioGraph to v2 topology" ac-ref="AC1">
+      <task id="T1.1">Study v2 reference: 8d-audio-live-v2.html lines 634-850</task>
+      <task id="T1.2">Document current differences: index.html lines 1140-1250</task>
+      <task id="T1.3">Refactor node creation order to match v2 exactly</task>
+      <task id="T1.4">Implement leftToLeftGain, leftToRightGain, rightToLeftGain, rightToRightGain (v2 manual panning)</task>
+      <task id="T1.5">Add delay nodes with v2 gain values (0.05, 0.03 to prevent clipping)</task>
+      <task id="T1.6">Apply 0.6 headroom multiplier to master gain</task>
+      <task id="T1.7">Store rotation nodes in rotationNodesRef for live updates</task>
+      <task id="T1.8">Visual diff review: Compare final code against v2 line-by-line</task>
+    </task-group>
+
+    <task-group id="TG2" name="Integrate binaural oscillators" ac-ref="AC2">
+      <task id="T2.1">Review v2 binaural implementation (lines 780-850)</task>
+      <task id="T2.2">Call AudioEngine.createBinauralNodes() after main gain creation</task>
+      <task id="T2.3">Wire binaural output to merge before analyser</task>
+      <task id="T2.4">Test frequency changes (7Hz → 14Hz) for smooth transitions</task>
+      <task id="T2.5">Verify no phase issues or clicking artifacts</task>
+      <task id="T2.6">Test binaural enable/disable toggle</task>
+    </task-group>
+
+    <task-group id="TG3" name="Integrate noise layer" ac-ref="AC3">
+      <task id="T3.1">Review v2 noise generation algorithm</task>
+      <task id="T3.2">Call AudioEngine.createNoiseNode() for pink/white buffer creation</task>
+      <task id="T3.3">Wire noise output to merge before analyser</task>
+      <task id="T3.4">Test noise volume adjustments (0.0 → 0.5) for clipping</task>
+      <task id="T3.5">Verify noise type switching (none → white → pink)</task>
+      <task id="T3.6">Confirm noise does not overpower music track</task>
+    </task-group>
+
+    <task-group id="TG4" name="Implement parameter latency measurement" ac-ref="AC4">
+      <task id="T4.1">Add Performance API timing to all parameter setters</task>
+      <task id="T4.2">Create automated test: Loop 100 parameter changes</task>
+      <task id="T4.3">Assert each change completes in &lt;20ms</task>
+      <task id="T4.4">Log worst-case latency to console</task>
+      <task id="T4.5">Test with multiple parameters: speed, intensity, volume, binaural freq, noise volume</task>
+      <task id="T4.6">Document latency measurement pattern for future stories</task>
+    </task-group>
+
+    <task-group id="TG5" name="Verify analyzer 60fps rendering" ac-ref="AC5">
+      <task id="T5.1">Confirm requestAnimationFrame loop (index.html ~1300)</task>
+      <task id="T5.2">Open Chrome DevTools → Performance tab</task>
+      <task id="T5.3">Record 10-second playback session</task>
+      <task id="T5.4">Analyze frame rate in timeline</task>
+      <task id="T5.5">Assert FPS stays within 55-60fps tolerance</task>
+      <task id="T5.6">Profile bottlenecks if FPS drops below threshold</task>
+      <task id="T5.7">Test with reduced-motion mode (should throttle to 10fps)</task>
+    </task-group>
+
+    <task-group id="TG6" name="Create regression test harness" ac-ref="AC6">
+      <task id="T6.1">Create tests/audio-regression-2025-11-11.md template</task>
+      <task id="T6.2">Load same MP3 in v2 (left tab) and unified (right tab)</task>
+      <task id="T6.3">Volume consistency test: Compare perceived loudness at 0.7 volume</task>
+      <task id="T6.4">Rotation smoothness test: Verify panning cycle time at speed=1.0</task>
+      <task id="T6.5">Analyzer pattern test: Compare waveform visualizations side-by-side</task>
+      <task id="T6.6">10-minute stress test: Log any dropouts, clicks, or artifacts</task>
+      <task id="T6.7">Document results with timestamps and observations</task>
+    </task-group>
+
+    <task-group id="TG7" name="Conduct 10-minute stress test" ac-ref="AC7">
+      <task id="T7.1">Select 3 test MP3s (different genres, bitrates)</task>
+      <task id="T7.2">Play each for 10 minutes at volume=0.7</task>
+      <task id="T7.3">Test rotation speeds: 0.5, 1.0, 2.0</task>
+      <task id="T7.4">Listen for dropouts, clipping, pops, clicks, distortion</task>
+      <task id="T7.5">Monitor CPU usage and memory consumption</task>
+      <task id="T7.6">Document any artifacts with timestamp and reproduction steps</task>
+      <task id="T7.7">Verify zero issues before marking story done</task>
+    </task-group>
+  </tasks>
+
+  <artifacts>
+    <reference-files>
+      <file path="8d-audio-live-v2.html" lines="634-850" role="gold-standard">
+        v2 setupAudioGraph function - EXACT topology to preserve. This is the proven, artifact-free implementation that users trust.
+      </file>
+      <file path="8d-audio-live-v2.html" lines="750-770" role="reference">
+        Compressor/limiter configuration with specific threshold, knee, ratio, attack, release values.
+      </file>
+      <file path="8d-audio-live-v2.html" lines="780-850" role="reference">
+        Binaural beats setup with baseFreq=200, gain=0.008 (drastically reduced to prevent clipping).
+      </file>
+      <file path="8d-audio-live-v2.html" lines="800-900" role="reference">
+        startRotation function with linearRampToValueAtTime for smooth gain transitions.
+      </file>
+      <file path="index.html" lines="1140-1250" role="current-implementation">
+        Current setupAudioGraph - NEEDS ALIGNMENT with v2. Already uses manual panning gains but may have subtle differences.
+      </file>
+      <file path="index.html" lines="1240-1340" role="current-implementation">
+        Current startRotation - Already matches v2 pattern closely. Verify safety factor and ramp times.
+      </file>
+      <file path="index.html" lines="1300-1350" role="current-implementation">
+        Analyzer visualization loop using requestAnimationFrame. Verify 60fps performance.
+      </file>
+      <file path="audio-engine.js" lines="1-100" role="helper-library">
+        connectGainStaging(context, sourceNode, options) - Returns {mainGain, compressor, limiter, analyser, setVolume(), disconnect()}.
+      </file>
+      <file path="audio-engine.js" lines="101-150" role="helper-library">
+        createBinauralNodes(context, destination, frequency, options) - Returns {leftOsc, rightOsc, merger, gain, stop()}.
+      </file>
+      <file path="audio-engine.js" lines="151-222" role="helper-library">
+        createNoiseNode(context, destination, type, volume) - Returns {source, gain, buffer, stop()}. Pink noise uses filter coefficients.
+      </file>
+    </reference-files>
+
+    <test-files>
+      <file path="tests/gain-staging.test.js" role="existing-tests">
+        Existing test surface for audio-engine.js exports. DO NOT break this interface.
+      </file>
+      <file path="tests/audio-regression-2025-11-11.md" role="to-create">
+        Manual regression test log comparing v2 vs unified build. Template provided in story markdown.
+      </file>
+      <file path="tests/pa11y-story-2-3.json" role="to-create">
+        Pa11y accessibility audit results. Must show 0 issues (no regression from Epic 1).
+      </file>
+    </test-files>
+
+    <outputs>
+      <output type="code-change" path="index.html" lines="1140-1250">
+        Refactored setupAudioGraph matching v2 topology exactly
+      </output>
+      <output type="test-log" path="tests/audio-regression-2025-11-11.md">
+        Regression test results documenting v2 parity
+      </output>
+      <output type="accessibility-report" path="tests/pa11y-story-2-3.json">
+        Pa11y audit showing 0 issues
+      </output>
+    </outputs>
+  </artifacts>
+
+  <implementation-details>
+    <current-state>
+      <observation>
+        index.html already has setupAudioGraph (lines 1140-1250) that creates manual panning gains (leftToLeftGain, leftToRightGain, rightToLeftGain, rightToRightGain) and uses AudioEngine.connectGainStaging for master gain/compressor/limiter/analyser chain. The startRotation function (lines 1240-1340) already uses linearRampToValueAtTime for smooth transitions with safetyFactor=0.35.
+      </observation>
+      <observation>
+        Current implementation appears to match v2 pattern closely. Key verification needed:
+        1. Delay gain values (should be 0.05, 0.03 not higher)
+        2. Headroom multiplier in connectGainStaging (should be 0.6)
+        3. Cross-channel delay connections match v2 exactly
+        4. rotationNodesRef stores all 8 gains (leftToLeft, leftToRight, rightToLeft, rightToRight, delayGainLeft, delayGainRight, crossGainLeft, crossGainRight)
+      </observation>
+      <observation>
+        Binaural and noise integration appears to use syncBinauralChain() and syncNoiseLayer() functions. These should call AudioEngine.createBinauralNodes() and AudioEngine.createNoiseNode() respectively. Verify implementations match v2 behavior.
+      </observation>
+    </current-state>
+
+    <critical-differences>
+      <difference id="D1" severity="HIGH">
+        <issue>Verify delay gain values in setupAudioGraph</issue>
+        <v2-pattern>
+          delayGainLeft.gain.value = 0.05 * spatialDepth;
+          delayGainRight.gain.value = 0.05 * spatialDepth;
+          crossGainLeft.gain.value = 0.03 * spatialDepth;
+          crossGainRight.gain.value = 0.03 * spatialDepth;
+        </v2-pattern>
+        <current-risk>
+          If values are higher (e.g., 0.5, 0.3), will cause clipping and distortion. v2 uses drastically reduced values specifically to prevent this.
+        </current-risk>
+        <fix-required>
+          Ensure delay gains use exact v2 values: 0.05 and 0.03 multiplied by spatialDepth
+        </fix-required>
+      </difference>
+
+      <difference id="D2" severity="CRITICAL">
+        <issue>Verify headroom multiplier in AudioEngine.connectGainStaging call</issue>
+        <v2-pattern>
+          mainGain.gain.value = volume * 0.6; // 0.6 headroom multiplier
+        </v2-pattern>
+        <current-risk>
+          If headroom is not applied or uses different value, volume levels will not match v2 and may clip.
+        </current-risk>
+        <fix-required>
+          Pass headroom: 0.6 option to AudioEngine.connectGainStaging() or verify MASTER_HEADROOM constant is 0.6
+        </fix-required>
+      </difference>
+
+      <difference id="D3" severity="MEDIUM">
+        <issue>Verify rotationNodesRef stores all 8 gain nodes</issue>
+        <v2-pattern>
+          rotationNodesRef.current = {
+            leftToLeftGain, leftToRightGain, rightToLeftGain, rightToRightGain,
+            delayGainLeft, delayGainRight, crossGainLeft, crossGainRight
+          };
+        </v2-pattern>
+        <current-risk>
+          If delay gains are not stored, live updates to spatialDepth will not work correctly.
+        </current-risk>
+        <fix-required>
+          Ensure rotationNodesRef stores all 8 gains (4 main + 4 delay) for runtime parameter updates
+        </fix-required>
+      </difference>
+
+      <difference id="D4" severity="HIGH">
+        <issue>Verify binaural integration uses AudioEngine.createBinauralNodes()</issue>
+        <v2-pattern>
+          const baseFreq = 200;
+          const gain = 0.008; // Drastically reduced to prevent clipping
+          // Left osc at baseFreq, right osc at baseFreq + binauralFreq
+        </v2-pattern>
+        <current-risk>
+          If binaural gain is higher than 0.008, will cause clipping when combined with music track.
+        </current-risk>
+        <fix-required>
+          Call AudioEngine.createBinauralNodes(context, destination, binauralFreq, {baseFreq: 200, gain: 0.008})
+        </fix-required>
+      </difference>
+
+      <difference id="D5" severity="MEDIUM">
+        <issue>Verify noise integration uses AudioEngine.createNoiseNode()</issue>
+        <v2-pattern>
+          Pink noise uses filter coefficients (b0-b6) for proper pink noise spectrum
+          White noise uses Math.random() * 2 - 1
+          Default gain: 0.05
+        </v2-pattern>
+        <current-risk>
+          If noise generation doesn't match v2, spectral balance will differ and may sound harsher.
+        </current-risk>
+        <fix-required>
+          Call AudioEngine.createNoiseNode(context, destination, noiseType, noiseVolume) which implements v2 algorithms
+        </fix-required>
+      </difference>
+    </critical-differences>
+
+    <code-patterns>
+      <pattern name="setupAudioGraph v2 Topology">
+        <description>Exact node creation and connection order from v2</description>
+        <example><![CDATA[
+const setupAudioGraph = (audioElement) => {
+  const context = audioContextRef.current;
+  if (!context) return;
+  
+  // Resume context if suspended (v2 pattern)
+  if (context.state === 'suspended') {
+    context.resume();
+  }
+  
+  // Cleanup existing (v2 pattern)
+  disposeAudioGraph();
+  
+  // Create source → splitter
+  const source = context.createMediaElementSource(audioElement);
+  sourceNodeRef.current = source;
+  
+  const splitter = context.createChannelSplitter(2);
+  const merger = context.createChannelMerger(2);
+  
+  // Manual rotation gains (v2 CRITICAL - NOT StereoPanner!)
+  const leftToLeftGain = context.createGain();
+  const leftToRightGain = context.createGain();
+  const rightToLeftGain = context.createGain();
+  const rightToRightGain = context.createGain();
+  
+  // Delay for spatial depth (v2 EXACT values: 0.05, 0.03)
+  const delayLeft = context.createDelay();
+  const delayRight = context.createDelay();
+  delayLeft.delayTime.value = 0.05;
+  delayRight.delayTime.value = 0.05;
+  
+  const delayGainLeft = context.createGain();
+  const delayGainRight = context.createGain();
+  delayGainLeft.gain.value = 0.05 * spatialDepth; // v2: NOT 0.5!
+  delayGainRight.gain.value = 0.05 * spatialDepth;
+  
+  // Cross-channel delays (v2 EXACT values: 0.03)
+  const crossDelayLeft = context.createDelay();
+  const crossDelayRight = context.createDelay();
+  crossDelayLeft.delayTime.value = 0.03;
+  crossDelayRight.delayTime.value = 0.03;
+  
+  const crossGainLeft = context.createGain();
+  const crossGainRight = context.createGain();
+  crossGainLeft.gain.value = 0.03 * spatialDepth; // v2: NOT 0.3!
+  crossGainRight.gain.value = 0.03 * spatialDepth;
+  
+  // Store rotation nodes for live updates (v2 pattern)
+  rotationNodesRef.current = {
+    leftToLeftGain,
+    leftToRightGain,
+    rightToLeftGain,
+    rightToRightGain,
+    delayGainLeft,
+    delayGainRight,
+    crossGainLeft,
+    crossGainRight
+  };
+  
+  // Connect graph (v2 exact order)
+  source.connect(splitter);
+  
+  // Left input routes
+  splitter.connect(leftToLeftGain, 0);
+  splitter.connect(leftToRightGain, 0);
+  
+  // Right input routes
+  splitter.connect(rightToLeftGain, 1);
+  splitter.connect(rightToRightGain, 1);
+  
+  // Direct paths to output
+  leftToLeftGain.connect(merger, 0, 0);
+  leftToRightGain.connect(merger, 0, 1);
+  rightToLeftGain.connect(merger, 0, 0);
+  rightToRightGain.connect(merger, 0, 1);
+  
+  // Delay paths (echo/reverb for spatial depth)
+  leftToLeftGain.connect(delayLeft);
+  delayLeft.connect(delayGainLeft);
+  delayGainLeft.connect(merger, 0, 0);
+  
+  rightToRightGain.connect(delayRight);
+  delayRight.connect(delayGainRight);
+  delayGainRight.connect(merger, 0, 1);
+  
+  // Cross-channel delays (depth enhancement)
+  leftToLeftGain.connect(crossDelayRight);
+  crossDelayRight.connect(crossGainRight);
+  crossGainRight.connect(merger, 0, 1);
+  
+  rightToRightGain.connect(crossDelayLeft);
+  crossDelayLeft.connect(crossGainLeft);
+  crossGainLeft.connect(merger, 0, 0);
+  
+  // Use audio-engine.js for gain staging chain
+  const gainStaging = AudioEngine.connectGainStaging(context, merger, {
+    headroom: 0.6,  // v2 CRITICAL: 0.6 multiplier
+    volume: volume,
+    fftSize: 2048
+  });
+  
+  gainChainRef.current = gainStaging;
+  gainNodeRef.current = gainStaging.mainGain;
+  analyserRef.current = gainStaging.analyser;
+  
+  // Integrate binaural and noise layers
+  syncBinauralChain();
+  syncNoiseLayer();
+  
+  // Start rotation animation
+  startRotation();
+  
+  // Start visualizer if enabled
+  if (showVisualizer) {
+    visualize();
+  }
+};
+        ]]></example>
+      </pattern>
+
+      <pattern name="Binaural Integration via audio-engine.js">
+        <description>Use AudioEngine.createBinauralNodes() helper with v2 parameters</description>
+        <example><![CDATA[
+// Called from syncBinauralChain() or similar
+const setupBinauralBeats = () => {
+  if (!binauralEnabled || !gainNodeRef.current) return;
+  
+  const context = audioContextRef.current;
+  if (!context) return;
+  
+  // Cleanup existing
+  if (binauralNodesRef.current) {
+    binauralNodesRef.current.stop();
+    binauralNodesRef.current = null;
+  }
+  
+  // Create binaural nodes via audio-engine.js
+  const binauralNodes = AudioEngine.createBinauralNodes(
+    context,
+    context.destination, // Connect directly to output (parallel to music)
+    binauralFreq,        // Frequency delta (e.g., 7Hz, 14Hz)
+    {
+      baseFreq: 200,     // v2 default base frequency
+      gain: 0.008        // v2 CRITICAL: 0.008 to prevent clipping
+    }
+  );
+  
+  binauralNodesRef.current = binauralNodes;
+};
+
+// Update binaural frequency when slider changes
+const updateBinauralFreq = (newFreq) => {
+  const t0 = performance.now();
+  
+  setBinauralFreq(newFreq);
+  
+  if (binauralNodesRef.current) {
+    // Update right oscillator (left stays at baseFreq)
+    const baseFreq = 200;
+    binauralNodesRef.current.rightOsc.frequency.value = baseFreq + newFreq;
+  }
+  
+  const t1 = performance.now();
+  if (t1 - t0 > 20) {
+    console.warn(`⚠️ Binaural freq latency: ${(t1 - t0).toFixed(2)}ms`);
+  }
+};
+        ]]></example>
+      </pattern>
+
+      <pattern name="Noise Integration via audio-engine.js">
+        <description>Use AudioEngine.createNoiseNode() helper with v2 algorithms</description>
+        <example><![CDATA[
+// Called from syncNoiseLayer() or similar
+const setupNoise = () => {
+  if (noiseType === 'none' || !gainNodeRef.current) {
+    // Cleanup existing
+    if (noiseNodeRef.current) {
+      noiseNodeRef.current.stop();
+      noiseNodeRef.current = null;
+    }
+    return;
+  }
+  
+  const context = audioContextRef.current;
+  if (!context) return;
+  
+  // Cleanup existing
+  if (noiseNodeRef.current) {
+    noiseNodeRef.current.stop();
+  }
+  
+  // Create noise node via audio-engine.js
+  const noiseNode = AudioEngine.createNoiseNode(
+    context,
+    context.destination, // Connect directly to output (parallel to music)
+    noiseType,           // 'white' or 'pink'
+    noiseVolume          // Default: 0.05
+  );
+  
+  noiseNodeRef.current = noiseNode;
+};
+
+// Update noise volume when slider changes
+const updateNoiseVolume = (newVolume) => {
+  const t0 = performance.now();
+  
+  setNoiseVolume(newVolume);
+  
+  if (noiseNodeRef.current) {
+    noiseNodeRef.current.gain.gain.value = newVolume;
+  }
+  
+  const t1 = performance.now();
+  if (t1 - t0 > 20) {
+    console.warn(`⚠️ Noise volume latency: ${(t1 - t0).toFixed(2)}ms`);
+  }
+};
+        ]]></example>
+      </pattern>
+
+      <pattern name="Parameter Latency Measurement">
+        <description>Wrap all parameter setters with Performance API timing</description>
+        <example><![CDATA[
+// Pattern for all parameter update functions
+const updateSpeed = (newSpeed) => {
+  const t0 = performance.now();
+  
+  setSpeed(newSpeed);
+  // Audio parameter updates happen via React state → useEffect → startRotation
+  
+  const t1 = performance.now();
+  const latency = t1 - t0;
+  
+  if (latency > 20) {
+    console.warn(`⚠️ Speed latency exceeded: ${latency.toFixed(2)}ms (threshold: 20ms)`);
+  }
+  
+  // Optional: Log to session telemetry
+  // SessionLogger.logEvent('parameter-change', { parameter: 'speed', latency });
+};
+
+// Automated test function (run in browser console)
+const testParameterLatency = () => {
+  const results = [];
+  const iterations = 100;
+  
+  console.log(`Testing parameter latency (${iterations} iterations)...`);
+  
+  for (let i = 0; i < iterations; i++) {
+    const t0 = performance.now();
+    
+    // Simulate parameter change (use actual setter)
+    const randomSpeed = Math.random() * 2;
+    setSpeed(randomSpeed);
+    
+    const t1 = performance.now();
+    results.push(t1 - t0);
+  }
+  
+  const maxLatency = Math.max(...results);
+  const avgLatency = results.reduce((a, b) => a + b) / results.length;
+  const failedCount = results.filter(r => r > 20).length;
+  
+  console.log(`\nLatency Test Results:`);
+  console.log(`  Average: ${avgLatency.toFixed(2)}ms`);
+  console.log(`  Max: ${maxLatency.toFixed(2)}ms`);
+  console.log(`  Failed (>20ms): ${failedCount}/${iterations}`);
+  console.log(`  Pass: ${maxLatency < 20 ? '✅' : '❌'}`);
+  
+  return {
+    average: avgLatency,
+    max: maxLatency,
+    failed: failedCount,
+    pass: maxLatency < 20
+  };
+};
+
+// Export for console access
+window.testParameterLatency = testParameterLatency;
+        ]]></example>
+      </pattern>
+
+      <pattern name="Regression Test Execution">
+        <description>Side-by-side comparison workflow</description>
+        <example><![CDATA[
+/*
+Regression Test Workflow
+=========================
+
+1. Serve repo locally:
+   python3 -m http.server 8000
+   # or
+   npx http-server . -p 8000 --cors
+
+2. Open two browser tabs:
+   - Tab 1 (v2): http://localhost:8000/8d-audio-live-v2.html
+   - Tab 2 (Unified): http://localhost:8000/index.html
+
+3. Load same test MP3 in both tabs
+   - Use drag/drop or file picker
+   - Ensure same file loaded (check filename)
+
+4. Volume Consistency Test:
+   - Set volume=0.7 in both tabs
+   - Play simultaneously
+   - Compare perceived loudness at 0:00, 2:30, 5:00
+   - Note any differences in regression log
+
+5. Rotation Smoothness Test:
+   - Set speed=1.0 in both tabs
+   - Listen for panning cycle duration (should be ~2 seconds)
+   - Note any clicking, popping, or roughness
+   - Compare spatial width (how "wide" the rotation feels)
+
+6. Analyzer Pattern Test:
+   - Play same section in both tabs
+   - Compare waveform visualizations
+   - Take screenshots if patterns differ
+   - Note any differences in regression log
+
+7. 10-Minute Stress Test:
+   - Play for 10 minutes continuously
+   - Monitor for dropouts, clicks, clipping
+   - Log CPU usage every 2 minutes
+   - Note any artifacts with timestamp
+
+8. Document results in tests/audio-regression-2025-11-11.md
+   - Fill in all test tables
+   - Mark PASS/FAIL for each section
+   - Provide overall assessment
+   - Include screenshots if needed
+
+9. Run Pa11y audit:
+   pa11y http://localhost:8000/index.html --reporter json > tests/pa11y-story-2-3.json
+   
+10. Verify 0 accessibility issues (no regression from Epic 1)
+*/
+        ]]></example>
+      </pattern>
+    </code-patterns>
+  </implementation-details>
+
+  <interfaces>
+    <interface name="setupAudioGraph" type="function">
+      <signature>setupAudioGraph(audioElement: HTMLAudioElement): void</signature>
+      <parameters>
+        <param name="audioElement" type="HTMLAudioElement">
+          The audio element to connect to Web Audio API graph
+        </param>
+      </parameters>
+      <returns>void</returns>
+      <side-effects>
+        - Creates and connects Web Audio nodes
+        - Stores references in React refs (sourceNodeRef, gainChainRef, rotationNodesRef, analyserRef)
+        - Starts rotation animation via startRotation()
+        - Starts visualizer if showVisualizer is true
+        - Resumes AudioContext if suspended
+      </side-effects>
+      <constraints>
+        - MUST match v2 topology exactly (8d-audio-live-v2.html lines 634-850)
+        - MUST use manual panning gains (NOT StereoPanner)
+        - MUST use v2 delay gain values (0.05, 0.03)
+        - MUST apply 0.6 headroom multiplier via AudioEngine.connectGainStaging
+        - MUST store all 8 rotation gains in rotationNodesRef
+      </constraints>
+    </interface>
+
+    <interface name="AudioEngine.connectGainStaging" type="helper">
+      <signature>connectGainStaging(context, sourceNode, options): GainStagingReturn</signature>
+      <parameters>
+        <param name="context" type="AudioContext">Audio context instance</param>
+        <param name="sourceNode" type="AudioNode">Source node to connect</param>
+        <param name="options" type="object">
+          - headroom: number (default: 0.6) - Master gain multiplier
+          - volume: number (default: 0.7) - User volume setting
+          - fftSize: number (default: 2048) - Analyser FFT size
+          - destination: AudioNode (default: context.destination) - Output node
+        </param>
+      </parameters>
+      <returns>
+        {
+          sourceNode: AudioNode,
+          mainGain: GainNode,
+          compressor: DynamicsCompressorNode,
+          limiter: DynamicsCompressorNode,
+          analyser: AnalyserNode,
+          headroom: number,
+          setVolume(volume): void,
+          disconnect(): void
+        }
+      </returns>
+      <constraints>
+        - DO NOT modify interface (tests depend on it)
+        - headroom MUST be 0.6 for v2 parity
+        - Compressor/limiter parameters match v2 (threshold, knee, ratio, attack, release)
+      </constraints>
+    </interface>
+
+    <interface name="AudioEngine.createBinauralNodes" type="helper">
+      <signature>createBinauralNodes(context, destination, frequency, options): BinauralReturn</signature>
+      <parameters>
+        <param name="context" type="AudioContext">Audio context instance</param>
+        <param name="destination" type="AudioNode">Destination node (usually context.destination)</param>
+        <param name="frequency" type="number">Frequency delta between left and right oscillators</param>
+        <param name="options" type="object">
+          - baseFreq: number (default: 200) - Base frequency for both oscillators
+          - gain: number (default: 0.008) - Output gain (v2: 0.008 to prevent clipping)
+        </param>
+      </parameters>
+      <returns>
+        {
+          leftOsc: OscillatorNode,
+          rightOsc: OscillatorNode,
+          merger: ChannelMergerNode,
+          gain: GainNode,
+          stop(): void
+        }
+      </returns>
+      <constraints>
+        - DO NOT modify interface (tests depend on it)
+        - gain MUST be 0.008 for v2 parity (prevents clipping)
+        - Oscillators start automatically
+      </constraints>
+    </interface>
+
+    <interface name="AudioEngine.createNoiseNode" type="helper">
+      <signature>createNoiseNode(context, destination, type, volume): NoiseReturn</signature>
+      <parameters>
+        <param name="context" type="AudioContext">Audio context instance</param>
+        <param name="destination" type="AudioNode">Destination node (usually context.destination)</param>
+        <param name="type" type="string">'white' | 'pink' (NOT 'none')</param>
+        <param name="volume" type="number">Output gain (default: 0.05)</param>
+      </parameters>
+      <returns>
+        {
+          source: AudioBufferSourceNode,
+          gain: GainNode,
+          buffer: AudioBuffer,
+          stop(): void
+        }
+      </returns>
+      <constraints>
+        - DO NOT modify interface (tests depend on it)
+        - Pink noise uses v2 filter coefficients (b0-b6)
+        - White noise uses Math.random() * 2 - 1
+        - Buffer loops automatically
+      </constraints>
+    </interface>
+  </interfaces>
+
+  <testing-strategy>
+    <unit-tests>
+      <test name="Audio Graph Topology Validation">
+        <description>Verify setupAudioGraph creates nodes in v2 order</description>
+        <approach>
+          - Manual code review: Compare setupAudioGraph vs v2 lines 634-850
+          - Visual diff tool if available
+          - Checklist: source, splitter, 4 manual gains, delays, merger, gain staging
+        </approach>
+      </test>
+
+      <test name="Parameter Latency Automated Test">
+        <description>100 iterations, assert all &lt;20ms</description>
+        <approach>
+          - Create testParameterLatency() function
+          - Loop 100 times, measure Performance.now() before/after parameter change
+          - Assert max latency &lt; 20ms
+          - Log average, max, failed count
+          - Export to window for console access
+        </approach>
+      </test>
+
+      <test name="Audio Engine Interface Integrity">
+        <description>Verify audio-engine.js exports unchanged</description>
+        <approach>
+          - Run existing tests/gain-staging.test.js
+          - Verify all tests pass
+          - No breaking changes to connectGainStaging, createBinauralNodes, createNoiseNode
+        </approach>
+      </test>
+    </unit-tests>
+
+    <integration-tests>
+      <test name="Volume Consistency (v2 vs Unified)">
+        <description>Side-by-side loudness comparison</description>
+        <approach>
+          - Load same MP3 in v2 and unified tabs
+          - Set volume=0.7 in both
+          - Play simultaneously
+          - Compare perceived loudness at 0:00, 2:30, 5:00
+          - Document in regression log: PASS if matches, FAIL if differs
+        </approach>
+      </test>
+
+      <test name="Rotation Smoothness (v2 vs Unified)">
+        <description>Panning cycle time and smoothness comparison</description>
+        <approach>
+          - Set speed=1.0 in both tabs
+          - Listen for cycle duration (should be ~2 seconds)
+          - Note any clicking, popping, or roughness
+          - Compare spatial width
+          - Document in regression log: PASS if matches, FAIL if differs
+        </approach>
+      </test>
+
+      <test name="Analyzer Pattern (v2 vs Unified)">
+        <description>Waveform visualization comparison</description>
+        <approach>
+          - Play same section in both tabs
+          - Compare waveform patterns visually
+          - Take screenshots if patterns differ
+          - Document in regression log: PASS if matches, FAIL if differs
+        </approach>
+      </test>
+
+      <test name="10-Minute Stress Test">
+        <description>Continuous playback artifact detection</description>
+        <approach>
+          - Select 3 test MP3s (different genres, bitrates)
+          - Play each for 10 minutes at volume=0.7
+          - Test rotation speeds: 0.5, 1.0, 2.0
+          - Listen for dropouts, clipping, pops, clicks, distortion
+          - Monitor CPU usage every 2 minutes
+          - Document any artifacts with timestamp
+          - Document in regression log: PASS if zero artifacts, FAIL otherwise
+        </approach>
+      </test>
+    </integration-tests>
+
+    <performance-tests>
+      <test name="Analyzer FPS Profiling">
+        <description>Verify 60fps rendering during playback</description>
+        <approach>
+          - Open Chrome DevTools → Performance tab
+          - Start recording
+          - Play audio with visualizer enabled
+          - Record for 10 seconds
+          - Stop recording
+          - Analyze frame rate in timeline
+          - Assert FPS stays within 55-60fps tolerance
+          - If &lt;55fps, profile bottlenecks and optimize
+        </approach>
+      </test>
+
+      <test name="Parameter Change Latency Profiling">
+        <description>Measure latency for all parameter types</description>
+        <approach>
+          - Test speed changes (0.5 → 2.0)
+          - Test intensity changes (0.0 → 1.0)
+          - Test volume changes (0.0 → 1.0)
+          - Test binaural freq changes (7Hz → 14Hz)
+          - Test noise volume changes (0.0 → 0.5)
+          - Assert each type &lt;20ms
+          - Log worst-case per parameter type
+        </approach>
+      </test>
+    </performance-tests>
+
+    <accessibility-tests>
+      <test name="Pa11y Regression Check">
+        <description>Ensure no accessibility regressions from Epic 1</description>
+        <approach>
+          - Run: pa11y http://localhost:8000/index.html --reporter json &gt; tests/pa11y-story-2-3.json
+          - Verify: "issues": [] (0 issues)
+          - Compare with Epic 1 Pa11y results
+          - Document: PASS if 0 issues, FAIL otherwise
+        </approach>
+      </test>
+
+      <test name="Keyboard Navigation Integrity">
+        <description>Verify audio changes don't break keyboard nav</description>
+        <approach>
+          - Tab through all controls
+          - Verify focus indicators visible
+          - Test Enter/Space on all buttons
+          - Test Arrow keys on sliders
+          - Document: PASS if all work, FAIL if any broken
+        </approach>
+      </test>
+    </accessibility-tests>
+  </testing-strategy>
+
+  <definition-of-done>
+    <checklist>
+      <item priority="CRITICAL">setupAudioGraph matches v2 topology exactly (visual diff vs v2 lines 634-850)</item>
+      <item priority="CRITICAL">All 4 manual panning gains present (leftToLeft, leftToRight, rightToLeft, rightToRight)</item>
+      <item priority="CRITICAL">Delay gain values exactly 0.05 and 0.03 (NOT higher)</item>
+      <item priority="CRITICAL">Headroom multiplier 0.6 applied via AudioEngine.connectGainStaging</item>
+      <item priority="HIGH">rotationNodesRef stores all 8 gains (4 main + 4 delay)</item>
+      <item priority="HIGH">Binaural integration uses AudioEngine.createBinauralNodes() with gain=0.008</item>
+      <item priority="HIGH">Noise integration uses AudioEngine.createNoiseNode() with v2 algorithms</item>
+      <item priority="CRITICAL">Automated latency test: 100 iterations, all &lt;20ms</item>
+      <item priority="MEDIUM">Analyzer FPS profiling: 55-60fps over 10-second recording</item>
+      <item priority="CRITICAL">Regression log tests/audio-regression-2025-11-11.md exists and documents PASS</item>
+      <item priority="CRITICAL">Volume consistency test: PASS</item>
+      <item priority="CRITICAL">Rotation smoothness test: PASS</item>
+      <item priority="MEDIUM">Analyzer pattern test: PASS (visual match)</item>
+      <item priority="CRITICAL">10-minute stress test: PASS (zero artifacts)</item>
+      <item priority="HIGH">Pa11y audit: 0 issues (tests/pa11y-story-2-3.json)</item>
+      <item priority="MEDIUM">Keyboard navigation: All controls functional</item>
+      <item priority="HIGH">audio-engine.js interface unchanged (tests/gain-staging.test.js passes)</item>
+      <item priority="MEDIUM">Code review completed using Code Review Checklist</item>
+      <item priority="LOW">Completion notes filled in story markdown</item>
+    </checklist>
+  </definition-of-done>
+
+  <risks-and-mitigations>
+    <risk id="R1" severity="HIGH">
+      <description>Audio graph changes introduce new artifacts or regressions</description>
+      <likelihood>MEDIUM</likelihood>
+      <impact>Breaks core value proposition, users lose trust</impact>
+      <mitigation>
+        - Create branch before changes
+        - Test v2 comparison after each major change
+        - Run 10-minute stress test before merging
+        - Get ear-test validation from stakeholder
+      </mitigation>
+    </risk>
+
+    <risk id="R2" severity="MEDIUM">
+      <description>Performance measurement overhead affects actual latency</description>
+      <likelihood>LOW</likelihood>
+      <impact>Latency test may not reflect real-world performance</impact>
+      <mitigation>
+        - Use Performance.now() which has minimal overhead
+        - Test with and without measurement to compare
+        - Focus on worst-case latency (max) not just average
+        - Remove measurement code after validation if needed
+      </mitigation>
+    </risk>
+
+    <risk id="R3" severity="LOW">
+      <description>Different browsers or audio hardware produce different results</description>
+      <likelihood>MEDIUM</likelihood>
+      <impact>Regression test may not be reproducible on all systems</impact>
+      <mitigation>
+        - Document test environment (browser, OS, audio device)
+        - Focus on relative comparison (v2 vs unified on same system)
+        - Test on multiple browsers if available (Chrome, Firefox, Edge)
+        - Note any browser-specific differences in regression log
+      </mitigation>
+    </risk>
+
+    <risk id="R4" severity="HIGH">
+      <description>Subtle audio differences are difficult to quantify objectively</description>
+      <likelihood>HIGH</likelihood>
+      <impact>May miss subtle regressions that affect user experience</impact>
+      <mitigation>
+        - Use side-by-side comparison to reduce subjective bias
+        - Document specific metrics (cycle duration, CPU usage)
+        - Take screenshots of analyzer patterns for visual comparison
+        - Get multiple testers to validate if possible
+        - Trust your ears: If it sounds different, it IS different
+      </mitigation>
+    </risk>
+  </risks-and-mitigations>
+
+  <success-criteria>
+    <criterion>All 7 acceptance criteria marked PASS</criterion>
+    <criterion>Regression log shows v2 parity across all tests</criterion>
+    <criterion>Pa11y audit shows 0 issues (no accessibility regression)</criterion>
+    <criterion>10-minute stress test produces zero audio artifacts</criterion>
+    <criterion>Code review confirms v2 topology match</criterion>
+    <criterion>Stakeholder ear-test validation (if applicable)</criterion>
+  </success-criteria>
+
+  <next-steps>
+    <step priority="1">Begin implementation: workflow develop-story</step>
+    <step priority="2">Study v2 reference (8d-audio-live-v2.html lines 634-850)</step>
+    <step priority="3">Document current differences in implementation notes</step>
+    <step priority="4">Refactor setupAudioGraph to match v2 exactly</step>
+    <step priority="5">Run automated latency test (100 iterations)</step>
+    <step priority="6">Create regression test log and run side-by-side comparison</step>
+    <step priority="7">Run Pa11y audit</step>
+    <step priority="8">Request code review</step>
+    <step priority="9">Mark story done in sprint status</step>
+  </next-steps>
+</story-context>

@@ -1,0 +1,1110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Story 2-1 Technical Context: Drag/Drop & File Picker Refactor
+Generated: 2025-11-11
+Story: 2-1 – Drag/Drop & File Picker Refactor
+Epic: E2 – Audio Intake & Graph Hardening
+Status: ready-for-dev
+Project: mp3_to_8D
+-->
+
+<story-context>
+  <metadata>
+    <story-id>2-1</story-id>
+    <story-name>Drag/Drop &amp; File Picker Refactor</story-name>
+    <epic-id>epic-2</epic-id>
+    <epic-name>Audio Intake &amp; Graph Hardening</epic-name>
+    <project>mp3_to_8D</project>
+    <generated-date>2025-11-11</generated-date>
+    <status>ready-for-dev</status>
+    <priority>HIGH</priority>
+    <complexity>MEDIUM</complexity>
+    <estimated-hours>4-6</estimated-hours>
+    <prerequisite-stories>
+      <prerequisite>2-3</prerequisite>
+    </prerequisite-stories>
+  </metadata>
+
+  <problem-statement>
+    <core-issue>
+      The current drag/drop and file picker implementation accepts files without MIME type validation, provides no progress feedback for batch operations, and lacks actionable error messages when users attempt to add unsupported formats (FLAC, M4A, TXT). This creates confusion and erodes trust in the intake system.
+    </core-issue>
+    
+    <user-impact>
+      - Users drop .flac or .m4a files expecting playback, but see silent failures
+      - No visual feedback when processing 10+ files, creating uncertainty
+      - File metadata (size, format) not visible in playlist, reducing confidence
+      - No clear guidance on supported formats until playback attempt fails
+    </user-impact>
+    
+    <technical-debt>
+      The current `addLocalFiles` function (index.html lines 1357-1373) processes all files without validation, storing unsupported types in the playlist. Errors only surface during playback when `audio.src` fails to load, far removed from the intake moment when users need feedback.
+    </technical-debt>
+  </problem-statement>
+
+  <scope>
+    <in-scope>
+      - MIME type validation before adding files to playlist
+      - Progress spinner for batches larger than 5 files
+      - Toast notification system for rejection feedback
+      - Empty file detection and rejection
+      - File metadata extraction and display in playlist UI
+      - Batch processing with mixed valid/invalid file handling
+      - Accessibility enhancements (aria-live announcements, keyboard navigation)
+      - Automated test suite for validation logic
+    </in-scope>
+    
+    <out-of-scope>
+      - Format conversion (e.g., FLAC → MP3 transcoding in browser)
+      - Folder drag/drop recursive traversal (deferred to Epic 3)
+      - Playlist persistence across browser restarts (Epic 3)
+      - Audio file duration extraction via metadata parsing (Epic 3 enhancement)
+      - Drag reordering within playlist (Epic 3)
+      - Thumbnail/cover art extraction (Epic 4)
+    </out-of-scope>
+    
+    <constraints>
+      - MUST preserve existing File object storage pattern (no blob URL on drop)
+      - MUST NOT break current blob URL creation in playTrack function
+      - MUST maintain screen reader compatibility (aria-live, role attributes)
+      - MUST use existing React state hooks pattern (no new libraries)
+      - MUST keep inline React (no JSX compilation step)
+      - MUST NOT introduce breaking changes to PlaylistTrack schema
+    </constraints>
+  </scope>
+
+  <acceptance-criteria>
+    <criterion id="AC1">
+      <title>Multi-File Drop Support</title>
+      <description>Drop zone accepts and processes multiple MP3/WAV/OGG files simultaneously</description>
+      <validation>
+        - Drop 10 MP3 files onto drop zone
+        - Verify all 10 appear in playlist with unique IDs
+        - Verify names extracted correctly (without .mp3 extension)
+        - Verify playlist updates atomically (no partial adds)
+      </validation>
+      <implementation-notes>
+        Current `Array.from(files).map()` pattern works, preserve this.
+        Ensure `Date.now() + index` ID generation remains stable.
+      </implementation-notes>
+    </criterion>
+
+    <criterion id="AC2">
+      <title>Progress Indicator for Large Batches</title>
+      <description>Spinner appears during file processing when &gt;5 files dropped</description>
+      <validation>
+        - Drop 6 MP3 files
+        - Verify spinner appears immediately
+        - Verify hero message shows "Adding 6 tracks..."
+        - Verify spinner disappears when setPlaylist completes
+      </validation>
+      <implementation-notes>
+        Add `isProcessingFiles` state hook.
+        Show modal spinner overlay when files.length > 5.
+        Hide spinner after `setPlaylist(prev => [...prev, ...newTracks])` call.
+      </implementation-notes>
+    </criterion>
+
+    <criterion id="AC3">
+      <title>MIME Type Validation with Toast</title>
+      <description>Unsupported file types trigger user-friendly toast notifications</description>
+      <validation>
+        - Drop mix of 3 MP3 + 2 FLAC files
+        - Verify toast: "2 unsupported files rejected. Use MP3, WAV, or OGG."
+        - Verify only 3 MP3s added to playlist
+        - Verify toast auto-dismisses after 5 seconds
+      </validation>
+      <supported-mime-types>
+        - audio/mpeg (MP3)
+        - audio/wav (WAV)
+        - audio/wave (WAV alternate)
+        - audio/ogg (OGG Vorbis)
+        - audio/x-wav (WAV legacy)
+      </supported-mime-types>
+      <implementation-notes>
+        Create `SUPPORTED_MIME_TYPES` constant array.
+        Filter files before creating playlist tracks.
+        Aggregate rejection count for toast message.
+        Use `setA11yAnnouncement` for screen reader notification.
+      </implementation-notes>
+    </criterion>
+
+    <criterion id="AC4">
+      <title>Offline Playback Guarantee</title>
+      <description>Local files remain playable for entire browser session without blob URL expiry</description>
+      <validation>
+        - Drop local MP3 at session start
+        - Wait 30 minutes (no page refresh)
+        - Click track to play
+        - Verify playback starts without errors
+        - Check console for "resource not found" errors (should be none)
+      </validation>
+      <implementation-notes>
+        PRESERVE current pattern:
+        - Store File object in playlist.file field
+        - Set playlist.url = null
+        - Create blob URL lazily in playTrack() via URL.createObjectURL(track.file)
+        - Clean up previous blob URL with URL.revokeObjectURL() before creating new one
+      </implementation-notes>
+    </criterion>
+
+    <criterion id="AC5">
+      <title>File Metadata Display</title>
+      <description>Playlist UI shows file size, format, and source for each track</description>
+      <validation>
+        - Drop 5MB MP3 and 500KB WAV file
+        - Verify MP3 shows "5.0 MB • MP3" in playlist
+        - Verify WAV shows "500.0 KB • WAV" in playlist
+        - Add streaming URL
+        - Verify URL track shows "🌐 Streaming" indicator
+      </validation>
+      <implementation-notes>
+        Add `metadata` field to PlaylistTrack:
+        ```javascript
+        metadata: {
+          size: file.size,
+          type: file.type,
+          lastModified: file.lastModified
+        }
+        ```
+        Create helper functions:
+        - formatFileSize(bytes): "5.0 MB" | "500.0 KB"
+        - formatFileType(mimeType): "MP3" | "WAV" | "OGG"
+      </implementation-notes>
+    </criterion>
+
+    <criterion id="AC6">
+      <title>Edge Case Handling with Tests</title>
+      <description>System gracefully handles empty files, corrupt headers, duplicate names</description>
+      <validation>
+        Test 1: Empty file (0 bytes)
+        - Drop 0-byte .mp3
+        - Verify toast: "1 empty file rejected"
+        - Verify not added to playlist
+        
+        Test 2: Duplicate names
+        - Drop "song.mp3" twice
+        - Verify both added with unique IDs
+        - Verify both display as "song"
+        
+        Test 3: Special characters
+        - Drop "Track #1 (remix).mp3"
+        - Verify name preserved: "Track #1 (remix)"
+        
+        Test 4: Mixed batch
+        - Drop 3 MP3 + 2 FLAC
+        - Verify 3 added, toast shows "2 unsupported files rejected"
+      </validation>
+      <implementation-notes>
+        Create `tests/file-intake.test.js` with:
+        - validateFile() function tests
+        - formatFileSize() function tests
+        - formatFileType() function tests
+        - Batch processing tests
+        Run with: `node tests/file-intake.test.js`
+      </implementation-notes>
+    </criterion>
+  </acceptance-criteria>
+
+  <current-implementation>
+    <file-locations>
+      <location path="index.html" lines="1357-1373" description="addLocalFiles function - core intake logic"/>
+      <location path="index.html" lines="1376-1382" description="handleDrop - drag/drop event handler"/>
+      <location path="index.html" lines="1384-1406" description="handleDragOver, handleDragEnter, handleDragLeave"/>
+      <location path="index.html" lines="1450-1461" description="playTrack blob URL creation (PRESERVE THIS)"/>
+      <location path="index.html" lines="2180-2202" description="Drop zone JSX with event handlers"/>
+      <location path="index.html" lines="2204-2212" description="File input element"/>
+      <location path="index.html" lines="2239-2279" description="Playlist rendering UI"/>
+      <location path="index.html" lines="704" description="playlist state hook"/>
+      <location path="index.html" lines="742-743" description="heroMessage and a11yAnnouncement state hooks"/>
+      <location path="index.html" lines="770" description="dropZoneRef"/>
+      <location path="index.html" lines="773" description="fileInputRef"/>
+    </file-locations>
+
+    <current-code-analysis>
+      <addLocalFiles>
+        <current-behavior>
+          ```javascript
+          // index.html lines 1357-1373
+          const addLocalFiles = (files) => {
+              const newTracks = Array.from(files).map((file, index) => {
+                  // Store the file object directly instead of creating blob URL
+                  return {
+                      id: Date.now() + index,
+                      name: file.name.replace('.mp3', ''),
+                      source: 'local',
+                      file: file, // Store file object
+                      url: null // We'll create URL when needed
+                  };
+              });
+              if (newTracks.length > 0) {
+                  setHeroMessage(`Added ${newTracks.length} track${newTracks.length > 1 ? 's' : ''}. Pick a ritual and press Start.`);
+                  setNeedsAudio(false);
+              }
+              setPlaylist(prev => [...prev, ...newTracks]);
+          };
+          ```
+        </current-behavior>
+        
+        <issues>
+          - No MIME type validation (accepts any file type)
+          - No empty file detection (0-byte files processed)
+          - No progress indication for large batches
+          - Hardcoded ".mp3" extension removal (fails for .wav, .ogg)
+          - No rejection feedback to user
+          - No file metadata extraction
+        </issues>
+        
+        <preservation-requirements>
+          ✅ KEEP: File object storage in `file` field
+          ✅ KEEP: Null `url` field for local files
+          ✅ KEEP: `Date.now() + index` ID pattern
+          ✅ KEEP: `setPlaylist(prev => [...prev, ...newTracks])` atomic update
+          ✅ KEEP: `source: 'local'` designation
+        </preservation-requirements>
+      </addLocalFiles>
+
+      <blob-url-pattern>
+        <current-behavior>
+          ```javascript
+          // index.html lines 1450-1461 (playTrack function)
+          const assignSource = () => {
+              if (track.source === 'local' &amp;&amp; track.file) {
+                  try {
+                      const blobUrl = URL.createObjectURL(track.file);
+                      currentBlobUrlRef.current = blobUrl;
+                      audio.src = blobUrl;
+                  } catch (err) {
+                      console.error('Error creating blob URL:', err);
+                      // ... error handling
+                  }
+              }
+              // ...
+          };
+          ```
+        </current-behavior>
+        
+        <critical-pattern>
+          ⚠️ DO NOT MODIFY THIS PATTERN!
+          
+          Blob URLs are created LAZILY when track plays, not on drop.
+          This prevents memory leaks and ensures offline stability.
+          
+          The File object reference in playlist.file remains valid for
+          the entire browser session, allowing URL.createObjectURL to
+          work at any time.
+        </critical-pattern>
+      </blob-url-pattern>
+
+      <drag-drop-ui>
+        <jsx-structure>
+          ```jsx
+          // index.html lines 2180-2202
+          &lt;div
+              className={dropZoneClasses.join(' ')}
+              onClick={() => fileInputRef.current.click()}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              role="button"
+              tabIndex={0}
+              ref={dropZoneRef}
+              onKeyDown={(event) => {
+                  if ((event.key === 'Enter' || event.key === ' ') &amp;&amp; fileInputRef.current) {
+                      event.preventDefault();
+                      fileInputRef.current.click();
+                  }
+              }}
+              aria-label="Add audio files"
+          >
+              &lt;strong>📁 Drop files here&lt;/strong>
+              &lt;span>or press Enter to browse&lt;/span>
+          &lt;/div>
+          ```
+        </jsx-structure>
+        
+        <accessibility-features>
+          ✅ role="button" for semantic clickable region
+          ✅ tabIndex={0} for keyboard focus
+          ✅ onKeyDown handles Enter/Space for keyboard activation
+          ✅ aria-label provides screen reader context
+          ✅ dropZoneClasses apply visual states (.drop-zone--hover, .drop-zone--attention)
+        </accessibility-features>
+      </drag-drop-ui>
+
+      <state-management>
+        <hooks>
+          ```javascript
+          // index.html lines 704, 742-743, 744, 770, 773
+          const [playlist, setPlaylist] = useState([]);
+          const [heroMessage, setHeroMessage] = useState('Select a ritual to begin');
+          const [a11yAnnouncement, setA11yAnnouncement] = useState('');
+          const [needsAudio, setNeedsAudio] = useState(false);
+          const dropZoneRef = useRef(null);
+          const fileInputRef = useRef(null);
+          ```
+        </hooks>
+        
+        <new-hooks-required>
+          ```javascript
+          const [toastMessage, setToastMessage] = useState('');
+          const [toastType, setToastType] = useState('info'); // 'info', 'warning', 'error', 'success'
+          const [isProcessingFiles, setIsProcessingFiles] = useState(false);
+          ```
+        </new-hooks-required>
+      </state-management>
+    </current-code-analysis>
+  </current-implementation>
+
+  <implementation-plan>
+    <task-group name="1. MIME Validation Logic" priority="CRITICAL">
+      <task id="1.1">
+        <description>Define SUPPORTED_MIME_TYPES constant array</description>
+        <location>index.html, after MODE_LIBRARY definition (~line 700)</location>
+        <code>
+          ```javascript
+          const SUPPORTED_MIME_TYPES = [
+              'audio/mpeg',      // .mp3
+              'audio/wav',       // .wav
+              'audio/wave',      // .wav (alternate)
+              'audio/ogg',       // .ogg
+              'audio/x-wav'      // .wav (legacy)
+          ];
+          ```
+        </code>
+      </task>
+
+      <task id="1.2">
+        <description>Create validateFile helper function</description>
+        <location>index.html, before addLocalFiles function (~line 1350)</location>
+        <code>
+          ```javascript
+          const validateFile = (file) => {
+              // Check for empty files
+              if (file.size === 0) {
+                  return { valid: false, reason: 'empty', file };
+              }
+              
+              // Check MIME type
+              if (!SUPPORTED_MIME_TYPES.includes(file.type)) {
+                  return { valid: false, reason: 'unsupported', file };
+              }
+              
+              return { valid: true, file };
+          };
+          ```
+        </code>
+      </task>
+
+      <task id="1.3">
+        <description>Add formatFileSize helper function</description>
+        <code>
+          ```javascript
+          const formatFileSize = (bytes) => {
+              if (bytes === 0) return '0 B';
+              if (bytes &lt; 1024) return `${bytes} B`;
+              if (bytes &lt; 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+              return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+          };
+          ```
+        </code>
+      </task>
+
+      <task id="1.4">
+        <description>Add formatFileType helper function</description>
+        <code>
+          ```javascript
+          const formatFileType = (mimeType) => {
+              const typeMap = {
+                  'audio/mpeg': 'MP3',
+                  'audio/wav': 'WAV',
+                  'audio/wave': 'WAV',
+                  'audio/ogg': 'OGG',
+                  'audio/x-wav': 'WAV'
+              };
+              return typeMap[mimeType] || 'Audio';
+          };
+          ```
+        </code>
+      </task>
+    </task-group>
+
+    <task-group name="2. State Management" priority="HIGH">
+      <task id="2.1">
+        <description>Add toast notification state hooks</description>
+        <location>index.html, App function state hooks section (~line 745)</location>
+        <code>
+          ```javascript
+          const [toastMessage, setToastMessage] = useState('');
+          const [toastType, setToastType] = useState('info');
+          const [isProcessingFiles, setIsProcessingFiles] = useState(false);
+          ```
+        </code>
+      </task>
+
+      <task id="2.2">
+        <description>Create showToast helper function</description>
+        <location>index.html, before addLocalFiles function</location>
+        <code>
+          ```javascript
+          const showToast = (message, type = 'info') => {
+              setToastMessage(message);
+              setToastType(type);
+              
+              // Auto-dismiss after 5 seconds
+              setTimeout(() => {
+                  setToastMessage('');
+              }, 5000);
+          };
+          ```
+        </code>
+      </task>
+    </task-group>
+
+    <task-group name="3. Refactor addLocalFiles" priority="CRITICAL">
+      <task id="3.1">
+        <description>Replace addLocalFiles with validation logic</description>
+        <location>index.html lines 1357-1373</location>
+        <code>
+          ```javascript
+          const addLocalFiles = (files) => {
+              const fileArray = Array.from(files);
+              
+              // Show progress indicator for large batches
+              if (fileArray.length > 5) {
+                  setIsProcessingFiles(true);
+                  setHeroMessage(`Adding ${fileArray.length} tracks...`);
+              }
+              
+              // Validate and filter files
+              const validFiles = [];
+              const rejectedFiles = [];
+              
+              fileArray.forEach(file => {
+                  const validation = validateFile(file);
+                  if (validation.valid) {
+                      validFiles.push(file);
+                  } else {
+                      rejectedFiles.push({ 
+                          name: file.name, 
+                          reason: validation.reason 
+                      });
+                  }
+              });
+              
+              // Create playlist tracks from valid files
+              const newTracks = validFiles.map((file, index) => {
+                  // Remove any audio extension, not just .mp3
+                  const baseName = file.name.replace(/\.(mp3|wav|ogg)$/i, '');
+                  return {
+                      id: Date.now() + index,
+                      name: baseName,
+                      source: 'local',
+                      file: file,
+                      url: null,
+                      metadata: {
+                          size: file.size,
+                          type: file.type,
+                          lastModified: file.lastModified
+                      }
+                  };
+              });
+              
+              // Update playlist
+              if (newTracks.length > 0) {
+                  setPlaylist(prev => [...prev, ...newTracks]);
+                  setNeedsAudio(false);
+                  
+                  const trackWord = newTracks.length === 1 ? 'track' : 'tracks';
+                  setHeroMessage(`Added ${newTracks.length} ${trackWord}. Pick a ritual and press Start.`);
+                  setA11yAnnouncement(`${newTracks.length} ${trackWord} added to playlist`);
+              }
+              
+              // Show rejection toast if needed
+              if (rejectedFiles.length > 0) {
+                  const emptyCount = rejectedFiles.filter(f => f.reason === 'empty').length;
+                  const unsupportedCount = rejectedFiles.filter(f => f.reason === 'unsupported').length;
+                  
+                  let message = '';
+                  if (emptyCount > 0) {
+                      message += `${emptyCount} empty file${emptyCount > 1 ? 's' : ''} rejected. `;
+                  }
+                  if (unsupportedCount > 0) {
+                      message += `${unsupportedCount} unsupported file${unsupportedCount > 1 ? 's' : ''} rejected. Use MP3, WAV, or OGG.`;
+                  }
+                  
+                  showToast(message, 'warning');
+                  setA11yAnnouncement(message);
+              }
+              
+              // Hide progress indicator
+              setIsProcessingFiles(false);
+          };
+          ```
+        </code>
+      </task>
+    </task-group>
+
+    <task-group name="4. Toast Notification Component" priority="HIGH">
+      <task id="4.1">
+        <description>Add toast CSS animations</description>
+        <location>index.html, in &lt;style> block (~line 400)</location>
+        <code>
+          ```css
+          @keyframes slideUp {
+              from {
+                  opacity: 0;
+                  transform: translateX(-50%) translateY(20px);
+              }
+              to {
+                  opacity: 1;
+                  transform: translateX(-50%) translateY(0);
+              }
+          }
+          
+          .toast {
+              pointer-events: none;
+          }
+          ```
+        </code>
+      </task>
+
+      <task id="4.2">
+        <description>Add toast JSX component</description>
+        <location>index.html, in return() JSX, before main-grid (~line 1950)</location>
+        <code>
+          ```jsx
+          {/* Toast Notification */}
+          {toastMessage &amp;&amp; (
+              &lt;div 
+                  className={`toast toast-${toastType}`}
+                  role="alert"
+                  aria-live="polite"
+                  style={{
+                      position: 'fixed',
+                      bottom: '24px',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      backgroundColor: toastType === 'warning' ? 'var(--amber-400)' : 
+                                     toastType === 'error' ? 'var(--red-400)' : 
+                                     toastType === 'success' ? 'var(--green-400)' : 
+                                     'var(--purple-400)',
+                      color: 'var(--gray-900)',
+                      padding: '12px 24px',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                      fontWeight: '500',
+                      fontSize: '14px',
+                      maxWidth: '500px',
+                      zIndex: 10000,
+                      animation: 'slideUp 0.3s ease-out'
+                  }}
+              >
+                  {toastMessage}
+              &lt;/div>
+          )}
+          ```
+        </code>
+      </task>
+    </task-group>
+
+    <task-group name="5. Progress Spinner Component" priority="MEDIUM">
+      <task id="5.1">
+        <description>Add spinner CSS animation</description>
+        <location>index.html, in &lt;style> block</location>
+        <code>
+          ```css
+          @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+          }
+          ```
+        </code>
+      </task>
+
+      <task id="5.2">
+        <description>Add processing spinner JSX</description>
+        <location>index.html, in return() JSX, near toast component</location>
+        <code>
+          ```jsx
+          {isProcessingFiles &amp;&amp; (
+              &lt;div 
+                  className="processing-spinner"
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                      position: 'fixed',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                      padding: '24px 32px',
+                      borderRadius: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '16px',
+                      zIndex: 9999
+                  }}
+              >
+                  &lt;div className="spinner" style={{
+                      width: '40px',
+                      height: '40px',
+                      border: '4px solid var(--gray-600)',
+                      borderTop: '4px solid var(--purple-400)',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                  }} />
+                  &lt;span style={{ color: 'var(--gray-100)', fontSize: '14px' }}>
+                      Processing files...
+                  &lt;/span>
+              &lt;/div>
+          )}
+          ```
+        </code>
+      </task>
+    </task-group>
+
+    <task-group name="6. Playlist Metadata Display" priority="MEDIUM">
+      <task id="6.1">
+        <description>Update playlist item rendering with metadata</description>
+        <location>index.html lines 2250-2275</location>
+        <code>
+          ```jsx
+          {playlist.map((track, index) => (
+              &lt;li key={track.id}>
+                  &lt;div
+                      className="playlist-button"
+                      role="button"
+                      tabIndex={0}
+                      aria-current={currentTrackIndex === index}
+                      onClick={() => playTrack(index)}
+                      onKeyDown={(event) => event.key === 'Enter' &amp;&amp; playTrack(index)}
+                  >
+                      &lt;span className="badge">{track.source}&lt;/span>
+                      &lt;div style={{ flex: 1 }}>
+                          &lt;div>{track.name}&lt;/div>
+                          
+                          {/* File metadata */}
+                          {track.metadata &amp;&amp; (
+                              &lt;div className="playlist-meta">
+                                  &lt;span>{formatFileType(track.metadata.type)}&lt;/span>
+                                  &lt;span> • &lt;/span>
+                                  &lt;span>{formatFileSize(track.metadata.size)}&lt;/span>
+                              &lt;/div>
+                          )}
+                          
+                          {/* URL indicator */}
+                          {track.source === 'url' &amp;&amp; !track.metadata &amp;&amp; (
+                              &lt;div className="playlist-meta">
+                                  &lt;span>🌐 Streaming&lt;/span>
+                              &lt;/div>
+                          )}
+                      &lt;/div>
+                      &lt;button
+                          type="button"
+                          className="remove-btn"
+                          aria-label={`Remove ${track.name} from playlist`}
+                          onClick={(event) => {
+                              event.stopPropagation();
+                              removeFromPlaylist(track.id);
+                          }}
+                      >
+                          ✕
+                      &lt;/button>
+                  &lt;/div>
+              &lt;/li>
+          ))}
+          ```
+        </code>
+      </task>
+    </task-group>
+
+    <task-group name="7. Testing Infrastructure" priority="HIGH">
+      <task id="7.1">
+        <description>Create tests/file-intake.test.js</description>
+        <location>NEW FILE: tests/file-intake.test.js</location>
+        <code>
+          ```javascript
+          // tests/file-intake.test.js
+          const assert = require('assert');
+
+          // Mock File object
+          class MockFile {
+              constructor(name, type, size) {
+                  this.name = name;
+                  this.type = type;
+                  this.size = size;
+                  this.lastModified = Date.now();
+              }
+          }
+
+          // Helper functions (copy from implementation)
+          const SUPPORTED_MIME_TYPES = [
+              'audio/mpeg',
+              'audio/wav',
+              'audio/wave',
+              'audio/ogg',
+              'audio/x-wav'
+          ];
+
+          const validateFile = (file) => {
+              if (file.size === 0) {
+                  return { valid: false, reason: 'empty' };
+              }
+              if (!SUPPORTED_MIME_TYPES.includes(file.type)) {
+                  return { valid: false, reason: 'unsupported' };
+              }
+              return { valid: true };
+          };
+
+          const formatFileSize = (bytes) => {
+              if (bytes === 0) return '0 B';
+              if (bytes &lt; 1024) return `${bytes} B`;
+              if (bytes &lt; 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+              return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+          };
+
+          const formatFileType = (mimeType) => {
+              const typeMap = {
+                  'audio/mpeg': 'MP3',
+                  'audio/wav': 'WAV',
+                  'audio/wave': 'WAV',
+                  'audio/ogg': 'OGG',
+                  'audio/x-wav': 'WAV'
+              };
+              return typeMap[mimeType] || 'Audio';
+          };
+
+          // Test Suite
+          console.log('Running file intake validation tests...\n');
+
+          // Test 1: Valid MP3 file
+          const mp3File = new MockFile('song.mp3', 'audio/mpeg', 5242880);
+          const result1 = validateFile(mp3File);
+          assert.strictEqual(result1.valid, true, 'Valid MP3 should pass');
+          console.log('✅ Test 1: Valid MP3 file');
+
+          // Test 2: Empty file rejection
+          const emptyFile = new MockFile('empty.mp3', 'audio/mpeg', 0);
+          const result2 = validateFile(emptyFile);
+          assert.strictEqual(result2.valid, false, 'Empty file should be rejected');
+          assert.strictEqual(result2.reason, 'empty', 'Rejection reason should be "empty"');
+          console.log('✅ Test 2: Empty file rejection');
+
+          // Test 3: Unsupported MIME type
+          const flacFile = new MockFile('audio.flac', 'audio/flac', 1048576);
+          const result3 = validateFile(flacFile);
+          assert.strictEqual(result3.valid, false, 'FLAC should be rejected');
+          assert.strictEqual(result3.reason, 'unsupported', 'Rejection reason should be "unsupported"');
+          console.log('✅ Test 3: Unsupported MIME type rejection');
+
+          // Test 4: File size formatting
+          assert.strictEqual(formatFileSize(0), '0 B');
+          assert.strictEqual(formatFileSize(512), '512 B');
+          assert.strictEqual(formatFileSize(1536), '1.5 KB');
+          assert.strictEqual(formatFileSize(5242880), '5.0 MB');
+          console.log('✅ Test 4: File size formatting');
+
+          // Test 5: File type formatting
+          assert.strictEqual(formatFileType('audio/mpeg'), 'MP3');
+          assert.strictEqual(formatFileType('audio/wav'), 'WAV');
+          assert.strictEqual(formatFileType('audio/ogg'), 'OGG');
+          assert.strictEqual(formatFileType('audio/unknown'), 'Audio');
+          console.log('✅ Test 5: File type formatting');
+
+          // Test 6: Batch validation
+          const files = [
+              new MockFile('song1.mp3', 'audio/mpeg', 3145728),
+              new MockFile('song2.wav', 'audio/wav', 2097152),
+              new MockFile('doc.txt', 'text/plain', 1024),
+              new MockFile('audio.flac', 'audio/flac', 4194304),
+              new MockFile('empty.mp3', 'audio/mpeg', 0)
+          ];
+
+          const validFiles = files.filter(f => validateFile(f).valid);
+          const rejectedFiles = files.filter(f => !validateFile(f).valid);
+
+          assert.strictEqual(validFiles.length, 2, 'Should accept 2 valid files');
+          assert.strictEqual(rejectedFiles.length, 3, 'Should reject 3 files');
+          console.log('✅ Test 6: Batch validation (2 valid, 3 rejected)');
+
+          console.log('\n🎉 All file intake validation tests passed!');
+          ```
+        </code>
+      </task>
+
+      <task id="7.2">
+        <description>Run automated tests</description>
+        <command>node tests/file-intake.test.js</command>
+        <expected-output>
+          ✅ Test 1: Valid MP3 file
+          ✅ Test 2: Empty file rejection
+          ✅ Test 3: Unsupported MIME type rejection
+          ✅ Test 4: File size formatting
+          ✅ Test 5: File type formatting
+          ✅ Test 6: Batch validation (2 valid, 3 rejected)
+          
+          🎉 All file intake validation tests passed!
+        </expected-output>
+      </task>
+    </task-group>
+
+    <task-group name="8. Manual Testing" priority="HIGH">
+      <task id="8.1">
+        <description>Execute manual test matrix</description>
+        <test-scenarios>
+          1. Multi-file drop (10 MP3s)
+          2. MIME validation (3 MP3 + 2 FLAC)
+          3. Offline playback (30-minute wait)
+          4. Metadata display (5MB MP3, 500KB WAV)
+          5. Empty file rejection (0-byte .mp3)
+          6. Duplicate names (2 files named "song.mp3")
+          7. Special characters ("Track #1 (remix).mp3")
+          8. Progress spinner (drop 6+ files)
+          9. Toast auto-dismiss (5-second timer)
+          10. Keyboard navigation (Tab → Enter on drop zone)
+        </test-scenarios>
+      </task>
+
+      <task id="8.2">
+        <description>Run Pa11y accessibility audit</description>
+        <command>pa11y http://localhost:8000/index.html --reporter json > tests/pa11y-story-2-1.json</command>
+        <expected-result>0 new accessibility issues (maintain Epic 1 standard)</expected-result>
+      </task>
+    </task-group>
+  </implementation-plan>
+
+  <code-patterns>
+    <pattern name="File Validation Pipeline">
+      <description>Standard validation flow for all file intake operations</description>
+      <example>
+        ```javascript
+        // 1. Convert FileList to Array
+        const fileArray = Array.from(files);
+        
+        // 2. Show progress if needed
+        if (fileArray.length > 5) {
+            setIsProcessingFiles(true);
+        }
+        
+        // 3. Validate each file
+        const validFiles = [];
+        const rejectedFiles = [];
+        
+        fileArray.forEach(file => {
+            const validation = validateFile(file);
+            if (validation.valid) {
+                validFiles.push(file);
+            } else {
+                rejectedFiles.push({ name: file.name, reason: validation.reason });
+            }
+        });
+        
+        // 4. Create playlist tracks
+        const newTracks = validFiles.map((file, index) => ({
+            id: Date.now() + index,
+            name: file.name.replace(/\.(mp3|wav|ogg)$/i, ''),
+            source: 'local',
+            file: file,
+            url: null,
+            metadata: {
+                size: file.size,
+                type: file.type,
+                lastModified: file.lastModified
+            }
+        }));
+        
+        // 5. Update state
+        if (newTracks.length > 0) {
+            setPlaylist(prev => [...prev, ...newTracks]);
+        }
+        
+        // 6. Show feedback
+        if (rejectedFiles.length > 0) {
+            showToast('X files rejected. Use MP3, WAV, or OGG.', 'warning');
+        }
+        
+        // 7. Hide progress
+        setIsProcessingFiles(false);
+        ```
+      </example>
+    </pattern>
+
+    <pattern name="Toast Notification">
+      <description>User feedback for validation errors and warnings</description>
+      <example>
+        ```javascript
+        const showToast = (message, type = 'info') => {
+            setToastMessage(message);
+            setToastType(type);
+            setTimeout(() => setToastMessage(''), 5000);
+        };
+        
+        // Usage
+        showToast('2 files rejected. Use MP3, WAV, or OGG.', 'warning');
+        showToast('Files added successfully!', 'success');
+        showToast('Network error. Try again.', 'error');
+        ```
+      </example>
+    </pattern>
+
+    <pattern name="Metadata Extraction">
+      <description>Extract and store file metadata for playlist display</description>
+      <example>
+        ```javascript
+        const newTrack = {
+            id: Date.now() + index,
+            name: file.name.replace(/\.(mp3|wav|ogg)$/i, ''),
+            source: 'local',
+            file: file,
+            url: null,
+            metadata: {
+                size: file.size,           // bytes
+                type: file.type,           // MIME type
+                lastModified: file.lastModified  // timestamp
+            }
+        };
+        
+        // Display in UI
+        &lt;span>{formatFileType(track.metadata.type)}&lt;/span>
+        &lt;span>{formatFileSize(track.metadata.size)}&lt;/span>
+        ```
+      </example>
+    </pattern>
+
+    <pattern name="Accessibility Announcements">
+      <description>Dual announcement system for visual and screen reader users</description>
+      <example>
+        ```javascript
+        // Visual feedback
+        setHeroMessage(`Added ${count} tracks. Pick a ritual and press Start.`);
+        
+        // Screen reader announcement
+        setA11yAnnouncement(`${count} tracks added to playlist`);
+        
+        // Toast for errors
+        showToast('2 files rejected. Use MP3, WAV, or OGG.', 'warning');
+        setA11yAnnouncement('2 unsupported files rejected');
+        ```
+      </example>
+    </pattern>
+  </code-patterns>
+
+  <risk-mitigation>
+    <risk id="R1" severity="HIGH">
+      <description>Breaking blob URL creation pattern causes playback failures</description>
+      <mitigation>
+        - DO NOT modify playTrack function blob URL logic
+        - DO NOT create blob URLs on file drop
+        - Preserve File object storage in playlist.file
+        - Run 30-minute offline playback test
+      </mitigation>
+    </risk>
+
+    <risk id="R2" severity="MEDIUM">
+      <description>Large file batches (>100 files) freeze UI during validation</description>
+      <mitigation>
+        - Test with 100+ file drop
+        - Consider setTimeout batching if needed
+        - Progress spinner provides visual feedback
+        - Browser will show "unresponsive script" warning if needed
+      </mitigation>
+    </risk>
+
+    <risk id="R3" severity="MEDIUM">
+      <description>Browser MIME type detection inconsistent across platforms</description>
+      <mitigation>
+        - Accept multiple MIME types (audio/wav, audio/wave, audio/x-wav)
+        - Fallback to file extension check if file.type empty
+        - Log validation failures for debugging
+        - Document known edge cases in story completion notes
+      </mitigation>
+    </risk>
+
+    <risk id="R4" severity="LOW">
+      <description>Toast notification obscures important UI elements</description>
+      <mitigation>
+        - Position toast at bottom-center (away from controls)
+        - Set z-index: 10000 to appear above all content
+        - Auto-dismiss after 5 seconds (don't block indefinitely)
+        - Use pointer-events: none to prevent click blocking
+      </mitigation>
+    </risk>
+
+    <risk id="R5" severity="LOW">
+      <description>Accessibility regression from new toast/spinner components</description>
+      <mitigation>
+        - Add aria-live="polite" to toast
+        - Add role="status" to progress spinner
+        - Run Pa11y audit before and after changes
+        - Test with screen reader (NVDA, JAWS, or VoiceOver)
+      </mitigation>
+    </risk>
+  </risk-mitigation>
+
+  <definition-of-done>
+    <code-completion>
+      <item>All 6 acceptance criteria implemented</item>
+      <item>addLocalFiles refactored with validation logic</item>
+      <item>Toast notification system added</item>
+      <item>Progress spinner component added</item>
+      <item>File metadata display in playlist UI</item>
+      <item>Helper functions created (validateFile, formatFileSize, formatFileType)</item>
+      <item>No breaking changes to blob URL creation pattern</item>
+    </code-completion>
+
+    <testing>
+      <item>Automated tests pass (tests/file-intake.test.js)</item>
+      <item>Manual test matrix completed (10 scenarios)</item>
+      <item>Pa11y audit: 0 new accessibility issues</item>
+      <item>Offline playback test: 30-minute wait verified</item>
+      <item>Large batch test: 20+ files processed smoothly</item>
+      <item>Keyboard navigation functional (Tab → Enter on drop zone)</item>
+    </testing>
+
+    <documentation>
+      <item>Implementation notes added to story markdown</item>
+      <item>Test results documented in tests/audio-regression-2025-11-11.md</item>
+      <item>Known edge cases documented</item>
+      <item>Code review checklist completed</item>
+    </documentation>
+
+    <quality>
+      <item>No console errors during file operations</item>
+      <item>Toast messages clear and actionable</item>
+      <item>Progress spinner appears/disappears correctly</item>
+      <item>File metadata accurate (size, format)</item>
+      <item>Mixed batch handling works (valid + invalid files)</item>
+      <item>Empty file detection works</item>
+      <item>Duplicate name handling works</item>
+      <item>Special character handling works</item>
+    </quality>
+  </definition-of-done>
+
+  <next-steps>
+    <immediate>
+      <step>Start implementation with Task Group 1 (MIME validation logic)</step>
+      <step>Add helper functions (validateFile, formatFileSize, formatFileType)</step>
+      <step>Create new state hooks (toastMessage, toastType, isProcessingFiles)</step>
+    </immediate>
+
+    <follow-up>
+      <step>After Story 2-1 complete, move to Story 2-2 (Streaming URL Validation)</step>
+      <step>Both 2-1 and 2-2 can be worked in parallel if resources available</step>
+      <step>Epic 2 concludes after all 3 stories (2-1, 2-2, 2-3) done</step>
+    </follow-up>
+  </next-steps>
+
+  <references>
+    <reference type="epic-context" path="docs/epic-2-audio-intake-graph-hardening.context.xml" description="Parent epic technical context"/>
+    <reference type="story-spec" path="docs/stories/2-1-drag-drop-file-picker-refactor.md" description="Story specification document"/>
+    <reference type="data-model" path="docs/data-models.md" lines="8-22" description="PlaylistTrack schema"/>
+    <reference type="implementation" path="index.html" lines="1357-1373" description="Current addLocalFiles function"/>
+    <reference type="implementation" path="index.html" lines="1450-1461" description="Blob URL creation pattern (DO NOT BREAK)"/>
+    <reference type="implementation" path="index.html" lines="2180-2212" description="Drop zone UI and file input"/>
+    <reference type="reference" path="8d-audio-live-v2.html" description="v2 reference (no file intake changes)"/>
+    <reference type="test" path="tests/gain-staging.test.js" description="Test pattern example"/>
+  </references>
+</story-context>
