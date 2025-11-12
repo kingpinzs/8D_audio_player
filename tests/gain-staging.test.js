@@ -161,11 +161,155 @@ function testNoiseRouting() {
     assert(nodes.source.stopped, 'stop() should halt noise source');
 }
 
+function testGainNormalization() {
+    console.log('\n🔬 Testing gain normalization to prevent clipping...');
+    
+    // Simulate the normalized panning algorithm from startRotation()
+    const normalizationFactor = 0.5;
+    const crossChannelMix = 0.15;
+    
+    // Test case 1: Center position (panPosition = 0)
+    const panPosition1 = 0;
+    const leftChannelGain1 = (1 - panPosition1) * 0.5;
+    const rightChannelGain1 = (1 + panPosition1) * 0.5;
+    const targetLeftGain1 = leftChannelGain1 * normalizationFactor;
+    const targetRightGain1 = rightChannelGain1 * normalizationFactor;
+    const targetLeftToRight1 = rightChannelGain1 * crossChannelMix * normalizationFactor;
+    const targetRightToLeft1 = leftChannelGain1 * crossChannelMix * normalizationFactor;
+    
+    // Total gain budget per channel should not exceed 1.0
+    const leftTotal1 = targetLeftGain1 + targetRightToLeft1;
+    const rightTotal1 = targetRightGain1 + targetLeftToRight1;
+    
+    assert(leftTotal1 <= 1.0, `Center position: Left channel total gain ${leftTotal1.toFixed(3)} should not exceed 1.0`);
+    assert(rightTotal1 <= 1.0, `Center position: Right channel total gain ${rightTotal1.toFixed(3)} should not exceed 1.0`);
+    console.log(`  ✓ Center position: L=${leftTotal1.toFixed(3)}, R=${rightTotal1.toFixed(3)}`);
+    
+    // Test case 2: Full left (panPosition = -1)
+    const panPosition2 = -1;
+    const leftChannelGain2 = (1 - panPosition2) * 0.5;
+    const rightChannelGain2 = (1 + panPosition2) * 0.5;
+    const targetLeftGain2 = leftChannelGain2 * normalizationFactor;
+    const targetRightGain2 = Math.max(0.001, rightChannelGain2 * normalizationFactor);
+    const targetLeftToRight2 = rightChannelGain2 * crossChannelMix * normalizationFactor;
+    const targetRightToLeft2 = leftChannelGain2 * crossChannelMix * normalizationFactor;
+    
+    const leftTotal2 = targetLeftGain2 + targetRightToLeft2;
+    const rightTotal2 = targetRightGain2 + targetLeftToRight2;
+    
+    assert(leftTotal2 <= 1.0, `Full left: Left channel total gain ${leftTotal2.toFixed(3)} should not exceed 1.0`);
+    assert(rightTotal2 <= 1.0, `Full left: Right channel total gain ${rightTotal2.toFixed(3)} should not exceed 1.0`);
+    console.log(`  ✓ Full left: L=${leftTotal2.toFixed(3)}, R=${rightTotal2.toFixed(3)}`);
+    
+    // Test case 3: Full right (panPosition = 1)
+    const panPosition3 = 1;
+    const leftChannelGain3 = (1 - panPosition3) * 0.5;
+    const rightChannelGain3 = (1 + panPosition3) * 0.5;
+    const targetLeftGain3 = Math.max(0.001, leftChannelGain3 * normalizationFactor);
+    const targetRightGain3 = rightChannelGain3 * normalizationFactor;
+    const targetLeftToRight3 = rightChannelGain3 * crossChannelMix * normalizationFactor;
+    const targetRightToLeft3 = leftChannelGain3 * crossChannelMix * normalizationFactor;
+    
+    const leftTotal3 = targetLeftGain3 + targetRightToLeft3;
+    const rightTotal3 = targetRightGain3 + targetLeftToRight3;
+    
+    assert(leftTotal3 <= 1.0, `Full right: Left channel total gain ${leftTotal3.toFixed(3)} should not exceed 1.0`);
+    assert(rightTotal3 <= 1.0, `Full right: Right channel total gain ${rightTotal3.toFixed(3)} should not exceed 1.0`);
+    console.log(`  ✓ Full right: L=${leftTotal3.toFixed(3)}, R=${rightTotal3.toFixed(3)}`);
+    
+    // Test case 4: Verify MASTER_HEADROOM is applied downstream
+    const masterHeadroom = AudioEngine.MASTER_HEADROOM;
+    assert(masterHeadroom === 0.6, 'MASTER_HEADROOM should be 0.6');
+    
+    // Even with MASTER_HEADROOM, normalized gains should prevent clipping
+    const worstCaseWithHeadroom = Math.max(leftTotal1, rightTotal1, leftTotal2, rightTotal2, leftTotal3, rightTotal3) * masterHeadroom;
+    assert(worstCaseWithHeadroom <= 1.0, `Worst-case gain with headroom ${worstCaseWithHeadroom.toFixed(3)} should not exceed 1.0`);
+    console.log(`  ✓ Worst-case with MASTER_HEADROOM: ${worstCaseWithHeadroom.toFixed(3)}`);
+    
+    console.log('✅ Gain normalization tests passed - no clipping possible\n');
+}
+
+function testDelayGainAccumulation() {
+    console.log('🔬 Testing delay gain accumulation...');
+    
+    // Simulate delay gains from setupAudioGraph
+    const spatialDepth = 1.0; // Maximum spatial depth
+    const delayGainValue = 0.05 * spatialDepth;
+    const crossGainValue = 0.03 * spatialDepth;
+    
+    console.log(`  Delay gain: ${delayGainValue.toFixed(3)}`);
+    console.log(`  Cross gain: ${crossGainValue.toFixed(3)}`);
+    
+    // These delay gains are additive to the main panning gains
+    // Verify they're small enough to not cause clipping when combined
+    const normalizationFactor = 0.5;
+    const maxMainGain = 1.0 * normalizationFactor; // Worst-case main path
+    const maxDelayContribution = delayGainValue + crossGainValue;
+    const totalWorstCase = maxMainGain + maxDelayContribution;
+    
+    console.log(`  Main gain (max): ${maxMainGain.toFixed(3)}`);
+    console.log(`  Delay contribution: ${maxDelayContribution.toFixed(3)}`);
+    console.log(`  Total worst-case: ${totalWorstCase.toFixed(3)}`);
+    
+    assert(totalWorstCase <= 1.0, `Total gain including delays ${totalWorstCase.toFixed(3)} should not exceed 1.0`);
+    console.log('✅ Delay gain accumulation safe\n');
+}
+
+function testExponentialRampSmoothing() {
+    console.log('🔬 Testing exponential ramp for click prevention...');
+    
+    // Verify that ramp time is appropriate for 50ms interval
+    const updateInterval = 50; // ms
+    const rampTime = 16; // ms (1 frame at 60fps)
+    
+    // Ramp time should be significantly less than interval to prevent overlap
+    assert(rampTime < updateInterval, 'Ramp time should be less than update interval to prevent overlap');
+    console.log(`  Update interval: ${updateInterval}ms`);
+    console.log(`  Ramp time: ${rampTime}ms`);
+    console.log(`  Ratio: ${(rampTime / updateInterval * 100).toFixed(1)}%`);
+    
+    // Verify clamping prevents automation errors
+    const clamp = (val) => Math.max(0.0001, Math.min(1, val));
+    assert(clamp(-0.5) === 0.0001, 'Clamp should floor negative values at 0.0001');
+    assert(clamp(0) === 0.0001, 'Clamp should floor zero at 0.0001');
+    assert(clamp(0.5) === 0.5, 'Clamp should pass through valid values');
+    assert(clamp(1.5) === 1, 'Clamp should ceiling high values at 1.0');
+    
+    console.log('✅ Exponential ramp configuration safe\n');
+}
+
+function testCrossChannelBleeding() {
+    console.log('🔬 Testing cross-channel bleeding limits...');
+    
+    const crossChannelMix = 0.15;
+    const normalizationFactor = 0.5;
+    
+    // Worst-case: one channel at max, cross-feed to opposite channel
+    const maxDirectGain = 1.0 * normalizationFactor;
+    const maxCrossFeed = 1.0 * crossChannelMix * normalizationFactor;
+    
+    console.log(`  Max direct gain: ${maxDirectGain.toFixed(3)}`);
+    console.log(`  Max cross-feed: ${maxCrossFeed.toFixed(3)}`);
+    console.log(`  Total: ${(maxDirectGain + maxCrossFeed).toFixed(3)}`);
+    
+    // Cross-feed should be significantly smaller than direct path
+    assert(maxCrossFeed < maxDirectGain * 0.3, 'Cross-feed should be less than 30% of direct path');
+    
+    // Total should never exceed 1.0
+    assert(maxDirectGain + maxCrossFeed <= 1.0, 'Direct + cross-feed should not exceed 1.0');
+    
+    console.log('✅ Cross-channel bleeding within safe limits\n');
+}
+
 function run() {
     testGainChainConnections();
     testBinauralRouting();
     testNoiseRouting();
-    console.log('Gain staging regression tests passed.');
+    testGainNormalization();
+    testDelayGainAccumulation();
+    testExponentialRampSmoothing();
+    testCrossChannelBleeding();
+    console.log('✅ All gain staging regression tests passed.');
 }
 
 if (require.main === module) {

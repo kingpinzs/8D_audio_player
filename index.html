@@ -902,6 +902,41 @@
         .toast {
             pointer-events: none;
         }
+
+        /* Story 3-3: Dialog Overlay Styles */
+        .dialog-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .dialog-content {
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body>
@@ -966,6 +1001,9 @@
 
         const HERO_BREATH_DURATION = 20;
 
+        // Story 3-3: Custom Preset Storage Keys
+        const CUSTOM_PRESETS_KEY = 'mpe_8d_custom_presets';
+
         // Supported MIME types for file intake validation
         const SUPPORTED_MIME_TYPES = [
             'audio/mpeg',      // .mp3
@@ -1002,6 +1040,187 @@
             return 'Peak alertness, high energy';
         };
 
+        // ============================================================
+        // Story 3-3: Custom Preset CRUD Storage Helpers
+        // ============================================================
+        
+        const loadCustomPresets = () => {
+            try {
+                const saved = localStorage.getItem(CUSTOM_PRESETS_KEY);
+                return saved ? JSON.parse(saved) : {};
+            } catch (err) {
+                console.error('[PresetStorage] Failed to load custom presets:', err);
+                return {};
+            }
+        };
+
+        const saveCustomPreset = (presetData, showToastFn) => {
+            try {
+                const customPresets = loadCustomPresets();
+                const id = `custom-preset-${Date.now()}`;
+                
+                customPresets[id] = {
+                    id,
+                    name: presetData.name,
+                    description: presetData.description || '',
+                    createdAt: Date.now(),
+                    lastUsedAt: Date.now(),
+                    preset: {
+                        speed: presetData.speed,
+                        intensity: presetData.intensity,
+                        spatialDepth: presetData.spatialDepth,
+                        movement: presetData.movement,
+                        binaural: { 
+                            enabled: presetData.binauralEnabled, 
+                            freq: presetData.binauralFreq 
+                        },
+                        noise: { 
+                            type: presetData.noiseType, 
+                            volume: presetData.noiseVolume 
+                        }
+                    },
+                    color: presetData.color || '#6366f1',
+                    tags: presetData.tags || []
+                };
+                
+                localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(customPresets));
+                
+                // Add to preset order
+                const order = getPresetOrder();
+                order.push(id);
+                savePresetOrder(order);
+                
+                console.log(`[PresetStorage] Saved custom preset: ${id} - ${presetData.name}`);
+                return id;
+            } catch (err) {
+                if (err.name === 'QuotaExceededError') {
+                    if (showToastFn) showToastFn('Storage full. Please delete old presets.', 'error');
+                } else {
+                    console.error('[PresetStorage] Failed to save preset:', err);
+                    if (showToastFn) showToastFn('Error saving preset.', 'error');
+                }
+                return null;
+            }
+        };
+
+        const updateCustomPreset = (id, updates, showToastFn) => {
+            try {
+                const customPresets = loadCustomPresets();
+                if (customPresets[id]) {
+                    customPresets[id] = { 
+                        ...customPresets[id], 
+                        ...updates,
+                        lastUsedAt: Date.now()
+                    };
+                    localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(customPresets));
+                    console.log(`[PresetStorage] Updated custom preset: ${id}`);
+                    return true;
+                }
+                console.warn(`[PresetStorage] Preset not found: ${id}`);
+                return false;
+            } catch (err) {
+                console.error('[PresetStorage] Failed to update preset:', err);
+                if (showToastFn) showToastFn('Error updating preset.', 'error');
+                return false;
+            }
+        };
+
+        const deleteCustomPreset = (id, showToastFn) => {
+            try {
+                const customPresets = loadCustomPresets();
+                const presetName = customPresets[id]?.name || id;
+                
+                delete customPresets[id];
+                localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(customPresets));
+                
+                // Remove from order
+                const order = getPresetOrder().filter(pid => pid !== id);
+                savePresetOrder(order);
+                
+                console.log(`[PresetStorage] Deleted custom preset: ${id}`);
+                
+                // Return the deleted preset ID and name for caller to handle track updates
+                return { id, name: presetName };
+            } catch (err) {
+                console.error('[PresetStorage] Failed to delete preset:', err);
+                if (showToastFn) showToastFn('Error deleting preset.', 'error');
+                return null;
+            }
+        };
+
+        const getAllPresets = () => {
+            const defaults = MODE_LIBRARY.map(mode => ({
+                id: mode.id,
+                name: mode.label,
+                description: mode.description,
+                preset: mode.preset,
+                color: mode.accent,
+                isDefault: true,
+                createdAt: 0,
+                lastUsedAt: 0
+            }));
+            
+            const custom = Object.values(loadCustomPresets()).map(p => ({
+                ...p,
+                isDefault: false
+            }));
+            
+            // Apply user-defined order
+            const order = getPresetOrder();
+            const allPresets = [...defaults, ...custom];
+            const ordered = order
+                .map(id => allPresets.find(p => p.id === id))
+                .filter(Boolean);
+            
+            // Add any new presets not in order (defensive)
+            const orderedIds = new Set(ordered.map(p => p.id));
+            const missing = allPresets.filter(p => !orderedIds.has(p.id));
+            
+            return [...ordered, ...missing];
+        };
+
+        const getPresetOrder = () => {
+            try {
+                const saved = localStorage.getItem('mpe_8d_preset_order');
+                if (saved) return JSON.parse(saved);
+            } catch (err) {
+                console.error('[PresetStorage] Failed to load preset order:', err);
+            }
+            
+            // Default order: defaults first, then custom by creation date
+            const defaults = MODE_LIBRARY.map(m => m.id);
+            const custom = Object.keys(loadCustomPresets()).sort();
+            return [...defaults, ...custom];
+        };
+
+        const savePresetOrder = (order) => {
+            try {
+                localStorage.setItem('mpe_8d_preset_order', JSON.stringify(order));
+            } catch (err) {
+                console.error('[PresetStorage] Failed to save preset order:', err);
+            }
+        };
+
+        // Helper to format "last used" timestamp
+        const formatLastUsed = (timestamp) => {
+            if (!timestamp || timestamp === 0) return 'Never used';
+            
+            const now = Date.now();
+            const diff = now - timestamp;
+            const seconds = Math.floor(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+            
+            if (seconds < 60) return 'Just now';
+            if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+            if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+            if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+            
+            const date = new Date(timestamp);
+            return date.toLocaleDateString();
+        };
+
         // Advanced Controls Component (Story 3-2)
         const AdvancedControls = ({ 
             // Parameter states (from existing Epic 1 hooks)
@@ -1016,7 +1235,9 @@
             // UI state
             isExpanded, setIsExpanded,
             sensorLocked, setSensorLocked,
-            setA11yAnnouncement
+            setA11yAnnouncement,
+            // Story 3-3: Save preset handler
+            onSavePreset
         }) => {
             return (
                 <details 
@@ -1181,6 +1402,19 @@
                         </label>
                     </div>
                     
+                    {/* Story 3-3: Save Preset Button */}
+                    {!sensorLocked && onSavePreset && (
+                        <button 
+                            type="button"
+                            onClick={onSavePreset}
+                            className="primary-btn"
+                            style={{ marginTop: '16px', width: '100%' }}
+                            aria-label="Save current parameters as custom preset"
+                        >
+                            💾 Save as Custom Preset
+                        </button>
+                    )}
+                    
                     {/* Sensor Lock Notice */}
                     {sensorLocked && (
                         <div className="sensor-lock-notice" role="status" aria-live="polite">
@@ -1198,6 +1432,297 @@
                         </div>
                     )}
                 </details>
+            );
+        };
+
+        // ============================================================
+        // Story 3-3: Save Preset Dialog Component
+        // ============================================================
+        
+        const SavePresetDialog = ({ 
+            currentParameters, 
+            onSave, 
+            onCancel,
+            showToast,
+            setA11yAnnouncement,
+            existingPreset = null // for edit mode
+        }) => {
+            const [name, setName] = useState(existingPreset?.name || '');
+            const [description, setDescription] = useState(existingPreset?.description || '');
+            const [color, setColor] = useState(existingPreset?.color || '#6366f1');
+            const [errors, setErrors] = useState({});
+            
+            const validate = () => {
+                const newErrors = {};
+                
+                if (!name.trim()) {
+                    newErrors.name = 'Preset name is required';
+                } else if (name.length > 50) {
+                    newErrors.name = 'Name too long (max 50 characters)';
+                }
+                
+                if (description.length > 200) {
+                    newErrors.description = 'Description too long (max 200 characters)';
+                }
+                
+                // Validate color hex format
+                const hexPattern = /^#[0-9A-Fa-f]{6}$/;
+                if (!hexPattern.test(color)) {
+                    newErrors.color = 'Invalid color format (use #RRGGBB)';
+                }
+                
+                setErrors(newErrors);
+                return Object.keys(newErrors).length === 0;
+            };
+            
+            const handleSave = () => {
+                if (!validate()) return;
+                
+                const presetData = {
+                    name: name.trim(),
+                    description: description.trim(),
+                    color,
+                    ...currentParameters
+                };
+                
+                let presetId;
+                if (existingPreset) {
+                    // Edit mode
+                    const success = updateCustomPreset(existingPreset.id, presetData, showToast);
+                    if (success) {
+                        presetId = existingPreset.id;
+                        showToast(`Preset "${name}" updated`, 'success');
+                        setA11yAnnouncement(`Preset ${name} updated`);
+                    }
+                } else {
+                    // Create mode
+                    presetId = saveCustomPreset(presetData, showToast);
+                    if (presetId) {
+                        showToast(`Preset "${name}" saved`, 'success');
+                        setA11yAnnouncement(`Preset ${name} saved`);
+                    }
+                }
+                
+                if (presetId) {
+                    onSave(presetId);
+                }
+            };
+            
+            // Handle Escape key to close dialog
+            useEffect(() => {
+                const handleEscape = (e) => {
+                    if (e.key === 'Escape') onCancel();
+                };
+                document.addEventListener('keydown', handleEscape);
+                return () => document.removeEventListener('keydown', handleEscape);
+            }, [onCancel]);
+            
+            return (
+                <div 
+                    className="dialog-overlay" 
+                    onClick={onCancel}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="dialog-title"
+                >
+                    <div 
+                        className="dialog-content" 
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            backgroundColor: 'var(--bg-primary)',
+                            padding: '24px',
+                            borderRadius: '12px',
+                            maxWidth: '500px',
+                            width: '90%',
+                            maxHeight: '80vh',
+                            overflow: 'auto'
+                        }}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            {/* React JSX automatically escapes user input, preventing XSS attacks */}
+                            <h2 id="dialog-title" style={{ margin: 0 }}>
+                                {existingPreset ? 'Edit Preset' : 'Save Custom Preset'}
+                            </h2>
+                            <button 
+                                onClick={onCancel} 
+                                aria-label="Close dialog" 
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '24px',
+                                    cursor: 'pointer',
+                                    color: 'var(--text-secondary)'
+                                }}
+                            >
+                                ×
+                            </button>
+                        </div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {/* Preset Name */}
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <span style={{ fontWeight: '500', color: errors.name ? '#f87171' : 'inherit' }}>
+                                    Preset Name *
+                                </span>
+                                <input 
+                                    type="text" 
+                                    value={name} 
+                                    onChange={(e) => setName(e.target.value)} 
+                                    placeholder="e.g., Deep Flow"
+                                    maxLength={50}
+                                    required
+                                    autoFocus
+                                    aria-invalid={!!errors.name}
+                                    aria-describedby={errors.name ? 'name-error' : undefined}
+                                    style={{
+                                        padding: '8px 12px',
+                                        borderRadius: '6px',
+                                        border: `1px solid ${errors.name ? '#f87171' : 'var(--border)'}`,
+                                        backgroundColor: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                />
+                                {errors.name && (
+                                    <span id="name-error" style={{ color: '#f87171', fontSize: '0.875rem' }}>
+                                        {errors.name}
+                                    </span>
+                                )}
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'right' }}>
+                                    {name.length}/50
+                                </span>
+                            </label>
+                            
+                            {/* Description */}
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <span style={{ fontWeight: '500', color: errors.description ? '#f87171' : 'inherit' }}>
+                                    Description (optional)
+                                </span>
+                                <textarea 
+                                    value={description} 
+                                    onChange={(e) => setDescription(e.target.value)} 
+                                    placeholder="My perfect focus state"
+                                    maxLength={200}
+                                    rows={3}
+                                    aria-invalid={!!errors.description}
+                                    aria-describedby={errors.description ? 'desc-error' : undefined}
+                                    style={{
+                                        padding: '8px 12px',
+                                        borderRadius: '6px',
+                                        border: `1px solid ${errors.description ? '#f87171' : 'var(--border)'}`,
+                                        backgroundColor: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        fontFamily: 'inherit',
+                                        resize: 'vertical'
+                                    }}
+                                />
+                                {errors.description && (
+                                    <span id="desc-error" style={{ color: '#f87171', fontSize: '0.875rem' }}>
+                                        {errors.description}
+                                    </span>
+                                )}
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'right' }}>
+                                    {description.length}/200
+                                </span>
+                            </label>
+                            
+                            {/* Color Picker */}
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <span style={{ fontWeight: '500', color: errors.color ? '#f87171' : 'inherit' }}>
+                                    Accent Color
+                                </span>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <input 
+                                        type="color" 
+                                        value={color} 
+                                        onChange={(e) => setColor(e.target.value)}
+                                        style={{ width: '48px', height: '48px', cursor: 'pointer' }}
+                                    />
+                                    <input 
+                                        type="text" 
+                                        value={color} 
+                                        onChange={(e) => setColor(e.target.value)} 
+                                        placeholder="#6366f1"
+                                        pattern="^#[0-9A-Fa-f]{6}$"
+                                        aria-invalid={!!errors.color}
+                                        aria-describedby={errors.color ? 'color-error' : undefined}
+                                        style={{
+                                            padding: '8px 12px',
+                                            borderRadius: '6px',
+                                            border: `1px solid ${errors.color ? '#f87171' : 'var(--border)'}`,
+                                            backgroundColor: 'var(--bg-secondary)',
+                                            color: 'var(--text-primary)',
+                                            flex: 1
+                                        }}
+                                    />
+                                </div>
+                                {errors.color && (
+                                    <span id="color-error" style={{ color: '#f87171', fontSize: '0.875rem' }}>
+                                        {errors.color}
+                                    </span>
+                                )}
+                            </label>
+                            
+                            {/* Parameter Preview */}
+                            <div style={{ 
+                                padding: '12px', 
+                                borderRadius: '8px', 
+                                backgroundColor: 'var(--bg-secondary)',
+                                border: '1px solid var(--border)'
+                            }}>
+                                <h3 style={{ margin: '0 0 12px 0', fontSize: '0.875rem', fontWeight: '600' }}>
+                                    Current Parameters
+                                </h3>
+                                <div style={{ 
+                                    display: 'grid', 
+                                    gridTemplateColumns: 'auto 1fr', 
+                                    gap: '4px 12px',
+                                    fontSize: '0.875rem'
+                                }}>
+                                    <dt style={{ fontWeight: '500', color: 'var(--text-secondary)' }}>Speed:</dt>
+                                    <dd style={{ margin: 0 }}>{currentParameters.speed.toFixed(2)}</dd>
+                                    
+                                    <dt style={{ fontWeight: '500', color: 'var(--text-secondary)' }}>Intensity:</dt>
+                                    <dd style={{ margin: 0 }}>{currentParameters.intensity.toFixed(2)}</dd>
+                                    
+                                    <dt style={{ fontWeight: '500', color: 'var(--text-secondary)' }}>Spatial Depth:</dt>
+                                    <dd style={{ margin: 0 }}>{currentParameters.spatialDepth.toFixed(2)}</dd>
+                                    
+                                    <dt style={{ fontWeight: '500', color: 'var(--text-secondary)' }}>Movement:</dt>
+                                    <dd style={{ margin: 0 }}>{currentParameters.movement}</dd>
+                                    
+                                    <dt style={{ fontWeight: '500', color: 'var(--text-secondary)' }}>Binaural:</dt>
+                                    <dd style={{ margin: 0 }}>
+                                        {currentParameters.binauralEnabled 
+                                            ? `${currentParameters.binauralFreq} Hz (${getBinauralBand(currentParameters.binauralFreq)})` 
+                                            : 'Off'}
+                                    </dd>
+                                    
+                                    <dt style={{ fontWeight: '500', color: 'var(--text-secondary)' }}>Noise:</dt>
+                                    <dd style={{ margin: 0 }}>
+                                        {currentParameters.noiseType} @ {(currentParameters.noiseVolume * 100).toFixed(0)}%
+                                    </dd>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* Dialog Actions */}
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '20px', justifyContent: 'flex-end' }}>
+                            <button 
+                                onClick={onCancel} 
+                                className="ghost-btn"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={handleSave} 
+                                disabled={!name.trim()} 
+                                className="primary-btn"
+                            >
+                                {existingPreset ? 'Update' : 'Save'} Preset
+                            </button>
+                        </div>
+                    </div>
+                </div>
             );
         };
 
@@ -1254,6 +1779,11 @@ function App() {
             // Story 3-2: Advanced Controls UI state
             const [isAdvancedControlsExpanded, setIsAdvancedControlsExpanded] = useState(false);
             const [sensorLocked, setSensorLocked] = useState(false); // Epic 5 adaptive mode
+            
+            // Story 3-3: Custom Preset Management
+            const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
+            const [editingPreset, setEditingPreset] = useState(null);
+            const [allPresets, setAllPresets] = useState([]);
             
             // File intake notifications
             const [toastMessage, setToastMessage] = useState('');
@@ -1484,6 +2014,13 @@ function App() {
                     }
                     clearRitualTimers();
                 };
+            }, []);
+
+            // Story 3-3: Load all presets on mount
+            useEffect(() => {
+                const presets = getAllPresets();
+                setAllPresets(presets);
+                console.log('[PresetManagement] Loaded', presets.length, 'presets');
             }, []);
 
             // Cleanup URL validation on unmount
@@ -1717,6 +2254,73 @@ function App() {
                 };
             }, []);
 
+            // ============================================================
+            // Story 3-3: Custom Preset Management Handlers
+            // ============================================================
+            
+            const openSavePresetDialog = () => {
+                setEditingPreset(null);
+                setShowSavePresetDialog(true);
+            };
+
+            const openEditPresetDialog = (preset) => {
+                setEditingPreset(preset);
+                setShowSavePresetDialog(true);
+            };
+
+            const closeSavePresetDialog = () => {
+                setShowSavePresetDialog(false);
+                setEditingPreset(null);
+            };
+
+            const handleSavePreset = (presetId) => {
+                // Apply the newly saved/edited preset
+                const presets = getAllPresets();
+                setAllPresets(presets);
+                
+                const preset = presets.find(p => p.id === presetId);
+                if (preset) {
+                    applyPreset(preset.preset, preset.id);
+                }
+                
+                closeSavePresetDialog();
+            };
+
+            const handleDeletePreset = (presetId) => {
+                if (!confirm('Delete this preset? This cannot be undone.')) {
+                    return;
+                }
+                
+                const result = deleteCustomPreset(presetId, showToast);
+                if (result) {
+                    showToast(`Preset "${result.name}" deleted`, 'success');
+                    setA11yAnnouncement(`Preset ${result.name} deleted`);
+                    
+                    // Update all presets list
+                    const presets = getAllPresets();
+                    setAllPresets(presets);
+                    
+                    // Update tracks using this preset to fallback to focus
+                    setPlaylist(prev => prev.map(track => ({
+                        ...track,
+                        lastPresetId: track.lastPresetId === presetId ? 'focus' : track.lastPresetId
+                    })));
+                    
+                    // If deleted preset was active, switch to focus
+                    if (activePresetId === presetId) {
+                        const focusMode = MODE_LIBRARY[0];
+                        applyPreset(focusMode.preset, focusMode.id);
+                        showToast('Switched to Focus preset', 'info');
+                    }
+                }
+            };
+
+            const handleQuickApplyPreset = (preset) => {
+                applyPreset(preset.preset, preset.id);
+                showToast(`Applied ${preset.name} preset`, 'success');
+                setA11yAnnouncement(`${preset.name} preset applied`);
+            };
+
             const setActiveMode = (index) => {
                 const normalized = focusModeChip(index);
                 const mode = MODE_LIBRARY[normalized];
@@ -1903,30 +2507,41 @@ function App() {
                     // Apply intensity to pan position
                     panPosition *= intensity;
                     
-                    // SMOOTHED GAIN CHANGES - prevents crackling from instant changes
-                    const safetyFactor = 0.35; // Further reduced from 0.5 to 0.35
-                    const targetLeftGain = Math.max(0.001, Math.min(1, (1 - panPosition) * 0.5)) * safetyFactor;
-                    const targetRightGain = Math.max(0.001, Math.min(1, (1 + panPosition) * 0.5)) * safetyFactor;
+                    // CRITICAL FIX: Normalized gain distribution to prevent clipping
+                    // Total energy must equal 1.0 to prevent gain accumulation
+                    const normalizationFactor = 0.5; // Base gain per channel before panning
+                    const crossChannelMix = 0.15; // Reduced cross-channel bleeding
                     
-                    // Use linearRampToValueAtTime for smooth transitions (prevents clicks)
+                    // Main channel gains (normalized to prevent sum > 1.0)
+                    const leftChannelGain = (1 - panPosition) * 0.5; // 0.0 to 1.0
+                    const rightChannelGain = (1 + panPosition) * 0.5; // 0.0 to 1.0
+                    
+                    // Apply normalization to prevent clipping
+                    const targetLeftGain = Math.max(0.001, leftChannelGain * normalizationFactor);
+                    const targetRightGain = Math.max(0.001, rightChannelGain * normalizationFactor);
+                    
+                    // Cross-channel gains (proportional to opposite channel, heavily attenuated)
+                    const targetLeftToRight = Math.max(0.001, rightChannelGain * crossChannelMix * normalizationFactor);
+                    const targetRightToLeft = Math.max(0.001, leftChannelGain * crossChannelMix * normalizationFactor);
+                    
+                    // Use exponentialRampToValueAtTime for smoother transitions (prevents clicks better than linear)
                     const now = ctx.currentTime;
-                    const rampTime = now + 0.05;
+                    const rampTime = now + 0.016; // ~1 frame at 60fps for responsive panning
                     
-                    nodes.leftToLeftGain.gain.setValueAtTime(nodes.leftToLeftGain.gain.value, now);
-                    nodes.leftToLeftGain.gain.linearRampToValueAtTime(targetLeftGain, rampTime);
+                    // Clamp to prevent automation errors
+                    const clamp = (val) => Math.max(0.0001, Math.min(1, val));
                     
-                    nodes.rightToRightGain.gain.setValueAtTime(nodes.rightToRightGain.gain.value, now);
-                    nodes.rightToRightGain.gain.linearRampToValueAtTime(targetRightGain, rampTime);
+                    nodes.leftToLeftGain.gain.setValueAtTime(clamp(nodes.leftToLeftGain.gain.value), now);
+                    nodes.leftToLeftGain.gain.exponentialRampToValueAtTime(clamp(targetLeftGain), rampTime);
                     
-                    // Cross-channel gains - drastically reduced
-                    const targetLeftToRight = Math.max(0.001, (1 - targetLeftGain) * 0.05 * safetyFactor);
-                    const targetRightToLeft = Math.max(0.001, (1 - targetRightGain) * 0.05 * safetyFactor);
+                    nodes.rightToRightGain.gain.setValueAtTime(clamp(nodes.rightToRightGain.gain.value), now);
+                    nodes.rightToRightGain.gain.exponentialRampToValueAtTime(clamp(targetRightGain), rampTime);
                     
-                    nodes.leftToRightGain.gain.setValueAtTime(nodes.leftToRightGain.gain.value, now);
-                    nodes.leftToRightGain.gain.linearRampToValueAtTime(targetLeftToRight, rampTime);
+                    nodes.leftToRightGain.gain.setValueAtTime(clamp(nodes.leftToRightGain.gain.value), now);
+                    nodes.leftToRightGain.gain.exponentialRampToValueAtTime(clamp(targetLeftToRight), rampTime);
                     
-                    nodes.rightToLeftGain.gain.setValueAtTime(nodes.rightToLeftGain.gain.value, now);
-                    nodes.rightToLeftGain.gain.linearRampToValueAtTime(targetRightToLeft, rampTime);
+                    nodes.rightToLeftGain.gain.setValueAtTime(clamp(nodes.rightToLeftGain.gain.value), now);
+                    nodes.rightToLeftGain.gain.exponentialRampToValueAtTime(clamp(targetRightToLeft), rampTime);
                     
                     time += 0.05;
                 }, 50);
@@ -2275,6 +2890,32 @@ function App() {
                 const track = activePlaylist[index];
                 if (!track) return;
                 
+                // Story 3-3: Auto-restore last-used preset for this track
+                if (track.lastPresetId) {
+                    const presets = getAllPresets();
+                    const savedPreset = presets.find(p => p.id === track.lastPresetId);
+                    
+                    if (savedPreset) {
+                        // Restore the preset if it's different from current
+                        if (activePresetId !== track.lastPresetId) {
+                            applyPreset(savedPreset.preset, savedPreset.id);
+                            showToast(`Restored ${savedPreset.name} preset for "${track.name}"`, 'info');
+                            setA11yAnnouncement(`Restored ${savedPreset.name} preset`);
+                        }
+                    } else {
+                        // Preset was deleted, fallback to focus
+                        console.warn(`[AutoRestore] Preset ${track.lastPresetId} not found for track ${track.name}, using Focus`);
+                        const focusMode = MODE_LIBRARY[0];
+                        applyPreset(focusMode.preset, focusMode.id);
+                    }
+                } else {
+                    // First time playing this track - save current preset
+                    setPlaylist(prev => prev.map((t, i) => 
+                        i === index ? { ...t, lastPresetId: activePresetId } : t
+                    ));
+                    console.log(`[AutoRestore] Saved preset ${activePresetId} for track ${track.name}`);
+                }
+                
                 const audio = prepareAudioElement();
                 
                 const handleLoadedMetadata = () => {
@@ -2621,6 +3262,14 @@ function App() {
                 // Update active preset tracking
                 setActivePresetId(presetId);
                 
+                // Story 3-3: Update current track's lastPresetId when preset changes
+                if (currentTrackIndex !== null && playlist[currentTrackIndex]) {
+                    setPlaylist(prev => prev.map((track, i) => 
+                        i === currentTrackIndex ? { ...track, lastPresetId: presetId } : track
+                    ));
+                    console.log(`[AutoRestore] Updated track ${playlist[currentTrackIndex].name} lastPresetId to ${presetId}`);
+                }
+                
                 // Log preset change event
                 logPresetChange(presetId);
                 
@@ -2901,6 +3550,7 @@ return (
                                 sensorLocked={sensorLocked}
                                 setSensorLocked={setSensorLocked}
                                 setA11yAnnouncement={setA11yAnnouncement}
+                                onSavePreset={openSavePresetDialog}
                             />
 
                             <article
@@ -3377,6 +4027,27 @@ return (
                             </div>
                         </aside>
                     </div>
+                    
+                    {/* Story 3-3: Save Preset Dialog */}
+                    {showSavePresetDialog && (
+                        <SavePresetDialog
+                            currentParameters={{
+                                speed,
+                                intensity,
+                                spatialDepth,
+                                movement: movementPattern,
+                                binauralEnabled,
+                                binauralFreq,
+                                noiseType,
+                                noiseVolume
+                            }}
+                            onSave={handleSavePreset}
+                            onCancel={closeSavePresetDialog}
+                            showToast={showToast}
+                            setA11yAnnouncement={setA11yAnnouncement}
+                            existingPreset={editingPreset}
+                        />
+                    )}
                 </div>
             );
         }

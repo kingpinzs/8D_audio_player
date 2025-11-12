@@ -1,0 +1,671 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>4-1</story-id>
+    <story-key>4-1-session-schema-lifecycle-hooks</story-key>
+    <story-title>Session Schema &amp; Lifecycle Hooks</story-title>
+    <epic-id>epic-4</epic-id>
+    <epic-title>Session Logging &amp; Insights</epic-title>
+    <generated>2025-11-12</generated>
+    <status>drafted</status>
+    <estimated-effort>3-4 hours</estimated-effort>
+  </metadata>
+
+  <user-story>
+    <as-a>family caregiver</as-a>
+    <i-want>automatic session logging with start/end timestamps, preset usage, and mood tracking</i-want>
+    <so-that>I can review patterns and demonstrate focus progress to therapists without manual note-taking</so-that>
+  </user-story>
+
+  <business-value>
+    <problem>
+      Users and caregivers need evidence that 8D rituals improve focus, but manual journaling is burdensome. Without automated session tracking, valuable insights about which presets/rituals work are lost.
+    </problem>
+    <value>
+      - Users see which presets/rituals work best without thinking
+      - Caregivers export objective data to therapists/teachers
+      - Product enables data-driven preset recommendations (Epic 5)
+    </value>
+    <metrics>
+      - Session capture rate: ≥95%
+      - IndexedDB write latency: &lt;50ms (P95)
+      - Zero data loss on browser crash/offline
+      - Schema supports ≥5 sessions stored offline
+    </metrics>
+  </business-value>
+
+  <acceptance-criteria>
+    <criterion id="AC1">
+      <title>IndexedDB Schema Definition</title>
+      <given>the application initializes for the first time</given>
+      <when>the database is created</when>
+      <then>
+        - Database name: mp3_8d_sessions
+        - Version: 1
+        - Object store: sessions with auto-incrementing id
+        - Indexes: timestamp, profileId, presetId, ritualUsed
+      </then>
+      <schema>
+        {
+          id: &lt;auto-increment&gt;,
+          profileId: string,           // "default" or custom profile
+          timestamp: number,            // Date.now() at session start
+          trackId: string,              // Current track ID
+          trackName: string,            // For export readability
+          presetId: string,             // Active preset ID
+          presetLabel: string,          // For export readability
+          ritualUsed: boolean,          // Did user complete breathing ritual?
+          duration: number,             // Session length in seconds
+          hrAvg: number | null,         // Heart rate avg (null if no sensor)
+          hrMax: number | null,         // Heart rate max (null if no sensor)
+          moodBefore: string | null,    // Emoji code (e.g., "😰" or null)
+          moodAfter: string | null,     // Emoji code (e.g., "😌" or null)
+          notes: string,                // Optional user notes
+          endedManually: boolean        // True if user stopped vs auto-advance
+        }
+      </schema>
+    </criterion>
+
+    <criterion id="AC2">
+      <title>Session Start Hook</title>
+      <given>a user starts playback (ritual completed or skipped)</given>
+      <when>launchRitualPlayback() executes</when>
+      <then>
+        - Create new session record with timestamp, track, preset
+        - Store ritualUsed flag (true if breathing ritual completed)
+        - Log to console: [SessionLogger] Session started: {sessionId}
+        - Return session ID for subsequent updates
+      </then>
+      <performance>
+        - IndexedDB write completes in &lt;50ms (P95)
+        - Non-blocking (async with proper error handling)
+      </performance>
+    </criterion>
+
+    <criterion id="AC3">
+      <title>Session End Hook</title>
+      <given>a session is active</given>
+      <when>track ends OR user manually stops playback</when>
+      <then>
+        - Calculate duration = (end timestamp - start timestamp) / 1000
+        - Update session record with duration, endedManually flag
+        - Log to console: [SessionLogger] Session ended: {sessionId}, duration: {duration}s
+      </then>
+      <performance>
+        - IndexedDB update completes in &lt;30ms (P95)
+      </performance>
+    </criterion>
+
+    <criterion id="AC4">
+      <title>Profile Clearing</title>
+      <given>a user wants to delete all session data</given>
+      <when>clearProfile(profileId) is called</when>
+      <then>
+        - Delete all session records where profileId matches
+        - Log count of deleted records to console
+        - Show confirmation toast: "X sessions deleted"
+      </then>
+      <edge-cases>
+        - If profileId === "all", clear entire object store
+        - If no records match, show "No sessions found" message
+      </edge-cases>
+    </criterion>
+
+    <criterion id="AC5">
+      <title>Error Handling</title>
+      <given>IndexedDB operations may fail (quota, corruption)</given>
+      <when>any database operation executes</when>
+      <then>
+        - Wrap in try/catch with specific error types
+        - Log errors to console: [SessionLogger] Error: {error.name} - {error.message}
+        - Show user-friendly toast notification
+        - Gracefully degrade (app continues without logging)
+      </then>
+      <quota-exceeded>
+        - Calculate estimated storage used
+        - Suggest export + clear old sessions
+        - Provide "Clear sessions older than 30 days" action
+      </quota-exceeded>
+    </criterion>
+  </acceptance-criteria>
+
+  <technical-implementation>
+    <files-to-modify>
+      <file path="index.html">
+        <section name="IndexedDB Helpers" location="after Story 3-3 storage helpers" estimated-lines="200">
+          <functions>
+            - initDatabase() with schema versioning
+            - addSession(session) returns auto-increment ID
+            - getSession(id) retrieves by ID
+            - updateSession(id, updates) modifies fields
+            - deleteSession(id) removes record
+            - clearProfile(profileId) bulk delete
+            - getSessionsByDateRange(startDate, endDate) for insights
+            - Error handling for quota exceeded, corruption
+          </functions>
+        </section>
+
+        <section name="Session Lifecycle State" location="in App component" estimated-lines="30">
+          <state-management>
+            const [activeSessionId, setActiveSessionId] = React.useState(null);
+            const activeSessionIdRef = React.useRef(null);
+          </state-management>
+        </section>
+
+        <section name="Session Start Hook" location="launchRitualPlayback function" estimated-lines="30">
+          <integration-point line="~3105">
+            Call startSession() after audio.play()
+            - Capture ritualStatus === 'breathing' as ritualUsed flag
+            - Store activePresetId, nowPlayingTrack metadata
+            - Set activeSessionIdRef for later updates
+          </integration-point>
+        </section>
+
+        <section name="Session End Hooks" location="audio event listeners + togglePlayPause" estimated-lines="40">
+          <integration-point-1 line="~2922">
+            audio.addEventListener('ended') → endSession(false)
+            - Calculate duration from timestamp
+            - Mark endedManually = false
+          </integration-point-1>
+          <integration-point-2 line="~2996">
+            togglePlayPause() stop branch → endSession(true)
+            - Same as 'ended' but endedManually = true
+          </integration-point-2>
+        </section>
+
+        <section name="Performance Instrumentation" location="after Story 3-1 logging" estimated-lines="30">
+          <logging>
+            - performance.mark() around IndexedDB operations
+            - Console logging for debugging
+            - Toast notifications for errors
+          </logging>
+        </section>
+      </file>
+    </files-to-modify>
+
+    <code-patterns>
+      <indexeddb-initialization>
+        <![CDATA[
+// Database constants
+const DB_NAME = 'mp3_8d_sessions';
+const DB_VERSION = 1;
+const STORE_NAME = 'sessions';
+
+const initDatabase = () => {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                const store = db.createObjectStore(STORE_NAME, { 
+                    keyPath: 'id', 
+                    autoIncrement: true 
+                });
+                
+                store.createIndex('timestamp', 'timestamp', { unique: false });
+                store.createIndex('profileId', 'profileId', { unique: false });
+                store.createIndex('presetId', 'presetId', { unique: false });
+                store.createIndex('ritualUsed', 'ritualUsed', { unique: false });
+            }
+        };
+    });
+};
+        ]]>
+      </indexeddb-initialization>
+
+      <crud-operations>
+        <![CDATA[
+const addSession = async (session) => {
+    const db = await initDatabase();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.add(session);
+        
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+const getSession = async (id) => {
+    const db = await initDatabase();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.get(id);
+        
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+const updateSession = async (id, updates) => {
+    const db = await initDatabase();
+    const session = await getSession(id);
+    if (!session) throw new Error('Session not found');
+    
+    const updated = { ...session, ...updates };
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.put(updated);
+        
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+        ]]>
+      </crud-operations>
+
+      <session-lifecycle>
+        <![CDATA[
+// In App component
+const [activeSessionId, setActiveSessionId] = React.useState(null);
+const activeSessionIdRef = React.useRef(null);
+
+// Session start (in launchRitualPlayback)
+const startSession = async () => {
+    performance.mark('session-start-begin');
+    
+    const session = {
+        profileId: 'default',
+        timestamp: Date.now(),
+        trackId: nowPlayingTrack.id,
+        trackName: nowPlayingTrack.name,
+        presetId: activePresetId,
+        presetLabel: selectedMode.label,
+        ritualUsed: ritualStatus === 'breathing',
+        duration: 0,
+        hrAvg: null,
+        hrMax: null,
+        moodBefore: null,
+        moodAfter: null,
+        notes: '',
+        endedManually: false
+    };
+    
+    try {
+        const sessionId = await addSession(session);
+        setActiveSessionId(sessionId);
+        activeSessionIdRef.current = sessionId;
+        
+        performance.mark('session-start-end');
+        const measure = performance.measure('session-start', 'session-start-begin', 'session-start-end');
+        console.log(`[SessionLogger] Session started: ${sessionId} in ${measure.duration.toFixed(2)}ms`);
+    } catch (err) {
+        console.error('[SessionLogger] Failed to start session:', err);
+        showToast('Session logging unavailable', 'warning');
+    }
+};
+
+// Session end (in audio 'ended' + manual stop)
+const endSession = async (manual = false) => {
+    if (!activeSessionIdRef.current) return;
+    
+    const sessionId = activeSessionIdRef.current;
+    const endTime = Date.now();
+    
+    try {
+        const session = await getSession(sessionId);
+        if (session) {
+            const duration = (endTime - session.timestamp) / 1000;
+            await updateSession(sessionId, { 
+                duration, 
+                endedManually: manual 
+            });
+            console.log(`[SessionLogger] Session ended: ${sessionId}, duration: ${duration}s`);
+        }
+    } catch (err) {
+        console.error('[SessionLogger] Failed to end session:', err);
+    }
+    
+    setActiveSessionId(null);
+    activeSessionIdRef.current = null;
+};
+        ]]>
+      </session-lifecycle>
+    </code-patterns>
+
+    <integration-hooks>
+      <hook location="launchRitualPlayback()" line="~3105">
+        <action>Call startSession() after audio.play() succeeds</action>
+        <context>
+          - ritualStatus state determines ritualUsed flag
+          - activePresetId from Story 3-3
+          - nowPlayingTrack from Story 2-1
+          - selectedMode from Story 3-1
+        </context>
+      </hook>
+
+      <hook location="audio.addEventListener('ended')" line="~2922">
+        <action>Call endSession(false) in 'ended' event handler</action>
+        <context>
+          - Track finished naturally
+          - endedManually = false
+        </context>
+      </hook>
+
+      <hook location="togglePlayPause()" line="~2996">
+        <action>Call endSession(true) when user stops playback</action>
+        <context>
+          - User manually stopped
+          - endedManually = true
+        </context>
+      </hook>
+    </integration-hooks>
+
+    <dependencies>
+      <functional>
+        <dependency story="3-3" reason="Requires activePresetId state" />
+        <dependency story="3-1" reason="Requires selectedMode state" />
+        <dependency story="1-2" reason="Requires ritualStatus state" />
+        <dependency story="2-1" reason="Requires nowPlayingTrack state" />
+      </functional>
+
+      <technical>
+        <dependency>IndexedDB API (browser native)</dependency>
+        <dependency>React hooks (useState, useRef, useEffect)</dependency>
+        <dependency>Toast notification system (from Story 3-3)</dependency>
+        <dependency>Performance API (performance.mark/measure)</dependency>
+      </technical>
+    </dependencies>
+
+    <error-handling-strategy>
+      <quota-exceeded>
+        <detection>Catch QuotaExceededError</detection>
+        <user-message>Storage full. Export and clear old sessions.</user-message>
+        <recovery>
+          - Calculate estimated storage used
+          - Show "Clear sessions older than 30 days" button
+          - Provide export before cleanup
+        </recovery>
+      </quota-exceeded>
+
+      <corruption>
+        <detection>Catch DOMException with name 'VersionError'</detection>
+        <user-message>Session database corrupted. Clearing data.</user-message>
+        <recovery>
+          - Delete database via indexedDB.deleteDatabase()
+          - Reinitialize on next session start
+          - Log error to console for debugging
+        </recovery>
+      </corruption>
+
+      <general-errors>
+        <strategy>
+          - Wrap all IndexedDB operations in try/catch
+          - Log to console with [SessionLogger] prefix
+          - Show toast notification for user-facing errors
+          - App continues working (graceful degradation)
+        </strategy>
+      </general-errors>
+    </error-handling-strategy>
+  </technical-implementation>
+
+  <testing-requirements>
+    <automated-tests>
+      <test-file path="tests/session-logging.test.js" framework="Node.js with fake-indexeddb">
+        <test name="Database schema initialization">
+          - Open database
+          - Verify object store 'sessions' exists
+          - Verify indexes created correctly
+          - Verify keyPath and autoIncrement set
+        </test>
+
+        <test name="Session CRUD operations">
+          - addSession() returns auto-incremented ID
+          - getSession() retrieves by ID
+          - updateSession() modifies duration field
+          - Session not found throws error
+        </test>
+
+        <test name="clearProfile() functionality">
+          - Create 5 sessions with profileId 'default'
+          - clearProfile('default') deletes all 5
+          - Verify count returned
+          - clearProfile('nonexistent') returns 0
+        </test>
+
+        <test name="Error handling">
+          - Simulate quota exceeded error
+          - Verify error caught and logged
+          - Verify app continues (no crash)
+        </test>
+
+        <test name="Concurrent writes">
+          - Start two sessions simultaneously
+          - Verify both get unique IDs
+          - Verify no data corruption
+        </test>
+      </test-file>
+    </automated-tests>
+
+    <manual-tests>
+      <test name="Session lifecycle - natural end">
+        <steps>
+          1. Start playback
+          2. Open IndexedDB DevTools → mp3_8d_sessions → sessions
+          3. Verify session created with correct metadata
+          4. Let track finish
+          5. Verify duration calculated correctly
+          6. Verify endedManually = false
+        </steps>
+      </test>
+
+      <test name="Session lifecycle - manual stop">
+        <steps>
+          1. Start playback
+          2. Stop manually after 30 seconds
+          3. Verify session updated
+          4. Verify duration ≈ 30 seconds
+          5. Verify endedManually = true
+        </steps>
+      </test>
+
+      <test name="Ritual completion tracking">
+        <steps>
+          1. Start ritual, complete breathing
+          2. Verify ritualUsed = true in session
+          3. Start ritual, skip breathing
+          4. Verify ritualUsed = false in session
+        </steps>
+      </test>
+
+      <test name="Profile clearing">
+        <steps>
+          1. Create 5 sessions
+          2. Call clearProfile('default') (TODO: Add UI button)
+          3. Verify console shows "5 sessions deleted"
+          4. Verify IndexedDB empty
+        </steps>
+      </test>
+
+      <test name="Offline behavior">
+        <steps>
+          1. Start session online
+          2. Go offline (DevTools Network → Offline)
+          3. End session
+          4. Verify update succeeds (IndexedDB works offline)
+          5. Close tab, reopen
+          6. Verify data persists
+        </steps>
+      </test>
+
+      <test name="Performance validation">
+        <steps>
+          1. Open DevTools Performance tab
+          2. Start recording
+          3. Start session
+          4. Stop recording
+          5. Verify addSession() &lt; 50ms
+          6. End session
+          7. Verify updateSession() &lt; 30ms
+        </steps>
+      </test>
+    </manual-tests>
+
+    <performance-targets>
+      <target metric="addSession() latency" p95="50ms" />
+      <target metric="updateSession() latency" p95="30ms" />
+      <target metric="getSession() latency" p95="20ms" />
+      <target metric="clearProfile() latency" p95="500ms" description="Acceptable for bulk delete" />
+    </performance-targets>
+  </testing-requirements>
+
+  <existing-codebase-context>
+    <current-state>
+      <completed-epics>
+        - Epic 1: Unified ritual player with breathing ritual, accessibility toggles
+        - Epic 2: Audio intake (drag/drop, URL validation), stable audio graph
+        - Epic 3: Preset orchestration (quick modes, custom CRUD, auto-restore)
+      </completed-epics>
+
+      <available-patterns>
+        - localStorage helpers with try/catch (from Story 3-3)
+        - Toast notification system: showToast(message, type)
+        - Performance instrumentation: performance.mark/measure
+        - Error handling: console logging + user-facing messages
+        - React 18 auto-batching for state updates
+      </available-patterns>
+
+      <state-available>
+        - activePresetId (string) - from Story 3-3
+        - selectedMode (object) - from Story 3-1
+        - ritualStatus (string: 'idle' | 'breathing' | 'active') - from Story 1-2
+        - nowPlayingTrack (object: {id, name, source}) - from Story 2-1
+        - audioElementRef (ref) - from Story 2-3
+      </state-available>
+
+      <functions-available>
+        - showToast(message, type) - from Story 3-3
+        - launchRitualPlayback() - line ~3105 in index.html
+        - togglePlayPause() - line ~2996 in index.html
+        - Audio 'ended' event listener - line ~2922 in index.html
+      </functions-available>
+    </current-state>
+
+    <file-structure>
+      <file path="index.html">
+        <current-lines>4134 total</current-lines>
+        <relevant-sections>
+          - Lines 1020-1188: Story 3-3 custom preset storage helpers
+          - Lines 2362-2458: setupAudioGraph function
+          - Lines 2461-2548: startRotation function (audio crackling fix)
+          - Lines 2877-2906: playTrack function with auto-restore
+          - Lines 2996-3014: togglePlayPause function
+          - Lines 3085-3207: launchRitualPlayback + startRitual + skipRitual
+          - Lines 3247-3283: applyPreset function
+        </relevant-sections>
+      </file>
+
+      <file path="audio-engine.js">
+        <current-lines>222 total</current-lines>
+        <purpose>Centralized Web Audio utilities</purpose>
+        <exports>connectGainStaging, createBinauralNodes, createNoiseNode</exports>
+      </file>
+
+      <file path="tests/gain-staging.test.js">
+        <current-lines>306 total</current-lines>
+        <purpose>Audio graph regression tests</purpose>
+        <patterns>Mock classes, Promise-based async tests, performance validation</patterns>
+      </file>
+    </file-structure>
+
+    <no-indexeddb-usage-yet>
+      <current-persistence>localStorage only (presets, dark mode, skip ritual pref)</current-persistence>
+      <this-story-introduces>First IndexedDB usage in the application</this-story-introduces>
+      <compatibility>All target browsers support IndexedDB (Chrome, Firefox, Safari, Edge)</compatibility>
+    </no-indexeddb-usage-yet>
+  </existing-codebase-context>
+
+  <definition-of-done>
+    <checklist>
+      <item>IndexedDB schema created with all fields and indexes</item>
+      <item>initDatabase() helper with version migration support</item>
+      <item>addSession(), getSession(), updateSession(), deleteSession() helpers</item>
+      <item>clearProfile() with count tracking</item>
+      <item>Session start hook in launchRitualPlayback()</item>
+      <item>Session end hooks in audio 'ended' event + manual stop</item>
+      <item>Error handling for quota exceeded, corruption</item>
+      <item>Console logging for all operations</item>
+      <item>Toast notifications for user-facing errors</item>
+      <item>5 automated tests passing (Node.js with fake-indexeddb)</item>
+      <item>6 manual test scenarios verified in Chrome</item>
+      <item>Performance validated: &lt;50ms writes, &lt;30ms reads</item>
+      <item>No syntax errors, no console warnings</item>
+      <item>Code review approval</item>
+      <item>Documentation: implementation summary created</item>
+    </checklist>
+  </definition-of-done>
+
+  <out-of-scope>
+    <deferred>
+      <item reason="Story 4-2">Mood/emoji capture UI</item>
+      <item reason="Story 4-3">Insights dashboard visualization</item>
+      <item reason="Story 4-3">Export to JSON/CSV</item>
+      <item reason="Epic 6">Multi-profile UI</item>
+      <item reason="Epic 5">Heart rate sensor integration</item>
+      <item reason="Post-MVP">Cloud sync</item>
+    </deferred>
+  </out-of-scope>
+
+  <implementation-notes>
+    <browser-compatibility>
+      <chrome>Full IndexedDB support ✅</chrome>
+      <firefox>Full IndexedDB support ✅</firefox>
+      <safari>Full IndexedDB support (iOS 10+) ✅</safari>
+      <edge>Full IndexedDB support ✅</edge>
+      <fallback>Console logging only (no persistence)</fallback>
+    </browser-compatibility>
+
+    <schema-evolution>
+      <current-version>1</current-version>
+      <future-fields>
+        - trackDuration (for completion rate tracking)
+        - pauseCount (for engagement metrics)
+        - presetChanges (for mid-session adjustments)
+        - sensorData (for Epic 5 biometric integration)
+      </future-fields>
+      <migration-strategy>Use onupgradeneeded event to add new fields/indexes without data loss</migration-strategy>
+    </schema-evolution>
+
+    <privacy-data-retention>
+      <storage-location>Local IndexedDB only</storage-location>
+      <data-transmission>None (no network calls)</data-transmission>
+      <user-control>clearProfile() allows full deletion</user-control>
+      <future-policy>Optional 30/60/90-day auto-deletion</future-policy>
+    </privacy-data-retention>
+
+    <performance-considerations>
+      <storage-footprint>~500 bytes per session</storage-footprint>
+      <estimated-capacity>1000 sessions ≈ 500KB</estimated-capacity>
+      <quota-typical>50MB+ (varies by browser)</quota-typical>
+      <optimization>Indexes enable efficient date-range queries for Story 4-3</optimization>
+    </performance-considerations>
+  </implementation-notes>
+
+  <next-story>
+    <story-id>4-2</story-id>
+    <story-title>Emoji Check-In &amp; Notes Prompt</story-title>
+    <dependencies-on-this-story>
+      - Requires updateSession() helper to save mood data
+      - Requires activeSessionId to update correct session
+    </dependencies-on-this-story>
+  </next-story>
+
+  <references>
+    <epic-context>docs/epic-4-session-logging-insights.context.xml</epic-context>
+    <architecture>docs/architecture.md (Section 3.5: Session Logging &amp; Insights)</architecture>
+    <data-models>docs/data-models.md (Session schema)</data-models>
+    <story-file>docs/stories/4-1-session-schema-lifecycle-hooks.md</story-file>
+    <related-stories>
+      - Story 4-2: Emoji Check-In &amp; Notes Prompt
+      - Story 4-3: Insights Dashboard &amp; Export
+    </related-stories>
+  </references>
+</story-context>

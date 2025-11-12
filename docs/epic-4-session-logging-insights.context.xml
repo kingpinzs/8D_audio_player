@@ -1,0 +1,632 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<epic-context>
+  <metadata>
+    <epic-id>epic-4</epic-id>
+    <epic-title>Session Logging &amp; Insights</epic-title>
+    <generated>2025-11-12</generated>
+    <status>backlog</status>
+    <dependencies>
+      <epic-dependency id="epic-2" reason="Playback events (audio element listeners)" />
+      <epic-dependency id="epic-3" reason="Preset metadata for effectiveness tracking" />
+    </dependencies>
+  </metadata>
+
+  <problem-statement>
+    <context>
+      Families and caregivers need objective evidence that 8D rituals improve focus and emotional regulation, but manual journaling is burdensome and often forgotten. Without automated session tracking, valuable insights about what works (which presets, durations, ritual types) are lost. Users cannot demonstrate progress to therapists or teachers, and the product cannot provide data-driven preset recommendations.
+    </context>
+    <user-impact>
+      - Parents cannot show therapists which sessions correlate with better focus outcomes
+      - Users forget to note which preset/ritual combinations feel most effective
+      - Caregivers lack quantitative data to justify continued use of the app
+      - Teachers receive anecdotal feedback instead of measurable session patterns
+    </user-impact>
+    <business-impact>
+      - Reduced user retention due to lack of visible progress indicators
+      - Missed opportunity for adaptive preset recommendations (Epic 5 prerequisite)
+      - Limited word-of-mouth growth without shareable success metrics
+      - Cannot validate product-market fit through usage patterns
+    </business-impact>
+  </problem-statement>
+
+  <scope>
+    <in-scope>
+      - IndexedDB schema design for offline-first session storage
+      - Automatic session lifecycle tracking (start, pause, end)
+      - Emoji-based mood check-in prompts (before/after)
+      - Optional text notes field for qualitative feedback
+      - Insights dashboard showing 7/14/30-day trends
+      - Preset effectiveness analysis (duration, completion rate)
+      - Ritual completion rate tracking
+      - Export to JSON/CSV for therapist handoff
+      - Profile-based data clearing (privacy control)
+      - Quota management and graceful degradation
+    </in-scope>
+    <out-of-scope>
+      - Cloud sync or backend APIs (fully offline for MVP)
+      - Multi-user authentication (deferred to Epic 6)
+      - Advanced ML-based recommendations (Epic 5 sensor integration first)
+      - Social sharing features
+      - Third-party integrations (Google Calendar, Apple Health)
+      - Comparative analytics across multiple users
+    </out-of-scope>
+    <future-considerations>
+      - Optional cloud backup with end-to-end encryption
+      - Therapist portal for viewing exported data
+      - Integration with EHR systems (FHIR compliance)
+      - Predictive analytics (best preset for time of day)
+    </future-considerations>
+  </scope>
+
+  <kpis>
+    <kpi>
+      <metric>Session capture rate</metric>
+      <target>≥95% of playback sessions logged successfully</target>
+      <measurement>Count of sessions logged / total playback starts</measurement>
+    </kpi>
+    <kpi>
+      <metric>IndexedDB write latency</metric>
+      <target>&lt;50ms (P95)</target>
+      <measurement>performance.mark() around addSession() calls</measurement>
+    </kpi>
+    <kpi>
+      <metric>Insights rendering performance</metric>
+      <target>&lt;500ms to render dashboard with 100 sessions</target>
+      <measurement>Performance profiler on dashboard mount</measurement>
+    </kpi>
+    <kpi>
+      <metric>Data loss rate</metric>
+      <target>0% in offline scenarios (browser crash, quota exceeded)</target>
+      <measurement>QA testing with simulated failures</measurement>
+    </kpi>
+    <kpi>
+      <metric>User engagement with check-in</metric>
+      <target>≥60% of sessions include mood emoji</target>
+      <measurement>Sessions with moodAfter not null / total sessions</measurement>
+    </kpi>
+  </kpis>
+
+  <technical-foundation>
+    <current-state>
+      <codebase-status>
+        - Epic 1 complete: Unified shell with ritual hero, accessibility toggles
+        - Epic 2 complete: Audio intake (drag/drop, URL validation), stable audio graph
+        - Epic 3 complete: Preset orchestration (quick modes, custom CRUD, auto-restore)
+        - No session logging exists yet (console.log only in Epic 3)
+        - No IndexedDB usage currently (localStorage only for presets, dark mode)
+        - Toast notification system available (from Story 3-3)
+        - Performance instrumentation pattern established (performance.mark/measure)
+      </codebase-status>
+      <existing-patterns>
+        - React 18 UMD with inline JSX (no bundler/modules)
+        - Custom hooks for feature isolation (useAudioGraph, usePreset)
+        - localStorage helpers with try/catch error handling
+        - Toast notifications via setState + timeout cleanup
+        - Accessibility: aria-live announcements, keyboard shortcuts
+        - Event logging stub in Story 3-1 (console.log only)
+      </existing-patterns>
+      <integration-points>
+        - launchRitualPlayback() function (line ~3105 in index.html) - session start hook
+        - audio.addEventListener('ended') (line ~2922) - session end hook
+        - togglePlayPause() function (line ~2996) - manual stop hook
+        - applyPreset() function (line ~3247) - preset change tracking
+        - ritualStatus state ('idle', 'breathing', 'active') - ritual completion flag
+        - activePresetId state - current preset tracking
+        - nowPlayingTrack state - track metadata capture
+      </integration-points>
+    </current-state>
+
+    <tech-stack>
+      <database>
+        <name>IndexedDB</name>
+        <version>v3 (latest stable browser support)</version>
+        <rationale>
+          - Browser-native, no external dependencies
+          - Offline-first by design (critical for PWA)
+          - Supports indexes for efficient querying (timestamp, profileId, presetId)
+          - Mature API with good browser support (Chrome, Firefox, Safari, Edge)
+          - Handles large datasets better than localStorage (50MB+ quota typical)
+        </rationale>
+        <libraries>
+          <library>
+            <name>idb (optional wrapper)</name>
+            <version>7.1.1</version>
+            <status>DEFERRED - use native API first, add wrapper if needed</status>
+            <reason>Zero dependencies preferred for MVP; native API sufficient for CRUD</reason>
+          </library>
+        </libraries>
+        <schema-design>
+          <database name="mp3_8d_sessions" version="1">
+            <object-store name="sessions" keyPath="id" autoIncrement="true">
+              <index name="timestamp" keyPath="timestamp" unique="false" />
+              <index name="profileId" keyPath="profileId" unique="false" />
+              <index name="presetId" keyPath="presetId" unique="false" />
+              <index name="ritualUsed" keyPath="ritualUsed" unique="false" />
+            </object-store>
+            <object-store name="profiles" keyPath="id" autoIncrement="false">
+              <!-- Future: Multi-user support in Epic 6 -->
+            </object-store>
+          </database>
+        </schema-design>
+      </database>
+
+      <charting>
+        <name>Custom Canvas-based Charts</name>
+        <rationale>
+          - Already using Canvas 2D for audio visualizer (code reuse)
+          - No external library dependency (keeps bundle size minimal)
+          - Full control over accessibility (custom ARIA labels)
+          - Reduced motion support via CSS prefers-reduced-motion
+        </rationale>
+        <alternative-considered>
+          <library>Chart.js</library>
+          <reason-rejected>82KB minified, overkill for 3 simple charts (bar, line, donut)</reason-rejected>
+        </alternative-considered>
+        <charts-needed>
+          - 7-day session duration bar chart (X: day, Y: minutes)
+          - Preset effectiveness line chart (X: preset, Y: avg completion rate)
+          - Mood improvement donut chart (felt better % vs same/worse)
+        </charts-needed>
+      </charting>
+
+      <export>
+        <format>JSON</format>
+        <implementation>
+          - Use Blob + URL.createObjectURL for download link
+          - Serialize sessions array with JSON.stringify
+          - Include metadata header (export date, version, profile)
+        </implementation>
+        <format>CSV</format>
+        <implementation>
+          - Transform sessions to CSV rows client-side
+          - Headers: timestamp,track,preset,duration,ritual,moodBefore,moodAfter,notes
+          - Escape commas/quotes in text fields
+        </implementation>
+      </export>
+    </tech-stack>
+
+    <data-models>
+      <model name="Session">
+        <field name="id" type="number" auto-increment="true" description="Primary key" />
+        <field name="profileId" type="string" default="default" description="Multi-user support (Epic 6)" />
+        <field name="timestamp" type="number" description="Date.now() at session start" />
+        <field name="trackId" type="string" description="Playlist track ID" />
+        <field name="trackName" type="string" description="For export readability" />
+        <field name="presetId" type="string" description="Active preset ID (from Epic 3)" />
+        <field name="presetLabel" type="string" description="Preset label for export" />
+        <field name="ritualUsed" type="boolean" description="True if breathing ritual completed" />
+        <field name="duration" type="number" description="Session length in seconds" />
+        <field name="hrAvg" type="number | null" description="Heart rate average (Epic 5)" />
+        <field name="hrMax" type="number | null" description="Heart rate max (Epic 5)" />
+        <field name="moodBefore" type="string | null" description="Emoji code (e.g., '😰')" />
+        <field name="moodAfter" type="string | null" description="Emoji code (e.g., '😌')" />
+        <field name="notes" type="string" description="Optional user notes" />
+        <field name="endedManually" type="boolean" description="True if user stopped vs auto-advance" />
+      </model>
+
+      <model name="InsightsSummary">
+        <field name="totalSessions" type="number" description="Count of sessions in date range" />
+        <field name="totalDuration" type="number" description="Sum of all session durations (seconds)" />
+        <field name="avgDuration" type="number" description="Mean session length" />
+        <field name="ritualCompletionRate" type="number" description="% sessions with ritualUsed=true" />
+        <field name="feltBetterRate" type="number" description="% sessions with mood improvement" />
+        <field name="topPresets" type="PresetStats[]" description="Most-used presets" />
+        <field name="sessionsByDay" type="DayStats[]" description="Daily session counts" />
+      </model>
+
+      <model name="PresetStats">
+        <field name="presetId" type="string" />
+        <field name="presetLabel" type="string" />
+        <field name="usageCount" type="number" description="Times this preset was used" />
+        <field name="avgDuration" type="number" description="Average session length with this preset" />
+        <field name="completionRate" type="number" description="% sessions not manually stopped" />
+      </model>
+
+      <model name="DayStats">
+        <field name="date" type="string" description="YYYY-MM-DD format" />
+        <field name="sessionCount" type="number" />
+        <field name="totalMinutes" type="number" />
+        <field name="feltBetterCount" type="number" />
+      </model>
+    </data-models>
+
+    <architecture-decisions>
+      <decision id="AD-4-1">
+        <title>Use IndexedDB over localStorage for session storage</title>
+        <status>ACCEPTED</status>
+        <rationale>
+          - localStorage limited to ~5-10MB, insufficient for long-term session history
+          - IndexedDB supports 50MB+ quota (varies by browser)
+          - IndexedDB provides indexes for efficient date-range queries
+          - Async API prevents main thread blocking (better UX)
+        </rationale>
+        <consequences>
+          - More complex API than localStorage (requires Promise handling)
+          - Need migration path from localStorage presets (already solved in Epic 3)
+          - Quota exceeded errors must be handled gracefully
+        </consequences>
+      </decision>
+
+      <decision id="AD-4-2">
+        <title>Custom Canvas charts instead of Chart.js</title>
+        <status>ACCEPTED</status>
+        <rationale>
+          - Already using Canvas 2D for audio visualizer (code reuse)
+          - Chart.js adds 82KB to bundle (significant for single-file HTML)
+          - Only need 3 simple chart types (bar, line, donut)
+          - Full control over accessibility and reduced-motion handling
+        </rationale>
+        <consequences>
+          - Must implement chart rendering logic manually (~200 lines)
+          - No built-in animations or interactivity (acceptable for MVP)
+          - Future: Could migrate to lightweight library if complexity grows
+        </consequences>
+      </decision>
+
+      <decision id="AD-4-3">
+        <title>Emoji check-in instead of numeric scales</title>
+        <status>ACCEPTED</status>
+        <rationale>
+          - Lower cognitive load for neurodivergent users
+          - More engaging than 1-10 sliders
+          - Easier to interpret in exported reports ("felt better" vs numeric deltas)
+          - Accessibility: emojis have clear ARIA labels
+        </rationale>
+        <consequences>
+          - Less granular than numeric scales (5 emojis vs 10-point scale)
+          - Must ensure emoji rendering consistent across browsers
+          - Screen readers must announce emoji labels properly
+        </consequences>
+      </decision>
+
+      <decision id="AD-4-4">
+        <title>Session logging opt-out instead of opt-in</title>
+        <status>ACCEPTED</status>
+        <rationale>
+          - Default logging maximizes data collection for insights
+          - Users can disable via settings toggle
+          - Opt-out respects privacy while encouraging feature usage
+          - Follows pattern from Epic 1 (breathing ritual auto-start with skip option)
+        </rationale>
+        <consequences>
+          - Must clearly communicate logging in onboarding
+          - Provide easy profile clearing for privacy-conscious users
+          - Document data retention policy (local only, no cloud sync)
+        </consequences>
+      </decision>
+
+      <decision id="AD-4-5">
+        <title>7/14/30-day rolling windows for insights</title>
+        <status>ACCEPTED</status>
+        <rationale>
+          - 7 days: short-term trend validation (weekly habit building)
+          - 14 days: medium-term pattern recognition (two-week cycles)
+          - 30 days: long-term progress demonstration (monthly review with therapist)
+          - Fixed windows simplify UI and query logic
+        </rationale>
+        <consequences>
+          - Cannot customize date ranges in MVP (future enhancement)
+          - Queries scan up to 30 days max (acceptable performance with indexes)
+          - Charts may show sparse data for new users (handle gracefully)
+        </consequences>
+      </decision>
+    </architecture-decisions>
+  </technical-foundation>
+
+  <implementation-guidance>
+    <story id="4-1" title="Session Schema &amp; Lifecycle Hooks">
+      <file-locations>
+        <file path="index.html">
+          <section name="IndexedDB Helpers" start-after="// Story 3-3: Custom preset storage helpers" estimated-lines="200">
+            - initDatabase() with schema versioning
+            - addSession(), getSession(), updateSession(), deleteSession()
+            - clearProfile() with confirmation
+            - getSessionsByDateRange() for insights queries
+            - Error handling for quota exceeded, corruption
+          </section>
+          <section name="Session Lifecycle Hooks" start-after="const launchRitualPlayback = () =&gt;" estimated-lines="50">
+            - activeSessionId state + ref
+            - startSession() call in launchRitualPlayback
+            - endSession() in audio 'ended' event
+            - endSession(true) in manual stop handler
+          </section>
+          <section name="Performance Instrumentation" start-after="// Story 3-1: Performance logging" estimated-lines="30">
+            - performance.mark() around IndexedDB operations
+            - Console logging for debugging
+            - Toast notifications for errors
+          </section>
+        </file>
+      </file-locations>
+
+      <integration-points>
+        <hook location="launchRitualPlayback()" action="Call startSession() after audio.play()">
+          - Capture ritualStatus === 'breathing' as ritualUsed flag
+          - Store activePresetId, nowPlayingTrack metadata
+          - Set activeSessionIdRef for later updates
+        </hook>
+        <hook location="audio.addEventListener('ended')" action="Call endSession(false) on track completion">
+          - Calculate duration from timestamp
+          - Mark endedManually = false
+          - Clear activeSessionIdRef
+        </hook>
+        <hook location="togglePlayPause() stop branch" action="Call endSession(true) on manual stop">
+          - Same as 'ended' but endedManually = true
+        </hook>
+      </integration-points>
+
+      <testing-requirements>
+        <test-file path="tests/session-logging.test.js" framework="Node.js with fake-indexeddb">
+          - Database schema initialization test
+          - CRUD operations (add, get, update, delete)
+          - clearProfile() with count verification
+          - Quota exceeded error simulation
+          - Concurrent writes handling
+        </test-file>
+        <manual-tests>
+          - Start playback → verify session in IndexedDB DevTools
+          - Let track finish → verify duration calculated
+          - Stop manually → verify endedManually = true
+          - Skip ritual → verify ritualUsed = false
+          - Complete ritual → verify ritualUsed = true
+          - Offline session creation → verify persistence
+        </manual-tests>
+      </testing-requirements>
+
+      <performance-targets>
+        <target metric="addSession() latency" p95="50ms" />
+        <target metric="updateSession() latency" p95="30ms" />
+        <target metric="getSession() latency" p95="20ms" />
+        <target metric="clearProfile() latency" p95="500ms" description="Acceptable for bulk delete" />
+      </performance-targets>
+    </story>
+
+    <story id="4-2" title="Emoji Check-In &amp; Notes Prompt">
+      <file-locations>
+        <file path="index.html">
+          <section name="CheckInModal Component" start-after="// Story 4-2: Emoji Check-In" estimated-lines="150">
+            - Modal overlay with emoji grid
+            - 5 emojis: 😰 (anxious), 😐 (neutral), 😊 (calm), 😌 (focused), 🎉 (energized)
+            - Optional notes textarea (max 500 chars)
+            - Submit button stores moodAfter + notes to session
+            - Skip button closes modal without saving
+            - Keyboard navigation (Tab, Enter, Escape)
+            - ARIA labels for each emoji button
+          </section>
+          <section name="Check-In Trigger Logic" start-after="const endSession = async () =&gt;" estimated-lines="30">
+            - Show modal after session ends
+            - Pre-populate moodBefore if user wants to record starting state
+            - Store result in IndexedDB via updateSession()
+          </section>
+        </file>
+        <file path="index.html" section="CSS">
+          <style>
+            .checkin-modal (overlay, centered, z-index 10000)
+            .emoji-grid (5 buttons, 80px each, hover states)
+            .notes-textarea (500 char limit, accessible placeholder)
+          </style>
+        </file>
+      </file-locations>
+
+      <accessibility-requirements>
+        - Each emoji button has aria-label: "Rate mood as [anxious/neutral/calm/focused/energized]"
+        - Modal has role="dialog" with aria-labelledby pointing to heading
+        - Escape key closes modal (same as Skip button)
+        - Focus trap within modal (Tab cycles through emoji buttons, textarea, submit, skip)
+        - Reduced motion: disable emoji hover animations
+      </accessibility-requirements>
+
+      <testing-requirements>
+        <manual-tests>
+          - Session ends → modal appears
+          - Click emoji → notes textarea appears
+          - Enter text → submit → verify stored in session
+          - Skip button → modal closes without saving
+          - Keyboard navigation → Tab through all controls
+          - Escape key → modal closes
+          - Screen reader → announces emoji labels
+        </manual-tests>
+      </testing-requirements>
+    </story>
+
+    <story id="4-3" title="Insights Dashboard &amp; Export">
+      <file-locations>
+        <file path="index.html">
+          <section name="InsightsPanel Component" start-after="// Story 4-3: Insights Dashboard" estimated-lines="300">
+            - Date range selector (7/14/30 days)
+            - Summary cards (total sessions, avg duration, felt better %)
+            - Session duration bar chart (Canvas 2D)
+            - Preset effectiveness chart (Canvas 2D)
+            - Mood improvement donut chart (Canvas 2D)
+            - Export button (JSON/CSV download)
+            - Empty state handling (no sessions yet)
+          </section>
+          <section name="Insights Calculation Helpers" start-after="// Story 4-3: Insights queries" estimated-lines="200">
+            - getSessionsByDateRange(startDate, endDate)
+            - calculateInsightsSummary(sessions)
+            - groupSessionsByDay(sessions)
+            - calculatePresetStats(sessions)
+            - calculateMoodImprovement(sessions)
+            - exportSessionsAsJSON(sessions)
+            - exportSessionsAsCSV(sessions)
+          </section>
+          <section name="Canvas Chart Renderers" start-after="// Story 4-3: Custom charts" estimated-lines="250">
+            - drawBarChart(canvas, data, options)
+            - drawLineChart(canvas, data, options)
+            - drawDonutChart(canvas, data, options)
+            - Responsive sizing based on container width
+            - Accessibility: aria-label on canvas with data summary
+          </section>
+        </file>
+      </file-locations>
+
+      <chart-specifications>
+        <chart type="bar" title="Session Duration (7 days)">
+          <x-axis>Days (Mon, Tue, Wed, ...)</x-axis>
+          <y-axis>Minutes (0-120)</y-axis>
+          <bars>Daily total session minutes, stacked if multiple sessions</bars>
+          <colors>Use selectedMode.accent for bars</colors>
+        </chart>
+        <chart type="line" title="Preset Effectiveness">
+          <x-axis>Preset names (Focus, Calm, Energize, Custom)</x-axis>
+          <y-axis>Completion rate (0-100%)</y-axis>
+          <line>Connect preset completion percentages</line>
+          <colors>Different color per preset (match mode chips)</colors>
+        </chart>
+        <chart type="donut" title="Mood Improvement">
+          <segments>
+            - Felt better: green
+            - Same: gray
+            - Felt worse: orange
+          </segments>
+          <center-label>XX% felt better</center-label>
+        </chart>
+      </chart-specifications>
+
+      <export-format>
+        <json>
+          <structure>
+            {
+              "exportDate": "2025-11-12T10:30:00Z",
+              "profileId": "default",
+              "version": "1.0",
+              "sessions": [
+                {
+                  "timestamp": 1699800000000,
+                  "track": "Focus Flow Mix",
+                  "preset": "Focus",
+                  "duration": 1800,
+                  "ritual": true,
+                  "moodBefore": "😰",
+                  "moodAfter": "😌",
+                  "notes": "Felt focused after 10 min"
+                },
+                ...
+              ]
+            }
+          </structure>
+        </json>
+        <csv>
+          <headers>timestamp,track,preset,duration,ritual,moodBefore,moodAfter,notes</headers>
+          <row-example>2025-11-12 10:30:00,Focus Flow Mix,Focus,1800,true,😰,😌,"Felt focused after 10 min"</row-example>
+        </csv>
+      </export-format>
+
+      <testing-requirements>
+        <manual-tests>
+          - Create 10 sample sessions via test helper
+          - Select 7-day range → verify summary stats
+          - Verify bar chart shows daily totals
+          - Verify line chart shows preset completion rates
+          - Verify donut chart shows mood improvement %
+          - Export JSON → open file → verify structure
+          - Export CSV → open in Excel → verify columns
+          - Test with 0 sessions → verify empty state
+          - Test with 100 sessions → verify performance &lt;500ms
+        </manual-tests>
+      </testing-requirements>
+
+      <performance-targets>
+        <target metric="Dashboard render time (100 sessions)" p95="500ms" />
+        <target metric="Export JSON generation (100 sessions)" p95="200ms" />
+        <target metric="Export CSV generation (100 sessions)" p95="300ms" />
+      </performance-targets>
+    </story>
+  </implementation-guidance>
+
+  <risks-and-mitigations>
+    <risk severity="HIGH">
+      <description>IndexedDB quota exceeded on long-term usage</description>
+      <probability>MEDIUM</probability>
+      <impact>Users cannot log new sessions, insights stale</impact>
+      <mitigation>
+        - Implement auto-cleanup: delete sessions older than 90 days
+        - Show quota usage indicator in settings
+        - Provide manual "Clear old sessions" action
+        - Export reminder before auto-cleanup
+      </mitigation>
+    </risk>
+
+    <risk severity="MEDIUM">
+      <description>Browser crash during session loses in-progress data</description>
+      <probability>LOW</probability>
+      <impact>Session not recorded, duration/mood lost</impact>
+      <mitigation>
+        - Write session start immediately (not buffered)
+        - Use window.onbeforeunload to attempt final update
+        - Accept that catastrophic crashes may lose 1 session
+        - Not worth complex recovery logic for rare edge case
+      </mitigation>
+    </risk>
+
+    <risk severity="MEDIUM">
+      <description>Chart rendering performance degrades with 500+ sessions</description>
+      <probability>MEDIUM</probability>
+      <impact>Insights dashboard slow to load</impact>
+      <mitigation>
+        - Default to 7-day view (fewer data points)
+        - Implement pagination for 30-day view (show weeks separately)
+        - Use requestIdleCallback for non-critical chart rendering
+        - Consider data sampling for very large datasets
+      </mitigation>
+    </risk>
+
+    <risk severity="LOW">
+      <description>Emoji rendering inconsistent across browsers/OS</description>
+      <probability>MEDIUM</probability>
+      <impact>Mood data misinterpreted in exports</impact>
+      <mitigation>
+        - Use text labels alongside emojis ("Anxious 😰")
+        - Export includes both emoji and text label
+        - Test across Chrome, Firefox, Safari on Mac/Windows/Android
+      </mitigation>
+    </risk>
+
+    <risk severity="LOW">
+      <description>Users forget to complete check-in prompt</description>
+      <probability>HIGH</probability>
+      <impact>Missing mood data reduces insights value</impact>
+      <mitigation>
+        - Auto-dismiss after 60 seconds (timeout)
+        - Allow retrospective mood entry via insights panel
+        - Show completion rate in settings ("You've rated 45% of sessions")
+        - Gentle encouragement, not mandatory
+      </mitigation>
+    </risk>
+  </risks-and-mitigations>
+
+  <success-criteria>
+    <criterion>All 3 stories implemented and tested</criterion>
+    <criterion>IndexedDB schema supports 1000+ sessions without performance degradation</criterion>
+    <criterion>Insights dashboard renders in &lt;500ms with 100 sessions</criterion>
+    <criterion>Export functionality generates valid JSON and CSV files</criterion>
+    <criterion>Accessibility audit passes (Pa11y, axe) with ≥95 score</criterion>
+    <criterion>Manual QA on Chrome, Firefox, Safari (desktop + mobile)</criterion>
+    <criterion>Zero data loss in offline scenarios (verified via testing)</criterion>
+    <criterion>User can export and share session data with therapist</criterion>
+  </success-criteria>
+
+  <completion-checklist>
+    <item>Story 4-1: Session schema and lifecycle hooks implemented</item>
+    <item>Story 4-2: Emoji check-in modal implemented with accessibility</item>
+    <item>Story 4-3: Insights dashboard with charts and export</item>
+    <item>Automated tests for IndexedDB operations (15+ tests)</item>
+    <item>Manual QA across browsers (Chrome, Firefox, Safari)</item>
+    <item>Performance profiling confirms &lt;500ms insights render</item>
+    <item>Accessibility audit with Pa11y/axe</item>
+    <item>Code review completed</item>
+    <item>Epic 4 retrospective document created</item>
+    <item>Sprint status updated to mark epic complete</item>
+  </completion-checklist>
+
+  <next-steps>
+    <step priority="1">Update sprint status: epic-4 → contexted</step>
+    <step priority="2">Run workflow story-context for Story 4-1</step>
+    <step priority="3">Implement Story 4-1 (Session Schema &amp; Lifecycle Hooks)</step>
+    <step priority="4">Code review Story 4-1</step>
+    <step priority="5">Implement Story 4-2 (Emoji Check-In)</step>
+    <step priority="6">Implement Story 4-3 (Insights Dashboard)</step>
+    <step priority="7">Epic 4 integration testing</step>
+    <step priority="8">Epic 4 retrospective</step>
+    <step priority="9">Plan Epic 5 (Sensor &amp; Adaptive Loop)</step>
+  </next-steps>
+</epic-context>
