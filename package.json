@@ -1,0 +1,27 @@
+{
+  "name": "mpe_8d",
+  "version": "1.0.0",
+  "main": "audio-engine.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node tests/file-intake.test.js && node tests/url-validation.test.js && node tests/gain-staging.test.js && node tests/session-logging.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kingpinzs/8D_audio_player.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kingpinzs/8D_audio_player/issues"
+  },
+  "homepage": "https://github.com/kingpinzs/8D_audio_player#readme",
+  "description": "",
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.5"
+  }
+}

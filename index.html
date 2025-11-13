@@ -8,6 +8,7 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="./audio-engine.js"></script>
+    <script src="./session-logging.js"></script>
     <style>
         :root {
             --bg-1: #f4f6ff;
@@ -782,6 +783,29 @@
         .sensor-card strong {
             display: block;
             margin-bottom: 8px;
+        }
+
+        .session-log-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .session-log-actions button {
+            border-radius: 999px;
+            border: 1px solid var(--card-border);
+            background: var(--surface);
+            padding: 10px 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+        }
+
+        .session-log-actions button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .alert-inline {
@@ -1790,6 +1814,25 @@ function App() {
             const [toastType, setToastType] = useState('info');
             const [isProcessingFiles, setIsProcessingFiles] = useState(false);
             const [isValidatingUrl, setIsValidatingUrl] = useState(false);
+
+            const showToast = React.useCallback((message, type = 'info') => {
+                if (toastTimeoutRef.current) {
+                    clearTimeout(toastTimeoutRef.current);
+                }
+
+                setToastMessage(message);
+                setToastType(type);
+                setA11yAnnouncement(message);
+
+                toastTimeoutRef.current = setTimeout(() => {
+                    setToastMessage('');
+                    toastTimeoutRef.current = null;
+                }, 5000);
+            }, []);
+
+            const [activeSessionId, setActiveSessionId] = useState(null);
+            const [isClearingSessions, setIsClearingSessions] = useState(false);
+            const [isTrimmingSessions, setIsTrimmingSessions] = useState(false);
             
             const selectedMode = MODE_LIBRARY[modeIndex];
             const nowPlayingTrack = currentTrackIndex !== null ? playlist[currentTrackIndex] : null;
@@ -1825,6 +1868,8 @@ function App() {
             const prevPlaylistLengthRef = useRef(playlist.length);
             const urlValidationControllerRef = useRef(null);
             const toastTimeoutRef = useRef(null);
+            const activeSessionIdRef = useRef(null);
+            const sessionRitualFlagRef = useRef(false);
 
             const cleanupBlobUrl = () => {
                 if (currentBlobUrlRef.current) {
@@ -1902,8 +1947,9 @@ function App() {
                 audioElementRef.current = audio;
                 audioEndedHandlerRef.current = () => {
                     cleanupBlobUrl();
+                    endSession(false);
                     if (typeof playNextRef.current === 'function') {
-                        playNextRef.current();
+                        playNextRef.current({ shouldEndActiveSession: false });
                     }
                 };
                 audio.addEventListener('ended', audioEndedHandlerRef.current);
@@ -2007,6 +2053,7 @@ function App() {
                 return () => {
                     window.removeEventListener('online', handleOnline);
                     window.removeEventListener('offline', handleOffline);
+                    endSession(true);
                     disposeAudioGraph();
                     teardownAudioElement();
                     if (audioContextRef.current) {
@@ -2039,6 +2086,33 @@ function App() {
                     }
                 };
             }, []);
+
+            useEffect(() => {
+                const sessionApi = getSessionLoggingApi();
+                if (!sessionApi) {
+                    console.warn('[SessionLogger] IndexedDB unavailable — session logging disabled.');
+                    return;
+                }
+                let canceled = false;
+                sessionApi.initDatabase().catch((error) => {
+                    if (canceled) {
+                        return;
+                    }
+                    console.error('[SessionLogger] Initialization failed:', error);
+                    showToast('Session logging unavailable. See console for details.', 'warning');
+                });
+
+                window.SessionLogger = {
+                    clearProfile: clearProfileSessions,
+                    clearSessionsOlderThanDays,
+                    exportSessions: (startDate, endDate) => sessionApi.getSessionsByDateRange(startDate, endDate)
+                };
+
+                return () => {
+                    canceled = true;
+                    delete window.SessionLogger;
+                };
+            }, [clearProfileSessions, clearSessionsOlderThanDays, showToast]);
 
             // Story 3-1: Persist active preset selection
             useEffect(() => {
@@ -2618,21 +2692,208 @@ function App() {
                 return typeMap[mimeType] || 'Audio';
             };
 
-            // Toast notification helper
-            const showToast = (message, type = 'info') => {
-                // Clear any existing timeout
-                if (toastTimeoutRef.current) {
-                    clearTimeout(toastTimeoutRef.current);
+            const SESSION_DEFAULT_PROFILE = 'default';
+
+            const getPresetLabel = React.useCallback(() => {
+                const presetMatch = allPresets.find(preset => preset.id === activePresetId);
+                if (presetMatch) {
+                    return presetMatch.name || presetMatch.label || 'Custom preset';
                 }
-                
-                setToastMessage(message);
-                setToastType(type);
-                
-                // Auto-dismiss after 5 seconds
-                toastTimeoutRef.current = setTimeout(() => {
-                    setToastMessage('');
-                    toastTimeoutRef.current = null;
-                }, 5000);
+                const defaultMode = MODE_LIBRARY.find(mode => mode.id === activePresetId);
+                if (defaultMode) {
+                    return defaultMode.label;
+                }
+                return MODE_LIBRARY[modeIndex]?.label || 'Focus';
+            }, [activePresetId, allPresets, modeIndex]);
+
+            const getSessionLoggingApi = () => {
+                if (typeof window === 'undefined' || typeof indexedDB === 'undefined') {
+                    return null;
+                }
+                return window.SessionLogging || null;
+            };
+
+            const handleSessionError = React.useCallback(async (error, phase) => {
+                if (!error) {
+                    return;
+                }
+                console.error(`[SessionLogger] Error during ${phase}:`, error);
+                if (error.name === 'QuotaExceededError') {
+                    const sessionApi = getSessionLoggingApi();
+                    if (sessionApi?.estimateStorageUsage) {
+                        try {
+                            const stats = await sessionApi.estimateStorageUsage();
+                            const approx = formatFileSize(stats.approxBytes || 0);
+                            showToast(`Session log full (~${approx}). Use the Insights panel to clear history.`, 'warning');
+                            return;
+                        } catch (statsError) {
+                            console.warn('[SessionLogger] Failed to estimate storage usage:', statsError);
+                        }
+                    }
+                    showToast('Session log full. Use Insights actions to clear old sessions.', 'warning');
+                } else if (error.name === 'VersionError') {
+                    showToast('Session log corrupted. Rebuilding...', 'error');
+                    try {
+                        const sessionApi = getSessionLoggingApi();
+                        if (sessionApi?.resetDatabase) {
+                            await sessionApi.resetDatabase();
+                            showToast('Session log reset. Try your action again.', 'success');
+                        }
+                    } catch (resetErr) {
+                        console.error('[SessionLogger] Failed to reset storage:', resetErr);
+                    }
+                } else {
+                    showToast('Session logging unavailable. See console for details.', 'warning');
+                }
+            }, [showToast]);
+
+            const startSession = React.useCallback(async ({ track, ritualUsed = false } = {}) => {
+                const sessionApi = getSessionLoggingApi();
+                if (!sessionApi) {
+                    return null;
+                }
+                if (!track) {
+                    console.warn('[SessionLogger] Missing track metadata; session not recorded.');
+                    return null;
+                }
+                if (activeSessionIdRef.current) {
+                    return activeSessionIdRef.current;
+                }
+
+                const record = {
+                    profileId: SESSION_DEFAULT_PROFILE,
+                    timestamp: Date.now(),
+                    trackId: track.id ?? track.url ?? track.name ?? `track-${Date.now()}`,
+                    trackName: track.name || track.label || 'Untitled Track',
+                    presetId: activePresetId,
+                    presetLabel: getPresetLabel(),
+                    ritualUsed: Boolean(ritualUsed),
+                    duration: 0,
+                    hrAvg: null,
+                    hrMax: null,
+                    moodBefore: null,
+                    moodAfter: null,
+                    notes: '',
+                    endedManually: false
+                };
+
+                try {
+                    if (performance?.mark) {
+                        performance.mark('session-start-begin');
+                    }
+                    const sessionId = await sessionApi.addSession(record);
+                    setActiveSessionId(sessionId);
+                    activeSessionIdRef.current = sessionId;
+                    if (performance?.mark) {
+                        performance.mark('session-start-end');
+                        const measure = performance.measure('session-start', 'session-start-begin', 'session-start-end');
+                        performance.clearMarks('session-start-begin');
+                        performance.clearMarks('session-start-end');
+                        performance.clearMeasures('session-start');
+                        console.log(`[SessionLogger] Session started: ${sessionId} in ${measure.duration.toFixed(2)}ms`);
+                    } else {
+                        console.log(`[SessionLogger] Session started: ${sessionId}`);
+                    }
+                    return sessionId;
+                } catch (error) {
+                    await handleSessionError(error, 'start');
+                    return null;
+                }
+            }, [activePresetId, getPresetLabel, handleSessionError]);
+
+            const endSession = React.useCallback(async (manual = false) => {
+                const sessionApi = getSessionLoggingApi();
+                if (!sessionApi || !activeSessionIdRef.current) {
+                    return;
+                }
+                const sessionId = activeSessionIdRef.current;
+                setActiveSessionId(null);
+                activeSessionIdRef.current = null;
+                try {
+                    const session = await sessionApi.getSession(sessionId);
+                    if (!session) {
+                        console.warn('[SessionLogger] Session missing during end call:', sessionId);
+                        return;
+                    }
+                    const rawDuration = (Date.now() - session.timestamp) / 1000;
+                    const durationSeconds = Number(rawDuration.toFixed(1));
+                    await sessionApi.updateSession(sessionId, {
+                        duration: durationSeconds,
+                        endedManually: manual
+                    });
+                    console.log(`[SessionLogger] Session ended: ${sessionId}, duration: ${durationSeconds}s`);
+                } catch (error) {
+                    await handleSessionError(error, 'end');
+                }
+            }, [handleSessionError]);
+
+            const clearProfileSessions = React.useCallback(async (profileId = SESSION_DEFAULT_PROFILE) => {
+                const sessionApi = getSessionLoggingApi();
+                if (!sessionApi) {
+                    showToast('Session logging not supported in this browser.', 'warning');
+                    return 0;
+                }
+                if (activeSessionIdRef.current) {
+                    await endSession(true);
+                }
+                try {
+                    const deletedCount = await sessionApi.clearProfile(profileId);
+                    if (deletedCount > 0) {
+                        showToast(`${deletedCount} sessions deleted`, 'success');
+                    } else {
+                        showToast('No sessions found for this profile.', 'info');
+                    }
+                    console.log(`[SessionLogger] Cleared ${deletedCount} sessions for profile "${profileId}"`);
+                    return deletedCount;
+                } catch (error) {
+                    await handleSessionError(error, 'clear-profile');
+                    return 0;
+                }
+            }, [endSession, handleSessionError, showToast]);
+
+            const clearSessionsOlderThanDays = React.useCallback(async (days = 30, profileId = SESSION_DEFAULT_PROFILE) => {
+                const sessionApi = getSessionLoggingApi();
+                if (!sessionApi) {
+                    showToast('Session logging not supported in this browser.', 'warning');
+                    return 0;
+                }
+                try {
+                    const deletedCount = await sessionApi.clearSessionsOlderThanDays(days, profileId);
+                    if (deletedCount > 0) {
+                        showToast(`${deletedCount} sessions older than ${days} days deleted`, 'success');
+                    } else {
+                        showToast(`No sessions older than ${days} days to delete.`, 'info');
+                    }
+                    console.log(`[SessionLogger] Cleared ${deletedCount} sessions older than ${days} days for "${profileId}"`);
+                    return deletedCount;
+                } catch (error) {
+                    await handleSessionError(error, 'trim-old');
+                    return 0;
+                }
+            }, [handleSessionError, showToast]);
+
+            const handleClearSessions = async () => {
+                if (isClearingSessions) {
+                    return;
+                }
+                setIsClearingSessions(true);
+                try {
+                    await clearProfileSessions(SESSION_DEFAULT_PROFILE);
+                } finally {
+                    setIsClearingSessions(false);
+                }
+            };
+
+            const handleTrimOldSessions = async () => {
+                if (isTrimmingSessions) {
+                    return;
+                }
+                setIsTrimmingSessions(true);
+                try {
+                    await clearSessionsOlderThanDays(30, SESSION_DEFAULT_PROFILE);
+                } finally {
+                    setIsTrimmingSessions(false);
+                }
             };
 
             const addLocalFiles = (files) => {
@@ -2885,10 +3146,19 @@ function App() {
                 }
             };
 
-            const playTrack = (index) => {
+            const playTrack = async (index, options = {}) => {
+                const { ritualUsed, shouldEndActiveSession = true } = options;
                 const activePlaylist = playlistRef.current || playlist;
                 const track = activePlaylist[index];
                 if (!track) return;
+
+                if (typeof ritualUsed !== 'undefined') {
+                    sessionRitualFlagRef.current = ritualUsed;
+                }
+
+                if (activeSessionIdRef.current && shouldEndActiveSession) {
+                    await endSession(true);
+                }
                 
                 // Story 3-3: Auto-restore last-used preset for this track
                 if (track.lastPresetId) {
@@ -2922,6 +3192,10 @@ function App() {
                     setupAudioGraph(audio);
                     audio.play().then(() => {
                         setIsPlaying(true);
+                        const resolvedRitualUsed = typeof ritualUsed === 'undefined'
+                            ? sessionRitualFlagRef.current
+                            : ritualUsed;
+                        startSession({ track, ritualUsed: resolvedRitualUsed });
                     }).catch(err => {
                         console.error('Playback error:', err);
                         alert('Playback error. If you opened this from file://, please run a local web server.\n\nQuick fix: Run "python3 -m http.server 8000" in this folder');
@@ -2972,7 +3246,8 @@ function App() {
                 setNeedsAudio(false);
             };
 
-            playNextRef.current = () => {
+            playNextRef.current = (options = {}) => {
+                const { shouldEndActiveSession = true } = options;
                 const playlistSnapshot = playlistRef.current;
                 if (!playlistSnapshot || playlistSnapshot.length === 0) {
                     return;
@@ -2984,17 +3259,17 @@ function App() {
                     indexSnapshot < 0 ||
                     indexSnapshot >= playlistSnapshot.length
                 ) {
-                    playTrack(0);
+                    playTrack(0, { shouldEndActiveSession });
                     return;
                 }
                 const nextIndex = (indexSnapshot + 1) % playlistSnapshot.length;
-                playTrack(nextIndex);
+                playTrack(nextIndex, { shouldEndActiveSession });
             };
 
             const togglePlayPause = () => {
                 if (!audioElementRef.current) {
                     if (playlist.length > 0) {
-                        playTrack(0);
+                        playTrack(0, { ritualUsed: sessionRitualFlagRef.current });
                     }
                     return;
                 }
@@ -3004,9 +3279,13 @@ function App() {
                 if (isPlaying) {
                     audio.pause();
                     setIsPlaying(false);
+                    endSession(true);
                 } else {
                     audio.play().then(() => {
                         setIsPlaying(true);
+                        if (!activeSessionIdRef.current && nowPlayingTrack) {
+                            startSession({ track: nowPlayingTrack, ritualUsed: sessionRitualFlagRef.current });
+                        }
                     });
                 }
             };
@@ -3025,7 +3304,7 @@ function App() {
                 playTrack(prevIndex);
             };
 
-            const removeFromPlaylist = (id) => {
+            const removeFromPlaylist = async (id) => {
                 const currentList = playlist;
                 const removedIndex = currentList.findIndex(track => track.id === id);
                 if (removedIndex === -1) {
@@ -3037,6 +3316,7 @@ function App() {
                 const prevIndex = currentTrackIndex;
                 const removedWasCurrent = prevIndex === removedIndex;
                 if (removedWasCurrent) {
+                    await endSession(true);
                     teardownAudioElement();
                     disposeAudioGraph();
                     setIsPlaying(false);
@@ -3079,7 +3359,10 @@ function App() {
                 return true;
             };
 
-            const launchRitualPlayback = () => {
+            const launchRitualPlayback = ({ ritualUsed } = {}) => {
+                const resolvedRitualUsed = typeof ritualUsed === 'boolean' ? ritualUsed : ritualStatus === 'breathing';
+                sessionRitualFlagRef.current = resolvedRitualUsed;
+
                 // Log ritual completion telemetry
                 try {
                     const ritualEndTs = Date.now();
@@ -3103,18 +3386,21 @@ function App() {
                 setBreathingPhase('');
                 
                 if (currentTrackIndex === null) {
-                    playTrack(0);
+                    playTrack(0, { ritualUsed: resolvedRitualUsed });
                     return;
                 }
                 const audio = audioElementRef.current;
                 if (audio) {
                     audio.play().then(() => {
                         setIsPlaying(true);
+                        if (nowPlayingTrack) {
+                            startSession({ track: nowPlayingTrack, ritualUsed: resolvedRitualUsed });
+                        }
                     }).catch(() => {
                         setHeroMessage('Press play to continue your ritual.');
                     });
                 } else {
-                    playTrack(currentTrackIndex);
+                    playTrack(currentTrackIndex, { ritualUsed: resolvedRitualUsed });
                 }
             };
 
@@ -3137,7 +3423,7 @@ function App() {
                     } catch (e) {
                         console.warn('Failed to log ritual skip', e);
                     }
-                    launchRitualPlayback();
+                    launchRitualPlayback({ ritualUsed: false });
                     return;
                 }
                 
@@ -3202,7 +3488,7 @@ function App() {
                 // Auto-launch after 20 seconds
                 ritualTimeoutRef.current = setTimeout(() => {
                     clearRitualTimers();
-                    launchRitualPlayback();
+                    launchRitualPlayback({ ritualUsed: true });
                 }, HERO_BREATH_DURATION * 1000);
             };
 
@@ -3227,7 +3513,7 @@ function App() {
                 clearRitualTimers();
                 setRitualCountdown(0);
                 setBreathingPhase('');
-                launchRitualPlayback();
+                launchRitualPlayback({ ritualUsed: false });
             };
 
             const toggleSkipRitualPref = () => {
@@ -3841,8 +4127,16 @@ return (
                                                 role="button"
                                                 tabIndex={0}
                                                 aria-current={currentTrackIndex === index}
-                                                onClick={() => playTrack(index)}
-                                                onKeyDown={(event) => event.key === 'Enter' && playTrack(index)}
+                                                onClick={() => {
+                                                    sessionRitualFlagRef.current = false;
+                                                    playTrack(index, { ritualUsed: false });
+                                                }}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === 'Enter') {
+                                                        sessionRitualFlagRef.current = false;
+                                                        playTrack(index, { ritualUsed: false });
+                                                    }
+                                                }}
                                             >
                                                 <span className="badge">{track.source}</span>
                                                 <div style={{ flex: 1 }}>
@@ -4024,6 +4318,28 @@ return (
                             <div className="panel sensor-card">
                                 <strong>Sensor readiness</strong>
                                 <p>{isOnline ? 'Optional BLE strap ready—pair via browser settings.' : 'Reconnect to the internet to enable streaming + sensors.'}</p>
+                            </div>
+                            <div className="panel insight-card">
+                                <p className="eyebrow">Session log</p>
+                                <p className="hero-support">
+                                    {activeSessionId ? `Logging session #${activeSessionId}` : 'Idle — starts automatically when playback begins.'}
+                                </p>
+                                <div className="session-log-actions">
+                                    <button
+                                        type="button"
+                                        onClick={handleClearSessions}
+                                        disabled={isClearingSessions}
+                                    >
+                                        {isClearingSessions ? 'Clearing…' : 'Clear profile history'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleTrimOldSessions}
+                                        disabled={isTrimmingSessions}
+                                    >
+                                        {isTrimmingSessions ? 'Trimming…' : 'Clear 30-day+ history'}
+                                    </button>
+                                </div>
                             </div>
                         </aside>
                     </div>
