@@ -2793,6 +2793,8 @@ function App() {
                 }
                 
                 let time = 0;
+                // Use a slightly longer interval to allow meaningful ramps (avoid overlapping automation)
+                const ROTATION_INTERVAL_MS = 100; // 100ms ticks
                 rotationIntervalRef.current = setInterval(() => {
                     const nodes = rotationNodesRef.current;
                     const ctx = audioContextRef.current;
@@ -2809,7 +2811,7 @@ function App() {
                     
                     const angle = 2 * Math.PI * speed * time;
                     let panPosition = 0;
-                    
+
                     // Calculate pan position based on movement pattern
                     switch(movementPattern) {
                         case 'circle':
@@ -2830,15 +2832,18 @@ function App() {
                             }
                             break;
                         case 'quadrant':
-                            // New pattern suggested by user for a more distinct circular feel.
-                            // Moves through four points: Right -> Center (quiet) -> Left -> Center (quiet)
-                            const quadrant = Math.floor((angle / (2 * Math.PI)) * 4);
-                            switch (quadrant) {
-                                case 0: panPosition = 1; break; // Full Right
-                                case 1: panPosition = 0; break; // Center
-                                case 2: panPosition = -1; break; // Full Left
-                                case 3: panPosition = 0; break; // Center
-                            }
+                            // Smooth quadrant: interpolate between four anchor points to create perceivable sweeps
+                            // Anchor positions: [1, 0, -1, 0] corresponding to Right -> Center -> Left -> Center
+                            const fullCycle = (angle / (2 * Math.PI)); // cycles (may be >1)
+                            const cyclePos = fullCycle - Math.floor(fullCycle); // 0..1 within cycle
+                            const segment = Math.floor(cyclePos * 4); // 0..3
+                            const segmentPhase = (cyclePos * 4) - segment; // 0..1 within segment
+
+                            const anchors = [1, 0, -1, 0];
+                            const a = anchors[segment];
+                            const b = anchors[(segment + 1) % anchors.length];
+                            // Linear interpolation between anchor points (can be swapped to smoother easing later)
+                            panPosition = a + (b - a) * segmentPhase;
                             break;
                         default:
                             panPosition = Math.sin(angle);
@@ -2852,9 +2857,9 @@ function App() {
                     const normalizationFactor = 0.5; // Base gain per channel before panning
                     const crossChannelMix = 0.15; // Reduced cross-channel bleeding
 
-                    // For the 'quadrant' pattern, reduce gain in the center position for a "quieter" feel.
-                    const isQuadrantCenter = movementPattern === 'quadrant' && panPosition === 0;
-                    const quadrantGainMultiplier = isQuadrantCenter ? 0.7 : 1.0;
+                    // For the 'quadrant' pattern, reduce gain in the center position but tolerate floating point precision
+                    const isQuadrantCenter = movementPattern === 'quadrant' && Math.abs(panPosition) < 0.12;
+                    const quadrantGainMultiplier = isQuadrantCenter ? 0.85 : 1.0;
 
                     
                     // Main channel gains (normalized to prevent sum > 1.0)
@@ -2869,14 +2874,22 @@ function App() {
                     const targetLeftGain = Math.max(0.001, leftChannelGain * normalizationFactor * quadrantGainMultiplier);
                     const targetRightGain = Math.max(0.001, rightChannelGain * normalizationFactor * quadrantGainMultiplier);
 
-                    
                     // Cross-channel gains (proportional to opposite channel, heavily attenuated)
                     const targetLeftToRight = Math.max(0.001, rightChannelGain * crossChannelMix * normalizationFactor);
                     const targetRightToLeft = Math.max(0.001, leftChannelGain * crossChannelMix * normalizationFactor);
+
+                    // Also update delay and cross-delay gains to add spatial perception cues (proportional to pan)
+                    const delayBase = 0.05 * spatialDepth;
+                    const crossDelayBase = 0.03 * spatialDepth;
+                    const targetDelayLeft = Math.max(0.0001, delayBase * Math.abs(panPosition));
+                    const targetDelayRight = Math.max(0.0001, delayBase * Math.abs(panPosition));
+                    const targetCrossDelayLeft = Math.max(0.0001, crossDelayBase * Math.abs(panPosition));
+                    const targetCrossDelayRight = Math.max(0.0001, crossDelayBase * Math.abs(panPosition));
                     
                     // Use exponentialRampToValueAtTime for smoother transitions (prevents clicks better than linear)
                     const now = ctx.currentTime;
-                    const rampTime = now + 0.016; // ~1 frame at 60fps for responsive panning
+                    const rampSec = 0.1; // 100ms ramp for perceptible movement
+                    const rampTime = now + rampSec;
                     
                     // Clamp to prevent automation errors
                     const clamp = (val) => Math.max(0.0001, Math.min(1, val));
@@ -2892,9 +2905,28 @@ function App() {
                     
                     nodes.rightToLeftGain.gain.setValueAtTime(clamp(nodes.rightToLeftGain.gain.value), now);
                     nodes.rightToLeftGain.gain.exponentialRampToValueAtTime(clamp(targetRightToLeft), rampTime);
+
+                    // Ramp delay/cross-delay gains as well to enhance spatial cues
+                    if (nodes.delayGainLeft) {
+                        nodes.delayGainLeft.gain.setValueAtTime(clamp(nodes.delayGainLeft.gain.value), now);
+                        nodes.delayGainLeft.gain.exponentialRampToValueAtTime(clamp(targetDelayLeft), rampTime);
+                    }
+                    if (nodes.delayGainRight) {
+                        nodes.delayGainRight.gain.setValueAtTime(clamp(nodes.delayGainRight.gain.value), now);
+                        nodes.delayGainRight.gain.exponentialRampToValueAtTime(clamp(targetDelayRight), rampTime);
+                    }
+                    if (nodes.crossGainLeft) {
+                        nodes.crossGainLeft.gain.setValueAtTime(clamp(nodes.crossGainLeft.gain.value), now);
+                        nodes.crossGainLeft.gain.exponentialRampToValueAtTime(clamp(targetCrossDelayLeft), rampTime);
+                    }
+                    if (nodes.crossGainRight) {
+                        nodes.crossGainRight.gain.setValueAtTime(clamp(nodes.crossGainRight.gain.value), now);
+                        nodes.crossGainRight.gain.exponentialRampToValueAtTime(clamp(targetCrossDelayRight), rampTime);
+                    }
                     
-                    time += 0.05;
-                }, 50);
+                    // Increment time according to interval (seconds)
+                    time += ROTATION_INTERVAL_MS / 1000;
+                }, ROTATION_INTERVAL_MS);
             };
 
             const visualize = () => {
