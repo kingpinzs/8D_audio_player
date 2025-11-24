@@ -7,7 +7,7 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "node tests/file-intake.test.js && node tests/url-validation.test.js && node tests/gain-staging.test.js && node tests/session-logging.test.js"
+    "test": "node tests/file-intake.test.js && node tests/url-validation.test.js && node tests/gain-staging.test.js && node tests/session-logging.test.js && node tests/preset-crud.test.js"
   },
   "repository": {
     "type": "git",

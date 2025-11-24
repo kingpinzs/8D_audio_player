@@ -1,534 +1,289 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<bmm-context>
-    <meta>
-        <story-id>3-3-custom-preset-crud-auto-restore</story-id>
-        <epic-id>E3</epic-id>
-        <project>mp3_to_8D</project>
-        <author>GitHub Copilot</author>
-        <timestamp>2025-11-12T10:00:00Z</timestamp>
-        <summary>
-            Technical context for implementing custom preset CRUD operations, localStorage persistence,
-            and auto-restore functionality for playlist tracks. This story builds on the advanced
-            controls from Story 3-2 and the preset application logic from Story 3-1.
-        </summary>
-    </meta>
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>E3</epicId>
+    <storyId>3-3</storyId>
+    <title>Custom Preset CRUD & Auto-Restore</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-24</generatedAt>
+    <generator>BMAD Story Context Workflow v6</generator>
+    <sourceStoryPath>docs/stories/3-3-custom-preset-crud.md</sourceStoryPath>
+  </metadata>
 
-    <spec-references>
-        <file path="docs/stories/3-3-custom-preset-crud.md" />
-        <acceptance-criteria>
-            <ac id="AC1" summary="Save Custom Preset from Advanced Controls" />
-            <ac id="AC2" summary="Preset List UI Shows All Presets" />
-            <ac id="AC3" summary="Edit &amp; Delete Custom Presets" />
-            <ac id="AC4" summary="Playlist Track Auto-Restore" />
-            <ac id="AC5" summary="Preset Reordering" />
-        </acceptance-criteria>
-    </spec-references>
+  <story>
+    <asA>parent creating a bedtime routine for my neurodivergent child</asA>
+    <iWant>to save our "Calm Bedtime" preset and have it auto-apply when we play our bedtime playlist</iWant>
+    <soThat>we have consistent calming audio every night, reducing anxiety triggers</soThat>
+    <tasks>
+      - Task 3-3-1: Define Preset Storage Schema & Helpers (45 min)
+      - Task 3-3-2: Build SavePresetDialog Component (60 min)
+      - Task 3-3-3: Build PresetList Component (90 min)
+      - Task 3-3-4: Implement Track Auto-Restore Logic (45 min)
+      - Task 3-3-5: Add Delete Confirmation Modal (20 min)
+      - Task 3-3-6: Implement Export/Import (Stretch Goal, 45 min)
+    </tasks>
+  </story>
 
-    <file-inventory>
-        <file path="index.html" role="primary-target">
-            <description>
-                The single HTML file containing all application logic. All new React components,
-                state, helper functions, and CSS will be added here.
-            </description>
-        </file>
-        <file path="audio-engine.js" role="reference">
-            <description>
-                No changes are expected. The preset parameters map directly to the existing
-                audio graph controls.
-            </description>
-        </file>
-        <file path="docs/stories/3-3-custom-preset-crud.md" role="source-of-truth">
-            <description>
-                The user story and acceptance criteria document.
-            </description>
-        </file>
-    </file-inventory>
+  <acceptanceCriteria>
+    <criterion id="AC1">
+      <title>Save Custom Preset from Advanced Controls</title>
+      <summary>Modal dialog with name/description inputs creates preset in localStorage with 8 audio parameters, validates name length (max 50 chars), handles quota exceeded errors</summary>
+    </criterion>
+    <criterion id="AC2">
+      <title>Preset List UI Shows All Presets</title>
+      <summary>Display defaults (Focus/Calm/Energize) with "Default" badge + custom presets sorted by last used, keyboard navigation with Arrow keys, active preset highlighted</summary>
+    </criterion>
+    <criterion id="AC3">
+      <title>Edit & Delete Custom Presets</title>
+      <summary>Edit button opens dialog with pre-filled values, delete shows confirmation modal with warning if preset used by tracks, deleting active preset falls back to focus</summary>
+    </criterion>
+    <criterion id="AC4">
+      <title>Playlist Track Auto-Restore</title>
+      <summary>Track schema extended with lastPresetId field, replaying track restores preset before audio starts, handles deleted presets by falling back to focus</summary>
+    </criterion>
+    <criterion id="AC5">
+      <title>Preset Reordering (Drag/Drop or Arrows)</title>
+      <summary>Drag handle and arrow buttons allow reordering, order persists in preset-order localStorage array, keyboard shortcuts (Ctrl+Up/Down)</summary>
+    </criterion>
+    <criterion id="AC6">
+      <title>Export/Import Preset JSON (Stretch Goal)</title>
+      <summary>Export button downloads .preset.json file, import validates structure and handles name collisions with auto-rename</summary>
+    </criterion>
+  </acceptanceCriteria>
 
-    <implementation-plan>
-        <phase title="State Management &amp; Data Persistence">
-            <step title="Define localStorage Schema">
-                <details>
-                    Establish clear keys for storing custom presets and their display order.
-                    - `mpe_8d_custom_presets`: A JSON string representing an object where keys are preset IDs.
-                    - `mpe_8d_preset_order`: A JSON string representing an array of preset IDs.
-                </details>
-                <code-snippet lang="javascript" purpose="schema-definition">
-                    <![CDATA[
-// localStorage key for custom presets
-const CUSTOM_PRESETS_KEY = 'mpe_8d_custom_presets';
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/PRD.md</path>
+        <title>mp3_to_8D Product Requirements Document</title>
+        <section>Scope - MVP</section>
+        <snippet>Preset management – Focus/Calm/Energize quick modes + advanced sliders + ability to save custom stacks. Telemetry scaffolding – IndexedDB schema for session logs.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture – mp3_to_8D</title>
+        <section>3.3 Preset & Mode Engine</section>
+        <snippet>Preset definitions stored in IndexedDB store presets with schema {id, mode, params, tags, lastUsedAt, sensorOverrides}. usePresetEngine returns APIs to applyPreset(id), savePreset(payload), deletePreset(id).</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-3-preset-mode-orchestration.context.xml</path>
+        <title>Epic 3 Technical Context</title>
+        <section>Story 3-3 - Custom Preset CRUD & Auto-Restore</section>
+        <snippet>Users save, rename, reorder, delete custom presets. Each playlist track stores last-used preset ID for auto-restore on replay. Target: ≥80% preset reuse rate, ≥60% preset adoption, ≥90% auto-restore success.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/3-1-quick-mode-presets.md</path>
+        <title>Story 3-1 – Quick Mode Presets</title>
+        <section>Implementation Summary</section>
+        <snippet>applyPreset() helper updates all 8 audio parameters in batch. activePresetId state tracks current selection. localStorage persistence with validation.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/3-2-advanced-controls-drawer.md</path>
+        <title>Story 3-2 – Advanced Controls Drawer & Live Binding</title>
+        <section>Key Features</section>
+        <snippet>AdvancedControls component with 8 sliders/dropdowns. Live parameter binding leverages existing Epic 1 useEffects. Keyboard shortcut: Ctrl+E to toggle drawer.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>index.html</path>
+        <kind>React component (main application file)</kind>
+        <symbol>MODE_LIBRARY</symbol>
+        <lines>666-717</lines>
+        <reason>Contains default preset definitions (Focus, Calm, Energize) with structure that custom presets will follow. Defines preset schema with 8 audio parameters.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>React state hook</kind>
+        <symbol>activePresetId</symbol>
+        <lines>1783</lines>
+        <reason>Story 3-1 implementation: Tracks currently active preset by ID. Custom presets will use this state to apply and track active selections.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>Helper function</kind>
+        <symbol>applyPreset</symbol>
+        <lines>2087-2114</lines>
+        <reason>Story 3-1 implementation: Applies all 8 audio parameters from preset object. Custom presets will call this function to apply saved parameter combinations.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>localStorage pattern</kind>
+        <symbol>localStorage persistence</symbol>
+        <lines>2028-2035, 2117-2125</lines>
+        <reason>Story 3-1 pattern: Load saved preset on mount with validation, persist changes with try/catch. Custom presets will follow same error handling pattern.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>React component</kind>
+        <symbol>SavePresetDialog</symbol>
+        <lines>1598-1746</lines>
+        <reason>Story 3-3 implementation: Dialog component for saving/editing presets with name/description/color validation. Already implemented, may need enhancement.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>Helper functions</kind>
+        <symbol>addLocalFiles</symbol>
+        <lines>2899-2950</lines>
+        <reason>Playlist file intake creates track objects with metadata. Track schema will be extended with lastPresetId field for auto-restore.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <node>
+        <package name="fake-indexeddb" version="^6.2.5" scope="devDependencies"/>
+      </node>
+      <runtime>
+        <library name="React" version="18 (UMD)" source="CDN"/>
+        <library name="ReactDOM" version="18 (UMD)" source="CDN"/>
+        <library name="Babel Standalone" version="latest" source="CDN"/>
+      </runtime>
+      <browser-apis>
+        <api name="localStorage" usage="Preset and order persistence"/>
+        <api name="Web Audio API" usage="Parameter application"/>
+        <api name="Drag and Drop API" usage="Preset reordering"/>
+      </browser-apis>
+    </dependencies>
+  </artifacts>
 
-// localStorage key for the order of all presets (default + custom)
-const PRESET_ORDER_KEY = 'mpe_8d_preset_order';
+  <constraints>
+    <development>
+      - Follow Story 3-1 localStorage patterns: try/catch error handling, validation on load, graceful fallback to defaults
+      - Follow Story 3-2 parameter binding patterns: Use existing state setters, leverage React 18 automatic batching
+      - Maintain single-file architecture: All components, helpers, and state in index.html
+      - Preserve backward compatibility: Existing tracks without lastPresetId should default to null, not break
+      - localStorage quota handling: Show user-friendly error on QuotaExceededError, suggest deleting old presets
+      - Deleted preset handling: Always fall back to 'focus' default, never crash or show undefined errors
+      - Follow Epic 2 toast pattern: showToast(message, type, duration) for user feedback
+    </development>
+    <architecture>
+      - No backend: All persistence uses localStorage/IndexedDB client-side only
+      - PWA-ready: Implementation must work offline with cached assets
+      - Accessibility: All modals and controls keyboard navigable, proper ARIA labels
+      - React patterns: Functional components with hooks, avoid class components
+      - State management: Local component state + lifted state to App component, no Redux/context needed yet
+    </architecture>
+    <performance>
+      - Preset application latency: &lt;100ms from selection to audio parameter update
+      - localStorage operations: Wrapped in try/catch to prevent UI blocking
+      - Drag/drop reordering: Debounced to avoid excessive localStorage writes
+      - Track auto-restore: Should not delay playback start (apply preset asynchronously if needed)
+    </performance>
+    <testing>
+      - Must pass existing regression tests: gain-staging.test.js, file-intake.test.js, url-validation.test.js
+      - Unit tests: Test CRUD helpers (save, load, update, delete, getAllPresets) with fake-indexeddb
+      - Integration tests: Test dialog → save → list update flow, delete → fallback flow
+      - Manual tests: Accessibility (keyboard navigation), edge cases (quota exceeded, name collision)
+    </testing>
+  </constraints>
 
-/* Example structure for a custom preset object in localStorage:
-{
-  "custom-1699999999999": {
-    "id": "custom-1699999999999",
-    "name": "Deep Flow",
-    "createdAt": 1699999999999,
-    "isCustom": true,
-    "preset": {
-      "speed": 0.4,
-      "intensity": 0.75,
-      "spatialDepth": 0.5,
-      "movement": "figure8",
-      "binaural": { "enabled": true, "freq": 10 },
-      "noise": { "type": "pink", "volume": 0.1 }
-    }
-  }
-}
-*/
-                    ]]>
-                </code-snippet>
-            </step>
-
-            <step title="Create State Hooks">
-                <details>
-                    Introduce new state variables in the `App` component to manage custom presets
-                    and the combined list of all presets.
-                </details>
-                <code-snippet lang="jsx" purpose="state-hooks">
-                    <![CDATA[
-// In App() component, around line 1240
-const [customPresets, setCustomPresets] = useState({});
-const [allPresets, setAllPresets] = useState([]); // Combined default + custom presets
-const [isSavePresetModalOpen, setIsSavePresetModalOpen] = useState(false);
-const [editingPreset, setEditingPreset] = useState(null); // Holds preset being edited or null
-                    ]]>
-                </code-snippet>
-            </step>
-
-            <step title="Implement CRUD Helper Functions">
-                <details>
-                    Create a set of helper functions within the `App` component's scope for
-                    loading, saving, updating, and deleting presets from localStorage. These
-                    will encapsulate the persistence logic.
-                </details>
-                <code-snippet lang="javascript" purpose="crud-helpers">
-                    <![CDATA[
-// Place near other helpers, e.g., after toggleSkipRitualPref() around line 2605
-
-const loadCustomPresets = () => {
-    try {
-        const saved = localStorage.getItem(CUSTOM_PRESETS_KEY);
-        return saved ? JSON.parse(saved) : {};
-    } catch (e) {
-        console.warn('Failed to load custom presets', e);
-        showToast('Could not load custom presets.', 'error');
-        return {};
-    }
-};
-
-const saveCustomPreset = (id, presetData) => {
-    try {
-        const presets = loadCustomPresets();
-        presets[id] = presetData;
-        localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(presets));
-        return true;
-    } catch (e) {
-        if (e.name === 'QuotaExceededError') {
-            showToast('Storage is full. Could not save preset.', 'error');
-        } else {
-            showToast('Error saving preset.', 'error');
+  <interfaces>
+    <interface>
+      <name>applyPreset</name>
+      <kind>Function signature</kind>
+      <signature>applyPreset(presetObject: Object, presetId: string) : void</signature>
+      <path>index.html:2087-2114</path>
+      <description>Story 3-1 implementation. Applies audio parameters to Web Audio graph. presetObject contains {speed, intensity, spatialDepth, movement, binaural: {enabled, freq}, noise: {type, volume}}. Custom presets call this with saved parameter object.</description>
+    </interface>
+    <interface>
+      <name>localStorage preset storage</name>
+      <kind>Data contract</kind>
+      <signature>
+        localStorage.setItem('custom-presets', JSON.stringify({
+          'custom-preset-123': {
+            id: string,
+            name: string (max 50 chars),
+            description: string (max 200 chars),
+            createdAt: number (timestamp),
+            lastUsedAt: number (timestamp),
+            preset: PresetObject (8 audio parameters),
+            color: string (hex color),
+            tags: string[]
+          }
+        }))
+      </signature>
+      <path>Story specification Task 3-3-1</path>
+      <description>localStorage schema for custom preset persistence. Key 'custom-presets' stores object map of preset IDs to preset definitions.</description>
+    </interface>
+    <interface>
+      <name>localStorage preset order</name>
+      <kind>Data contract</kind>
+      <signature>
+        localStorage.setItem('preset-order', JSON.stringify([
+          'focus', 'calm', 'energize', // defaults always first
+          'custom-preset-1', 'custom-preset-2', // custom in user-defined order
+        ]))
+      </signature>
+      <path>Story specification AC5</path>
+      <description>Defines display order for preset list. Defaults always appear first, followed by custom presets in user-defined order.</description>
+    </interface>
+    <interface>
+      <name>Track schema extension</name>
+      <kind>Data model</kind>
+      <signature>
+        track = {
+          id: number,
+          name: string,
+          source: 'local' | 'url',
+          file: File | null,
+          url: string | null,
+          lastPresetId: string | null,       // NEW: Auto-populated when preset changes
+          preferredPresetId: string | null,  // NEW: User can pin preset (future)
+          metadata: Object
         }
-        console.error('Failed to save preset:', e);
-        return false;
-    }
-};
+      </signature>
+      <path>Story specification AC4</path>
+      <description>Extends existing track schema with preset tracking fields. lastPresetId auto-populated during playback, preferredPresetId reserved for future enhancement.</description>
+    </interface>
+    <interface>
+      <name>getAllPresets</name>
+      <kind>Helper function to implement</kind>
+      <signature>getAllPresets() : Array&lt;PresetObject&gt;</signature>
+      <path>Story specification Task 3-3-1</path>
+      <description>Merges MODE_LIBRARY defaults with custom presets from localStorage, applies user-defined order from preset-order array, returns combined sorted list for UI rendering.</description>
+    </interface>
+  </interfaces>
 
-const deleteCustomPreset = (id) => {
-    try {
-        const presets = loadCustomPresets();
-        delete presets[id];
-        localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(presets));
-        return true;
-    } catch (e) {
-        showToast('Error deleting preset.', 'error');
-        console.error('Failed to delete preset:', e);
-        return false;
-    }
-};
-
-// useEffect to load presets on startup
-useEffect(() => {
-    const loadedPresets = loadCustomPresets();
-    setCustomPresets(loadedPresets);
-}, []);
-
-// useEffect to combine default and custom presets into a single list
-useEffect(() => {
-    const defaults = MODE_LIBRARY.map(mode => ({ ...mode, isCustom: false }));
-    const customs = Object.values(customPresets).map(p => ({
-        id: p.id,
-        label: p.name,
-        short: 'Custom',
-        heroCopy: p.name,
-        description: 'Your custom saved preset.',
-        accent: '#8b5cf6', // A default accent for custom presets
-        preset: p.preset,
-        isCustom: true,
-    }));
-    setAllPresets([...defaults, ...customs]);
-}, [customPresets]);
-                    ]]>
-                </code-snippet>
-            </step>
-        </phase>
-
-        <phase title="UI Implementation">
-            <step title="Create SavePresetModal Component">
-                <details>
-                    A new modal component for creating and editing presets. It will be conditionally
-                    rendered by the `App` component.
-                </details>
-                <code-snippet lang="jsx" purpose="modal-component">
-                    <![CDATA[
-// Define as a new component function before App(), around line 1200
-
-function SavePresetModal({ isOpen, onClose, onSave, existingPreset, currentParams }) {
-    if (!isOpen) return null;
-
-    const [name, setName] = React.useState(existingPreset ? existingPreset.name : '');
-    const [error, setError] = React.useState('');
-
-    const handleSave = () => {
-        if (name.trim().length === 0) {
-            setError('Preset name is required.');
-            return;
-        }
-        if (name.length > 30) {
-            setError('Name must be 30 characters or less.');
-            return;
-        }
-        
-        const presetToSave = {
-            id: existingPreset ? existingPreset.id : `custom-${Date.now()}`,
-            name: name.trim(),
-            createdAt: existingPreset ? existingPreset.createdAt : Date.now(),
-            isCustom: true,
-            preset: existingPreset ? existingPreset.preset : currentParams,
-        };
-        onSave(presetToSave);
-        onClose();
-    };
-
-    return (
-        <div className="modal-overlay">
-            <div className="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-                <h3 id="modal-title">{existingPreset ? 'Edit Preset' : 'Save Preset'}</h3>
-                <div className="form-group">
-                    <label htmlFor="preset-name">Preset Name</label>
-                    <input
-                        id="preset-name"
-                        type="text"
-                        value={name}
-                        onChange={(e) => { setName(e.target.value); setError(''); }}
-                        placeholder="e.g., Morning Focus"
-                        maxLength="30"
-                    />
-                    {error && <p className="error-text">{error}</p>}
-                </div>
-                <div className="modal-actions">
-                    <button type="button" className="ghost-btn" onClick={onClose}>Cancel</button>
-                    <button type="button" className="primary-btn" onClick={handleSave}>Save</button>
-                </div>
-            </div>
-        </div>
-    );
-}
-                    ]]>
-                </code-snippet>
-            </step>
-
-            <step title="Add 'Save Preset' Button to AdvancedControls">
-                <details>
-                    Modify the `AdvancedControls` component to include a "Save as Preset..." button
-                    within its `details` element. This button will trigger the save modal.
-                </details>
-                <code-snippet lang="jsx" purpose="save-button">
-                    <![CDATA[
-// In AdvancedControls component, inside the <details> element, after the grid.
-// Around line 1180.
-
-<div className="advanced-controls-actions">
-    <button type="button" className="text-btn" onClick={onSavePreset}>
-        💾 Save as Preset...
-    </button>
-    {/* We can add a reset button here later */}
-</div>
-
-// The `onSavePreset` prop will be passed down from App.
-// App will implement it as:
-const handleOpenSaveModal = () => {
-    setEditingPreset(null); // Ensure it's a new preset
-    setIsSavePresetModalOpen(true);
-};
-                    ]]>
-                </code-snippet>
-            </step>
-
-            <step title="Create CustomPresetChips Component">
-                <details>
-                    A new component to render the list of custom presets below the default mode chips.
-                    This will handle applying, editing, and deleting custom presets.
-                </details>
-                <code-snippet lang="jsx" purpose="preset-chips-component">
-                    <![CDATA[
-// Define as a new component function before App(), around line 1150
-
-function CustomPresetChips({ presets, activeId, onSelect, onEdit, onDelete }) {
-    if (presets.length === 0) return null;
-
-    return (
-        <div className="custom-preset-chips" role="toolbar" aria-label="Custom presets">
-            {presets.map(preset => (
-                <div
-                    key={preset.id}
-                    className={`custom-chip ${activeId === preset.id ? 'active' : ''}`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSelect(preset)}
-                    onKeyDown={(e) => e.key === 'Enter' && onSelect(preset)}
-                >
-                    <span className="chip-label">{preset.name}</span>
-                    <div className="chip-actions">
-                        <button
-                            type="button"
-                            aria-label={`Edit ${preset.name}`}
-                            onClick={(e) => { e.stopPropagation(); onEdit(preset); }}
-                        >✏️</button>
-                        <button
-                            type="button"
-                            aria-label={`Delete ${preset.name}`}
-                            onClick={(e) => { e.stopPropagation(); onDelete(preset.id); }}
-                        >🗑️</button>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
-                    ]]>
-                </code-snippet>
-            </step>
-
-            <step title="Integrate Components into App">
-                <details>
-                    Render the new `SavePresetModal` and `CustomPresetChips` components within the `App`
-                    component's return statement and wire up all the props and handlers.
-                </details>
-                <code-snippet lang="jsx" purpose="app-integration">
-                    <![CDATA[
-// In App() return statement
-
-// After the <div className="mode-tabs">...</div> block, around line 2870
-<CustomPresetChips
-    presets={Object.values(customPresets)}
-    activeId={activePresetId}
-    onSelect={(preset) => applyPreset(preset.preset, preset.id)}
-    onEdit={(preset) => {
-        setEditingPreset(preset);
-        setIsSavePresetModalOpen(true);
-    }}
-    onDelete={(id) => {
-        if (confirm('Are you sure you want to delete this preset?')) {
-            deleteCustomPreset(id);
-            // If deleting the active preset, fall back to focus
-            if (activePresetId === id) {
-                applyPreset(MODE_LIBRARY[0].preset, MODE_LIBRARY[0].id);
-            }
-            setCustomPresets(loadCustomPresets()); // Re-load to trigger UI update
-            showToast('Preset deleted.', 'success');
-        }
-    }}
-/>
-
-// Pass onSavePreset prop to AdvancedControls, around line 2900
-<AdvancedControls
-    // ... existing props
-    onSavePreset={() => {
-        setEditingPreset(null);
-        setIsSavePresetModalOpen(true);
-    }}
-/>
-
-// Render the modal at the top level of the screen div, around line 2790
-<SavePresetModal
-    isOpen={isSavePresetModalOpen}
-    onClose={() => setIsSavePresetModalOpen(false)}
-    existingPreset={editingPreset}
-    currentParams={{
-        speed, intensity, spatialDepth, movementPattern,
-        binaural: { enabled: binauralEnabled, freq: binauralFreq },
-        noise: { type: noiseType, volume: noiseVolume }
-    }}
-    onSave={(presetData) => {
-        saveCustomPreset(presetData.id, presetData);
-        setCustomPresets(loadCustomPresets()); // Re-load to trigger UI update
-        applyPreset(presetData.preset, presetData.id); // Apply the new/edited preset
-        showToast(`Preset '${presetData.name}' saved.`, 'success');
-    }}
-/>
-                    ]]>
-                </code-snippet>
-            </step>
-        </phase>
-
-        <phase title="CSS Styling">
-            <step title="Add Styles for Modal and Custom Chips">
-                <details>
-                    Add new CSS rules to the `&lt;style&gt;` block in `index.html` for the modal overlay,
-                    modal content, and the custom preset chip list.
-                </details>
-                <code-snippet lang="css" purpose="new-css-styles">
-                    <![CDATA[
-/* Add to <style> block, e.g., after .advanced-controls styles around line 430 */
-
-.modal-overlay {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.7);
-    display: grid;
-    place-items: center;
-    z-index: 1000;
-}
-
-.modal-content {
-    background: var(--background-color-secondary);
-    padding: 24px;
-    border-radius: 12px;
-    width: min(90vw, 400px);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-}
-
-.modal-content h3 {
-    margin-top: 0;
-    color: var(--text-color-primary);
-}
-
-.modal-content .form-group {
-    margin-block: 16px;
-}
-
-.modal-content label {
-    display: block;
-    margin-bottom: 8px;
-    font-size: 0.9rem;
-    color: var(--text-color-secondary);
-}
-
-.modal-content input[type="text"] {
-    width: 100%;
-    padding: 10px;
-    border-radius: 6px;
-    border: 1px solid var(--border-color);
-    background: var(--background-color-primary);
-    color: var(--text-color-primary);
-}
-
-.modal-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    margin-top: 24px;
-}
-
-.error-text {
-    color: #f87171;
-    font-size: 0.8rem;
-    margin-top: 4px;
-}
-
-.custom-preset-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 12px 0;
-    border-top: 1px solid var(--border-color);
-    margin-top: 12px;
-}
-
-.custom-chip {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background-color: var(--background-color-tertiary);
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 0.9rem;
-    cursor: pointer;
-    border: 2px solid transparent;
-    transition: all 0.2s ease;
-}
-
-.custom-chip:hover {
-    background-color: var(--background-color-secondary);
-}
-
-.custom-chip.active {
-    border-color: var(--accent-color, #a78bfa);
-    font-weight: 600;
-}
-
-.custom-chip .chip-actions {
-    display: flex;
-    gap: 4px;
-}
-
-.custom-chip .chip-actions button {
-    background: none;
-    border: none;
-    color: var(--text-color-secondary);
-    cursor: pointer;
-    padding: 2px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-}
-
-.custom-chip .chip-actions button:hover {
-    background-color: rgba(255,255,255,0.1);
-    color: var(--text-color-primary);
-}
-
-.advanced-controls-actions {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border-color);
-}
-
-.text-btn {
-    background: none;
-    border: none;
-    color: var(--text-color-secondary);
-    cursor: pointer;
-    text-decoration: underline;
-}
-.text-btn:hover {
-    color: var(--text-color-primary);
-}
-                    ]]>
-                </code-snippet>
-            </step>
-        </phase>
-    </implementation-plan>
-
-    <open-questions>
-        <question id="Q1">
-            How should the UI handle a very large number of custom presets?
-            (e.g., > 10). Should the list become scrollable?
-            <resolution>
-                For initial implementation, flex-wrap is sufficient. If this becomes a common
-                user request, a horizontally scrollable container can be added in a future iteration.
-            </resolution>
-        </question>
-        <question id="Q2">
-            Is the fallback logic (deleting a preset reverts tracks to 'focus') the desired behavior?
-            <resolution>
-                Yes, falling back to the primary 'focus' preset is a safe and predictable default,
-                as confirmed in the story description.
-            </resolution>
-        </question>
-    </open-questions>
-
-</bmm-context>
+  <tests>
+    <standards>
+      Tests use Node.js with manual DOM/AudioContext mocking. Pattern: Create mock classes for browser APIs (MockGain, MockNode, etc.), require audio-engine.js module, run assertions with custom assert() helper. Tests stored in tests/ directory, run via npm test script. Story 3-3 should add tests/preset-crud.test.js following same mocking pattern for localStorage and validation logic.
+    </standards>
+    <locations>
+      - tests/preset-crud.test.js (NEW - to be created)
+      - tests/gain-staging.test.js (existing - must still pass after changes)
+      - tests/file-intake.test.js (existing regression test)
+      - tests/url-validation.test.js (existing regression test)
+      - tests/session-logging.test.js (existing regression test)
+    </locations>
+    <ideas>
+      <test criterion="AC1">
+        - Test saveCustomPreset() creates valid preset in localStorage
+        - Test name validation rejects empty names and names &gt;50 chars
+        - Test QuotaExceededError handling shows correct error message
+      </test>
+      <test criterion="AC2">
+        - Test getAllPresets() merges defaults + custom in correct order
+        - Test preset-order array correctly sorts custom presets
+        - Test default presets always appear first regardless of order array
+      </test>
+      <test criterion="AC3">
+        - Test deleteCustomPreset() removes preset and updates tracks
+        - Test deleting active preset falls back to 'focus' gracefully
+        - Test editing preset preserves createdAt, updates lastUsedAt
+      </test>
+      <test criterion="AC4">
+        - Integration test: Play track → change preset → verify lastPresetId updated
+        - Integration test: Replay track → verify preset auto-restores before audio
+        - Test fallback to focus when lastPresetId references deleted preset
+      </test>
+      <test criterion="AC5">
+        - Test savePresetOrder() persists to localStorage
+        - Test reordering updates preset-order array correctly
+        - Test drag/drop logic moves presets in array
+      </test>
+      <test criterion="AC6">
+        - Test export generates valid JSON matching preset schema
+        - Test import validates required fields (name, preset)
+        - Test import auto-renames on name collision (appends " (2)")
+      </test>
+    </ideas>
+  </tests>
+</story-context>

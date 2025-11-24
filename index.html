@@ -1750,6 +1750,244 @@
             );
         };
 
+        // ============================================================
+        // Story 3-3: PresetList Component
+        // ============================================================
+
+        const PresetList = ({
+            presets,
+            activePresetId,
+            onSelect,
+            onEdit,
+            onDelete,
+            onReorder
+        }) => {
+            const [draggedIndex, setDraggedIndex] = useState(null);
+
+            const handleDragStart = (e, index) => {
+                setDraggedIndex(index);
+                e.dataTransfer.effectAllowed = 'move';
+            };
+
+            const handleDragOver = (e, index) => {
+                e.preventDefault();
+                if (draggedIndex === null || draggedIndex === index) return;
+
+                const newPresets = [...presets];
+                const [removed] = newPresets.splice(draggedIndex, 1);
+                newPresets.splice(index, 0, removed);
+
+                onReorder(newPresets.map(p => p.id));
+                setDraggedIndex(index);
+            };
+
+            const handleDragEnd = () => {
+                setDraggedIndex(null);
+            };
+
+            const handlePresetKeyDown = (e, preset) => {
+                // Handle Ctrl+ArrowUp/Down for reordering (AC5)
+                if (e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                    e.preventDefault();
+
+                    const currentIndex = presets.findIndex(p => p.id === preset.id);
+                    if (currentIndex === -1) return;
+
+                    let newIndex;
+                    if (e.key === 'ArrowUp') {
+                        // Can't move above first custom preset (defaults are immutable)
+                        const firstCustomIndex = presets.findIndex(p => !p.isDefault);
+                        if (currentIndex <= firstCustomIndex) return;
+                        newIndex = currentIndex - 1;
+                    } else { // ArrowDown
+                        if (currentIndex >= presets.length - 1) return;
+                        newIndex = currentIndex + 1;
+                    }
+
+                    const newPresets = [...presets];
+                    [newPresets[currentIndex], newPresets[newIndex]] = [newPresets[newIndex], newPresets[currentIndex]];
+                    onReorder(newPresets.map(p => p.id));
+                    return;
+                }
+
+                // Handle ArrowUp/Down for navigation (AC2)
+                if (!e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                    e.preventDefault();
+
+                    // Find all focusable preset cards
+                    const presetCards = Array.from(document.querySelectorAll('.preset-card[tabindex="0"]'));
+                    const currentCard = e.currentTarget;
+                    const currentCardIndex = presetCards.indexOf(currentCard);
+
+                    if (currentCardIndex === -1) return;
+
+                    let nextCard;
+                    if (e.key === 'ArrowUp' && currentCardIndex > 0) {
+                        nextCard = presetCards[currentCardIndex - 1];
+                    } else if (e.key === 'ArrowDown' && currentCardIndex < presetCards.length - 1) {
+                        nextCard = presetCards[currentCardIndex + 1];
+                    }
+
+                    if (nextCard) {
+                        nextCard.focus();
+                    }
+                    return;
+                }
+
+                // Handle Enter to apply preset (AC2)
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    onSelect(preset.id);
+                }
+            };
+
+            const formatLastUsed = (timestamp) => {
+                if (!timestamp) return 'Never used';
+                const hours = Math.floor((Date.now() - timestamp) / 1000 / 60 / 60);
+                if (hours < 1) return 'Just now';
+                if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+                const days = Math.floor(hours / 24);
+                return `${days} day${days > 1 ? 's' : ''} ago`;
+            };
+
+            return (
+                <div className="preset-list-section" style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '12px', color: 'var(--text-secondary)' }}>
+                        Your Custom Presets
+                    </h3>
+
+                    <div className="preset-list" role="list">
+                        {presets.filter(p => !p.isDefault).length === 0 ? (
+                            <div style={{
+                                padding: '20px',
+                                textAlign: 'center',
+                                color: 'var(--text-secondary)',
+                                backgroundColor: 'var(--bg-secondary)',
+                                borderRadius: '8px',
+                                fontSize: '0.875rem'
+                            }}>
+                                <p style={{ margin: '0 0 8px 0' }}>No custom presets yet.</p>
+                                <p style={{ margin: 0 }}>Tweak parameters and click "Save Preset" to create your first!</p>
+                            </div>
+                        ) : (
+                            presets.filter(p => !p.isDefault).map((preset, index) => (
+                                <div
+                                    key={preset.id}
+                                    className={`preset-card ${preset.id === activePresetId ? 'active' : ''}`}
+                                    role="listitem"
+                                    tabIndex={0}
+                                    draggable={true}
+                                    onDragStart={(e) => handleDragStart(e, index)}
+                                    onDragOver={(e) => handleDragOver(e, index)}
+                                    onDragEnd={handleDragEnd}
+                                    onKeyDown={(e) => handlePresetKeyDown(e, preset)}
+                                    style={{
+                                        '--accent-color': preset.color,
+                                        marginBottom: '8px',
+                                        padding: '12px',
+                                        backgroundColor: preset.id === activePresetId ? 'var(--bg-secondary)' : 'var(--bg-primary)',
+                                        border: `1px solid ${preset.id === activePresetId ? 'var(--accent)' : 'var(--border)'}`,
+                                        borderRadius: '8px',
+                                        cursor: 'grab',
+                                        position: 'relative'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                                        <div className="drag-handle" aria-label="Drag to reorder" style={{
+                                            cursor: 'grab',
+                                            color: 'var(--text-tertiary)',
+                                            fontSize: '1rem',
+                                            lineHeight: '1'
+                                        }}>
+                                            ⋮⋮
+                                        </div>
+
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                                <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: '600' }}>{preset.name}</h4>
+                                                {preset.id === activePresetId && (
+                                                    <span style={{
+                                                        fontSize: '0.75rem',
+                                                        padding: '2px 6px',
+                                                        backgroundColor: 'var(--accent)',
+                                                        color: 'white',
+                                                        borderRadius: '4px',
+                                                        fontWeight: '500'
+                                                    }}>
+                                                        Active
+                                                    </span>
+                                                )}
+                                                {preset.isDefault && (
+                                                    <span style={{
+                                                        fontSize: '0.75rem',
+                                                        padding: '2px 6px',
+                                                        backgroundColor: 'var(--border)',
+                                                        color: 'var(--text-secondary)',
+                                                        borderRadius: '4px',
+                                                        fontWeight: '500'
+                                                    }}>
+                                                        Default
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {preset.description && (
+                                                <p style={{
+                                                    margin: '4px 0',
+                                                    fontSize: '0.8125rem',
+                                                    color: 'var(--text-secondary)',
+                                                    lineHeight: '1.4'
+                                                }}>
+                                                    {preset.description}
+                                                </p>
+                                            )}
+
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                marginTop: '8px'
+                                            }}>
+                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                                                    Last used: {formatLastUsed(preset.lastUsedAt)}
+                                                </span>
+                                                <div style={{ display: 'flex', gap: '6px' }}>
+                                                    <button
+                                                        className="ghost-btn"
+                                                        style={{ fontSize: '0.75rem', padding: '4px 8px' }}
+                                                        onClick={() => onSelect(preset.id)}
+                                                        disabled={preset.id === activePresetId}
+                                                    >
+                                                        {preset.id === activePresetId ? '✓ Active' : 'Apply'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => onEdit(preset)}
+                                                        aria-label={`Edit ${preset.name}`}
+                                                        className="ghost-btn"
+                                                        style={{ fontSize: '0.75rem', padding: '4px 8px' }}
+                                                    >
+                                                        ✏️
+                                                    </button>
+                                                    <button
+                                                        onClick={() => onDelete(preset.id)}
+                                                        aria-label={`Delete ${preset.name}`}
+                                                        className="ghost-btn"
+                                                        style={{ fontSize: '0.75rem', padding: '4px 8px', color: '#ef4444' }}
+                                                    >
+                                                        🗑️
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
 function App() {
             const defaultMode = MODE_LIBRARY[0];
             const [playlist, setPlaylist] = useState([]);
@@ -2361,10 +2599,18 @@ function App() {
             };
 
             const handleDeletePreset = (presetId) => {
-                if (!confirm('Delete this preset? This cannot be undone.')) {
+                // Check how many tracks use this preset
+                const tracksUsingPreset = playlist.filter(t => t.lastPresetId === presetId).length;
+
+                let confirmMessage = 'Delete this preset? This cannot be undone.';
+                if (tracksUsingPreset > 0) {
+                    confirmMessage = `⚠️ This preset is used by ${tracksUsingPreset} track(s).\n\nThey will reset to the default Focus preset.\n\nDelete this preset? This cannot be undone.`;
+                }
+
+                if (!confirm(confirmMessage)) {
                     return;
                 }
-                
+
                 const result = deleteCustomPreset(presetId, showToast);
                 if (result) {
                     showToast(`Preset "${result.name}" deleted`, 'success');
@@ -2393,6 +2639,13 @@ function App() {
                 applyPreset(preset.preset, preset.id);
                 showToast(`Applied ${preset.name} preset`, 'success');
                 setA11yAnnouncement(`${preset.name} preset applied`);
+            };
+
+            const handleReorderPresets = (newOrder) => {
+                savePresetOrder(newOrder);
+                // Reload all presets to reflect new order
+                const presets = getAllPresets();
+                setAllPresets(presets);
             };
 
             const setActiveMode = (index) => {
@@ -2576,6 +2829,19 @@ function App() {
                                 panPosition = (Math.random() * 2 - 1);
                             }
                             break;
+                        case 'quadrant':
+                            // New pattern suggested by user for a more distinct circular feel.
+                            // Moves through four points: Right -> Center (quiet) -> Left -> Center (quiet)
+                            const quadrant = Math.floor((angle / (2 * Math.PI)) * 4);
+                            switch (quadrant) {
+                                case 0: panPosition = 1; break; // Full Right
+                                case 1: panPosition = 0; break; // Center
+                                case 2: panPosition = -1; break; // Full Left
+                                case 3: panPosition = 0; break; // Center
+                            }
+                            break;
+                        default:
+                            panPosition = Math.sin(angle);
                     }
                     
                     // Apply intensity to pan position
@@ -2585,14 +2851,24 @@ function App() {
                     // Total energy must equal 1.0 to prevent gain accumulation
                     const normalizationFactor = 0.5; // Base gain per channel before panning
                     const crossChannelMix = 0.15; // Reduced cross-channel bleeding
+
+                    // For the 'quadrant' pattern, reduce gain in the center position for a "quieter" feel.
+                    const isQuadrantCenter = movementPattern === 'quadrant' && panPosition === 0;
+                    const quadrantGainMultiplier = isQuadrantCenter ? 0.7 : 1.0;
+
                     
                     // Main channel gains (normalized to prevent sum > 1.0)
                     const leftChannelGain = (1 - panPosition) * 0.5; // 0.0 to 1.0
                     const rightChannelGain = (1 + panPosition) * 0.5; // 0.0 to 1.0
                     
                     // Apply normalization to prevent clipping
-                    const targetLeftGain = Math.max(0.001, leftChannelGain * normalizationFactor);
-                    const targetRightGain = Math.max(0.001, rightChannelGain * normalizationFactor);
+                    //const targetLeftGain = Math.max(0.001, leftChannelGain * normalizationFactor);
+                    //const targetRightGain = Math.max(0.001, rightChannelGain * normalizationFactor);
+
+                    // Apply the quadrant multiplier
+                    const targetLeftGain = Math.max(0.001, leftChannelGain * normalizationFactor * quadrantGainMultiplier);
+                    const targetRightGain = Math.max(0.001, rightChannelGain * normalizationFactor * quadrantGainMultiplier);
+
                     
                     // Cross-channel gains (proportional to opposite channel, heavily attenuated)
                     const targetLeftToRight = Math.max(0.001, rightChannelGain * crossChannelMix * normalizationFactor);
@@ -2932,6 +3208,8 @@ function App() {
                             source: 'local',
                             file: file,
                             url: null,
+                            lastPresetId: null, // Story 3-3: Track preset for auto-restore
+                            preferredPresetId: null, // Story 3-3: User can pin preset (future)
                             metadata: {
                                 size: file.size,
                                 type: file.type,
@@ -3129,7 +3407,9 @@ function App() {
                         name: 'Remote Track',
                         source: 'url',
                         url: url,
-                        originalUrl: url
+                        originalUrl: url,
+                        lastPresetId: null, // Story 3-3: Track preset for auto-restore
+                        preferredPresetId: null // Story 3-3: User can pin preset (future)
                     };
                     
                     setPlaylist(prev => [...prev, newTrack]);
@@ -3839,6 +4119,16 @@ return (
                                 onSavePreset={openSavePresetDialog}
                             />
 
+                            {/* Story 3-3: PresetList Component */}
+                            <PresetList
+                                presets={allPresets}
+                                activePresetId={activePresetId}
+                                onSelect={handleQuickApplyPreset}
+                                onEdit={openEditPresetDialog}
+                                onDelete={handleDeletePreset}
+                                onReorder={handleReorderPresets}
+                            />
+
                             <article
                                 className="hero-card"
                                 id={`mode-panel-${selectedMode.id}`}
@@ -4228,6 +4518,7 @@ return (
                                             <option value="figure8">∞ Figure-8</option>
                                             <option value="leftright">↔️ Left-Right</option>
                                             <option value="frontback">↕️ Front-Back</option>
+                                            <option value="quadrant">Quadrant (Discrete Circle)</option>
                                             <option value="random">🎲 Random</option>
                                         </select>
                                     </div>

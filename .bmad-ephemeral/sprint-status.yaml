@@ -383,7 +383,7 @@ const startSession = async () => {
 
     activeSessionIdRef.current = sessionId;
 
-    console.log('[SessionLogger] Session started:', sessionId);### Forward Dependencies (Ready)    status: contexted
+    console.log('[SessionLogger] Session started:', sessionId);### Forward Dependencies (Ready)    status: done
 
 };
 
@@ -415,7 +415,7 @@ const endSession = async (manual = false) => {- ✅ Story 3-3: `activePresetId` 
 
             endedManually: manual 
 
-        });---**File:** `docs/stories/3-3-custom-preset-crud.md` (1,100+ lines)  3-3-custom-preset-crud-auto-restore: drafted
+        });---**File:** `docs/stories/3-3-custom-preset-crud.md` (1,100+ lines)  3-3-custom-preset-crud-auto-restore: done
 
         console.log('[SessionLogger] Session ended:', sessionId, `duration: ${duration}s`);
 
@@ -431,7 +431,7 @@ const endSession = async (manual = false) => {- ✅ Story 3-3: `activePresetId` 
 
 ```
 
-### Deferred Items**Summary:** Save, edit, delete, reorder custom presets. Auto-restore last preset per track on replay.  epic-4: backlog
+### Deferred Items**Summary:** Save, edit, delete, reorder custom presets. Auto-restore last preset per track on replay.  epic-4: contexted
 
 ### IndexedDB CRUD Helpers
 
@@ -439,7 +439,7 @@ const endSession = async (manual = false) => {- ✅ Story 3-3: `activePresetId` 
 
 const addSession = async (session) => {
 
-    const db = await initDatabase();   - Parameter application logic in `applyPreset()` and useEffect  4-1-session-schema-lifecycle-hooks: backlog
+    const db = await initDatabase();   - Parameter application logic in `applyPreset()` and useEffect  4-1-session-schema-lifecycle-hooks: done
 
     return new Promise((resolve, reject) => {
 
@@ -937,7 +937,7 @@ epic-3:
   epic-4:
     status: contexted
     title: "Session Logging & Insights"
-  4-1-session-schema-lifecycle-hooks: drafted
+  4-1-session-schema-lifecycle-hooks: done
   4-2-emoji-checkin-notes-prompt: drafted
   4-3-insights-dashboard-export: drafted
 ```
