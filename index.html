@@ -1245,8 +1245,1150 @@
             return date.toLocaleDateString();
         };
 
+        // Spatial Audio Tuner - Visual debugging tool for dialing in 3D audio effect
+        const SpatialAudioTuner = ({
+            isOpen,
+            onClose,
+            onApplyGains, // Function to apply gains to audio engine: (leftGain, rightGain, crossGain) => void
+            currentVolume = 0.7,
+            onVolumeChange
+        }) => {
+            const [orbPosition, setOrbPosition] = React.useState({ x: 0, y: -80 }); // Start at "front"
+            const [isDragging, setIsDragging] = React.useState(false);
+            const containerRef = React.useRef(null);
+
+            // Advanced tuning settings
+            const [crossBleed, setCrossBleed] = React.useState(0); // 0-0.3: how much bleeds to opposite ear
+            const [backDepth, setBackDepth] = React.useState(0.55); // 0.3-1.0: volume when behind
+            const [panCurve, setPanCurve] = React.useState(2.0); // 1-4: how aggressively pan separates L/R
+            const [hardPanThreshold, setHardPanThreshold] = React.useState(0.1); // 0-0.5: center dead zone
+            const [itdAmount, setItdAmount] = React.useState(0.7); // 0-1.5: ITD multiplier (0.7ms max is realistic)
+            const [directionalDepth, setDirectionalDepth] = React.useState(0.15); // 0-0.3: extra attenuation for ear facing away
+            const [headShadow, setHeadShadow] = React.useState(0.5); // 0-1: how much high-freq is cut when behind/opposite
+
+            // Calibration wizard state
+            const [showCalibration, setShowCalibration] = React.useState(false);
+            const [calibrationStep, setCalibrationStep] = React.useState(0);
+            const [calibrationResults, setCalibrationResults] = React.useState({
+                canHearLeftRight: null,      // Can perceive L/R panning
+                leftRightIntensity: 2.0,     // How much pan curve they need
+                canHearFrontBack: null,      // Can perceive front/back via muffling
+                frontBackIntensity: 0.5,     // Head shadow amount
+                canHearTiming: null,         // Can perceive ITD
+                timingIntensity: 0.7,        // ITD amount
+                preferredVolume: 0.5         // Their optimal volume
+            });
+
+            // Calculate audio parameters from orb position
+            const radius = 80; // Head radius
+            const orbRadius = Math.sqrt(orbPosition.x ** 2 + orbPosition.y ** 2);
+            const angle = Math.atan2(orbPosition.x, -orbPosition.y) * (180 / Math.PI); // 0=front, 90=right, 180=back, -90=left
+            const normalizedAngle = ((angle + 360) % 360); // 0-360
+
+            // Calculate pan position (-1 to 1) based on X position
+            const panPosition = Math.max(-1, Math.min(1, orbPosition.x / radius));
+
+            // Calculate if behind (y > 0 means behind the head in our coordinate system)
+            const isBehind = orbPosition.y > 0;
+            const behindAmount = isBehind ? Math.min(1, orbPosition.y / radius) : 0; // 0-1 how far behind
+
+            // Base depth multiplier for being behind
+            const baseDepthMultiplier = isBehind ? backDepth : 1.0;
+
+            // Directional depth: the ear CLOSER to the source gets extra attenuation when sound is behind
+            // This simulates the pinna (outer ear) blocking sounds from behind
+            // At back-left (pan=-0.76), left ear should be slightly quieter because sound is behind it
+            let leftDirectionalAtten = 1.0;
+            let rightDirectionalAtten = 1.0;
+
+            if (isBehind) {
+                // When behind, attenuate the ear that's on the same side as the sound
+                // because that ear is "facing away" from the sound source
+                if (panPosition < 0) {
+                    // Sound is back-left: left ear faces away, gets extra attenuation
+                    leftDirectionalAtten = 1.0 - (directionalDepth * Math.abs(panPosition) * behindAmount);
+                } else if (panPosition > 0) {
+                    // Sound is back-right: right ear faces away, gets extra attenuation
+                    rightDirectionalAtten = 1.0 - (directionalDepth * Math.abs(panPosition) * behindAmount);
+                }
+            }
+
+            // Calculate gain values (what the audio engine should use)
+            const leftGain = Math.max(0, (1 - panPosition) * 0.5 * baseDepthMultiplier * leftDirectionalAtten);
+            const rightGain = Math.max(0, (1 + panPosition) * 0.5 * baseDepthMultiplier * rightDirectionalAtten);
+
+            // Hard pan calculation with adjustable curve and threshold
+            let hardLeftGain, hardRightGain, actualCrossBleed;
+            if (panPosition > hardPanThreshold) {
+                // Sound is on the right
+                const rightAmount = Math.min(1, (panPosition - hardPanThreshold) / (1 - hardPanThreshold));
+                const curved = Math.pow(rightAmount, 1 / panCurve); // Apply pan curve
+                hardLeftGain = Math.max(0, 1 - curved);
+                hardRightGain = 1;
+                actualCrossBleed = crossBleed * (1 - curved);
+            } else if (panPosition < -hardPanThreshold) {
+                // Sound is on the left
+                const leftAmount = Math.min(1, (-panPosition - hardPanThreshold) / (1 - hardPanThreshold));
+                const curved = Math.pow(leftAmount, 1 / panCurve);
+                hardLeftGain = 1;
+                hardRightGain = Math.max(0, 1 - curved);
+                actualCrossBleed = crossBleed * (1 - curved);
+            } else {
+                // Center zone
+                hardLeftGain = 0.5;
+                hardRightGain = 0.5;
+                actualCrossBleed = crossBleed;
+            }
+            // Apply depth and directional attenuation
+            hardLeftGain *= baseDepthMultiplier * leftDirectionalAtten;
+            hardRightGain *= baseDepthMultiplier * rightDirectionalAtten;
+
+            // Calculate ITD (Inter-aural Time Difference)
+            // Sound reaches closer ear first. Max ITD ~0.7ms when sound is directly to one side
+            // Negative pan = sound on left = delay right ear
+            // Positive pan = sound on right = delay left ear
+            const maxItdMs = 0.7 * itdAmount; // ms
+            const itdLeftDelay = panPosition > 0 ? Math.abs(panPosition) * maxItdMs / 1000 : 0; // seconds
+            const itdRightDelay = panPosition < 0 ? Math.abs(panPosition) * maxItdMs / 1000 : 0; // seconds
+
+            // Calculate low-pass filter frequencies for "head shadow" effect
+            // When sound is behind or on opposite side, high frequencies are blocked
+            // Full open = 20000Hz, max muffled = 2000Hz
+            const minFreq = 2000; // Muffled sound
+            const maxFreq = 20000; // Clear sound
+
+            // Left ear filter: darker when sound is on the RIGHT or BEHIND-LEFT
+            // Right ear filter: darker when sound is on the LEFT or BEHIND-RIGHT
+            let leftFilterFreq = maxFreq;
+            let rightFilterFreq = maxFreq;
+
+            if (headShadow > 0) {
+                // Head shadow from opposite side (sound on right = left ear darker)
+                const leftShadowFromPan = panPosition > 0 ? panPosition : 0; // 0-1 when sound on right
+                const rightShadowFromPan = panPosition < 0 ? -panPosition : 0; // 0-1 when sound on left
+
+                // Additional shadow when behind
+                const behindShadow = isBehind ? behindAmount * 0.5 : 0;
+
+                const leftShadowAmount = Math.min(1, (leftShadowFromPan + behindShadow) * headShadow);
+                const rightShadowAmount = Math.min(1, (rightShadowFromPan + behindShadow) * headShadow);
+
+                // Exponential mapping for more natural rolloff
+                leftFilterFreq = maxFreq * Math.pow(minFreq / maxFreq, leftShadowAmount);
+                rightFilterFreq = maxFreq * Math.pow(minFreq / maxFreq, rightShadowAmount);
+            }
+
+            // Apply gains to audio whenever orb position or settings change
+            React.useEffect(() => {
+                if (isOpen && onApplyGains) {
+                    // Use hard pan values with cross bleed, ITD, and filter frequencies
+                    onApplyGains(hardLeftGain, hardRightGain, Math.max(0.001, actualCrossBleed), itdLeftDelay, itdRightDelay, leftFilterFreq, rightFilterFreq);
+                }
+            }, [orbPosition, isOpen, onApplyGains, hardLeftGain, hardRightGain, actualCrossBleed, itdLeftDelay, itdRightDelay, leftFilterFreq, rightFilterFreq, crossBleed, backDepth, panCurve, hardPanThreshold, itdAmount, directionalDepth, headShadow]);
+
+            const handleMouseDown = (e) => {
+                setIsDragging(true);
+                updateOrbPosition(e);
+            };
+
+            const handleMouseMove = (e) => {
+                if (!isDragging) return;
+                updateOrbPosition(e);
+            };
+
+            const handleMouseUp = () => {
+                setIsDragging(false);
+            };
+
+            const updateOrbPosition = (e) => {
+                if (!containerRef.current) return;
+                const rect = containerRef.current.getBoundingClientRect();
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+
+                let x = e.clientX - rect.left - centerX;
+                let y = e.clientY - rect.top - centerY;
+
+                // Constrain to circle
+                const dist = Math.sqrt(x * x + y * y);
+                if (dist > radius) {
+                    x = (x / dist) * radius;
+                    y = (y / dist) * radius;
+                }
+
+                setOrbPosition({ x, y });
+            };
+
+            const getPositionLabel = () => {
+                if (normalizedAngle >= 315 || normalizedAngle < 45) return 'FRONT';
+                if (normalizedAngle >= 45 && normalizedAngle < 135) return 'RIGHT';
+                if (normalizedAngle >= 135 && normalizedAngle < 225) return 'BACK';
+                return 'LEFT';
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0,0,0,0.85)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 10000
+                }} onClick={onClose}>
+                    <div style={{
+                        background: 'var(--bg-2)',
+                        borderRadius: '16px',
+                        padding: '24px',
+                        maxWidth: '500px',
+                        width: '90%'
+                    }} onClick={e => e.stopPropagation()}>
+                        <h3 style={{ margin: '0 0 8px', color: 'var(--accent)' }}>🎯 Spatial Audio Tuner</h3>
+                        <p style={{ margin: '0 0 12px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                            Drag the orb around the head to position the sound. Use this to find settings that work for your hearing.
+                        </p>
+
+                        {/* Volume Recommendation Panel */}
+                        {(() => {
+                            const volumePercent = Math.round(currentVolume * 100);
+                            const isOptimal = volumePercent >= 40 && volumePercent <= 60;
+                            const isTooLoud = volumePercent > 75;
+                            const isTooQuiet = volumePercent < 25;
+                            const statusColor = isOptimal ? '#4ade80' : (isTooLoud ? '#f87171' : (isTooQuiet ? '#fbbf24' : '#fbbf24'));
+                            const statusText = isOptimal ? '✓ Optimal for spatial perception' :
+                                              (isTooLoud ? '⚠ Too loud - spatial cues may be drowned out' :
+                                              (isTooQuiet ? '⚠ Too quiet - may miss subtle effects' : '~ Adjust for best spatial effect'));
+
+                            return (
+                                <div style={{
+                                    background: 'rgba(0,0,0,0.4)',
+                                    borderRadius: '8px',
+                                    padding: '12px',
+                                    marginBottom: '16px',
+                                    border: `1px solid ${statusColor}40`
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                        <span style={{ fontSize: '1.2rem' }}>🔊</span>
+                                        <span style={{ fontWeight: 'bold', color: 'var(--text-primary)', fontSize: '0.875rem' }}>
+                                            Volume: {volumePercent}%
+                                        </span>
+                                        <span style={{
+                                            fontSize: '0.75rem',
+                                            color: statusColor,
+                                            marginLeft: 'auto'
+                                        }}>
+                                            {statusText}
+                                        </span>
+                                    </div>
+
+                                    {onVolumeChange && (
+                                        <div>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="1"
+                                                step="0.01"
+                                                value={currentVolume}
+                                                onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+                                                style={{
+                                                    width: '100%',
+                                                    accentColor: statusColor,
+                                                    height: '8px'
+                                                }}
+                                            />
+                                            <div style={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                fontSize: '0.65rem',
+                                                color: 'var(--text-secondary)',
+                                                marginTop: '4px'
+                                            }}>
+                                                <span>Too Quiet</span>
+                                                <span style={{ color: '#4ade80' }}>▲ Sweet Spot (40-60%)</span>
+                                                <span>Too Loud</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div style={{
+                                        fontSize: '0.7rem',
+                                        color: 'var(--text-secondary)',
+                                        marginTop: '8px',
+                                        padding: '6px',
+                                        background: 'rgba(255,255,255,0.05)',
+                                        borderRadius: '4px'
+                                    }}>
+                                        💡 <strong>Tip:</strong> Research shows 73-85 dB SPL is optimal for spatial perception.
+                                        At high volumes, spatial cues get "drowned out". Try 40-60% for best results.
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Quick Calibration Button */}
+                        {!showCalibration && (
+                            <button
+                                onClick={() => {
+                                    setShowCalibration(true);
+                                    setCalibrationStep(0);
+                                }}
+                                style={{
+                                    width: '100%',
+                                    padding: '12px',
+                                    marginBottom: '16px',
+                                    background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600',
+                                    fontSize: '0.9rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '8px'
+                                }}
+                            >
+                                🧠 Quick Brain Calibration (APD-Friendly)
+                            </button>
+                        )}
+
+                        {/* Calibration Wizard */}
+                        {showCalibration && (
+                            <div style={{
+                                background: 'rgba(139, 92, 246, 0.1)',
+                                border: '2px solid #8b5cf6',
+                                borderRadius: '12px',
+                                padding: '16px',
+                                marginBottom: '16px'
+                            }}>
+                                {calibrationStep === 0 && (
+                                    <div>
+                                        <h4 style={{ margin: '0 0 12px', color: '#a78bfa' }}>🧠 Brain Calibration Wizard</h4>
+                                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                                            This wizard will help find the spatial audio settings that work best for YOUR brain.
+                                            We'll test different types of spatial cues and adjust based on what you can perceive.
+                                        </p>
+                                        <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '8px', marginBottom: '12px' }}>
+                                            <p style={{ fontSize: '0.8rem', color: '#fbbf24', margin: '0 0 8px' }}>
+                                                <strong>For Auditory Processing Differences:</strong>
+                                            </p>
+                                            <ul style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0, paddingLeft: '20px' }}>
+                                                <li>Timing cues (ITD) may be harder to perceive - we'll test this</li>
+                                                <li>Frequency changes (muffling) are often easier to notice</li>
+                                                <li>We can boost effects that work best for you</li>
+                                            </ul>
+                                        </div>
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                                            <strong>Requirements:</strong> Music playing + headphones on
+                                        </p>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                onClick={() => setCalibrationStep(1)}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '10px',
+                                                    background: '#8b5cf6',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    borderRadius: '6px',
+                                                    cursor: 'pointer',
+                                                    fontWeight: '600'
+                                                }}
+                                            >
+                                                Start Calibration →
+                                            </button>
+                                            <button
+                                                onClick={() => setShowCalibration(false)}
+                                                style={{
+                                                    padding: '10px 16px',
+                                                    background: 'transparent',
+                                                    color: 'var(--text-secondary)',
+                                                    border: '1px solid var(--text-secondary)',
+                                                    borderRadius: '6px',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {calibrationStep === 1 && (
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                            <h4 style={{ margin: 0, color: '#a78bfa' }}>Step 1: Left/Right Test</h4>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>1 of 4</span>
+                                        </div>
+                                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                                            I'll move the sound to the <strong>LEFT</strong> then <strong>RIGHT</strong>.
+                                            Listen carefully - can you tell the difference?
+                                        </p>
+
+                                        {/* Test buttons to move sound */}
+                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    setOrbPosition({ x: -80, y: 0 });
+                                                }}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '16px',
+                                                    background: 'rgba(59, 130, 246, 0.2)',
+                                                    color: '#60a5fa',
+                                                    border: '2px solid #60a5fa',
+                                                    borderRadius: '8px',
+                                                    cursor: 'pointer',
+                                                    fontWeight: '600',
+                                                    fontSize: '1.1rem'
+                                                }}
+                                            >
+                                                👈 LEFT
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setOrbPosition({ x: 80, y: 0 });
+                                                }}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '16px',
+                                                    background: 'rgba(34, 197, 94, 0.2)',
+                                                    color: '#4ade80',
+                                                    border: '2px solid #4ade80',
+                                                    borderRadius: '8px',
+                                                    cursor: 'pointer',
+                                                    fontWeight: '600',
+                                                    fontSize: '1.1rem'
+                                                }}
+                                            >
+                                                RIGHT 👉
+                                            </button>
+                                        </div>
+
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                            <strong>Can you clearly hear the difference between LEFT and RIGHT?</strong>
+                                        </p>
+                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    setCalibrationResults(prev => ({ ...prev, canHearLeftRight: 'clear', leftRightIntensity: 2.0 }));
+                                                    setCalibrationStep(2);
+                                                }}
+                                                style={{ flex: 1, padding: '10px', background: '#4ade80', color: 'black', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+                                            >
+                                                Yes, clearly! ✓
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setCalibrationResults(prev => ({ ...prev, canHearLeftRight: 'subtle', leftRightIntensity: 3.0 }));
+                                                    setPanCurve(3.0);
+                                                    setCalibrationStep(2);
+                                                }}
+                                                style={{ flex: 1, padding: '10px', background: '#fbbf24', color: 'black', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+                                            >
+                                                Barely / Subtle
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setCalibrationResults(prev => ({ ...prev, canHearLeftRight: 'no', leftRightIntensity: 4.0 }));
+                                                    setPanCurve(4.0);
+                                                    setCrossBleed(0);
+                                                    setCalibrationStep(2);
+                                                }}
+                                                style={{ flex: 1, padding: '10px', background: '#f87171', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+                                            >
+                                                No / Can't tell ✗
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {calibrationStep === 2 && (
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                            <h4 style={{ margin: 0, color: '#a78bfa' }}>Step 2: Front/Back Test (Muffling)</h4>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>2 of 4</span>
+                                        </div>
+                                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                                            I'll move the sound to the <strong>FRONT</strong> (bright/clear) then <strong>BACK</strong> (muffled/darker).
+                                            This tests if you can hear the tone change.
+                                        </p>
+
+                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    setOrbPosition({ x: 0, y: -80 });
+                                                }}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '16px',
+                                                    background: 'rgba(251, 191, 36, 0.2)',
+                                                    color: '#fbbf24',
+                                                    border: '2px solid #fbbf24',
+                                                    borderRadius: '8px',
+                                                    cursor: 'pointer',
+                                                    fontWeight: '600',
+                                                    fontSize: '1rem'
+                                                }}
+                                            >
+                                                🔆 FRONT (Clear)
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setOrbPosition({ x: 0, y: 80 });
+                                                }}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '16px',
+                                                    background: 'rgba(107, 114, 128, 0.3)',
+                                                    color: '#9ca3af',
+                                                    border: '2px solid #6b7280',
+                                                    borderRadius: '8px',
+                                                    cursor: 'pointer',
+                                                    fontWeight: '600',
+                                                    fontSize: '1rem'
+                                                }}
+                                            >
+                                                🔅 BACK (Muffled)
+                                            </button>
+                                        </div>
+
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                            <strong>Can you hear the muffling/darkening when sound moves to BACK?</strong>
+                                        </p>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    setCalibrationResults(prev => ({ ...prev, canHearFrontBack: 'clear', frontBackIntensity: 0.5 }));
+                                                    setCalibrationStep(3);
+                                                }}
+                                                style={{ flex: 1, padding: '10px', background: '#4ade80', color: 'black', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+                                            >
+                                                Yes, clearly! ✓
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setCalibrationResults(prev => ({ ...prev, canHearFrontBack: 'subtle', frontBackIntensity: 0.8 }));
+                                                    setHeadShadow(0.8);
+                                                    setCalibrationStep(3);
+                                                }}
+                                                style={{ flex: 1, padding: '10px', background: '#fbbf24', color: 'black', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+                                            >
+                                                Barely / Subtle
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setCalibrationResults(prev => ({ ...prev, canHearFrontBack: 'no', frontBackIntensity: 1.0 }));
+                                                    setHeadShadow(1.0);
+                                                    setBackDepth(0.35);
+                                                    setCalibrationStep(3);
+                                                }}
+                                                style={{ flex: 1, padding: '10px', background: '#f87171', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+                                            >
+                                                No / Can't tell ✗
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {calibrationStep === 3 && (
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                            <h4 style={{ margin: 0, color: '#a78bfa' }}>Step 3: Timing Test (ITD)</h4>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>3 of 4</span>
+                                        </div>
+                                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                            This tests tiny timing differences (sound reaches one ear before the other).
+                                            <strong style={{ color: '#fbbf24' }}> This is often harder for APD brains to detect - that's okay!</strong>
+                                        </p>
+
+                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    setItdAmount(0);
+                                                    setOrbPosition({ x: 80, y: 0 });
+                                                }}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '12px',
+                                                    background: 'rgba(239, 68, 68, 0.2)',
+                                                    color: '#f87171',
+                                                    border: '2px solid #ef4444',
+                                                    borderRadius: '8px',
+                                                    cursor: 'pointer',
+                                                    fontWeight: '600'
+                                                }}
+                                            >
+                                                No Timing (ITD Off)
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setItdAmount(1.5);
+                                                    setOrbPosition({ x: 80, y: 0 });
+                                                }}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '12px',
+                                                    background: 'rgba(139, 92, 246, 0.2)',
+                                                    color: '#a78bfa',
+                                                    border: '2px solid #8b5cf6',
+                                                    borderRadius: '8px',
+                                                    cursor: 'pointer',
+                                                    fontWeight: '600'
+                                                }}
+                                            >
+                                                Max Timing (ITD Max)
+                                            </button>
+                                        </div>
+
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                            <strong>Toggle between these - can you hear ANY difference?</strong>
+                                        </p>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    setCalibrationResults(prev => ({ ...prev, canHearTiming: 'yes', timingIntensity: 1.0 }));
+                                                    setItdAmount(1.0);
+                                                    setCalibrationStep(4);
+                                                }}
+                                                style={{ flex: 1, padding: '10px', background: '#4ade80', color: 'black', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+                                            >
+                                                Yes, I hear it ✓
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setCalibrationResults(prev => ({ ...prev, canHearTiming: 'no', timingIntensity: 0 }));
+                                                    setItdAmount(0);
+                                                    setCalibrationStep(4);
+                                                }}
+                                                style={{ flex: 1, padding: '10px', background: '#f87171', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+                                            >
+                                                No difference ✗
+                                            </button>
+                                        </div>
+                                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '8px', fontStyle: 'italic' }}>
+                                            Note: If you can't hear ITD, that's common with APD. We'll rely on other cues instead!
+                                        </p>
+                                    </div>
+                                )}
+
+                                {calibrationStep === 4 && (
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                            <h4 style={{ margin: 0, color: '#4ade80' }}>✓ Calibration Complete!</h4>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>4 of 4</span>
+                                        </div>
+
+                                        <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                                            <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', margin: '0 0 12px', fontWeight: '600' }}>
+                                                Your Personalized Profile:
+                                            </p>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
+                                                <div>
+                                                    <span style={{ color: 'var(--text-secondary)' }}>Left/Right:</span>
+                                                    <span style={{ marginLeft: '8px', color: calibrationResults.canHearLeftRight === 'clear' ? '#4ade80' : (calibrationResults.canHearLeftRight === 'subtle' ? '#fbbf24' : '#f87171') }}>
+                                                        {calibrationResults.canHearLeftRight === 'clear' ? 'Clear ✓' : (calibrationResults.canHearLeftRight === 'subtle' ? 'Boosted' : 'Max Boost')}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span style={{ color: 'var(--text-secondary)' }}>Front/Back:</span>
+                                                    <span style={{ marginLeft: '8px', color: calibrationResults.canHearFrontBack === 'clear' ? '#4ade80' : (calibrationResults.canHearFrontBack === 'subtle' ? '#fbbf24' : '#f87171') }}>
+                                                        {calibrationResults.canHearFrontBack === 'clear' ? 'Clear ✓' : (calibrationResults.canHearFrontBack === 'subtle' ? 'Boosted' : 'Max Boost')}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span style={{ color: 'var(--text-secondary)' }}>Timing (ITD):</span>
+                                                    <span style={{ marginLeft: '8px', color: calibrationResults.canHearTiming === 'yes' ? '#4ade80' : '#6b7280' }}>
+                                                        {calibrationResults.canHearTiming === 'yes' ? 'Enabled ✓' : 'Disabled (OK!)'}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span style={{ color: 'var(--text-secondary)' }}>Strategy:</span>
+                                                    <span style={{ marginLeft: '8px', color: '#a78bfa' }}>
+                                                        {calibrationResults.canHearTiming === 'no' ? 'Volume + Tone' : 'Full Spatial'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {calibrationResults.canHearTiming === 'no' && (
+                                            <div style={{ background: 'rgba(251, 191, 36, 0.1)', padding: '10px', borderRadius: '6px', marginBottom: '12px', fontSize: '0.8rem', color: '#fbbf24' }}>
+                                                💡 <strong>APD-Optimized:</strong> Since timing cues are harder for you, we're using
+                                                <strong> volume differences</strong> and <strong>tone changes</strong> (muffling) as your primary spatial cues.
+                                                These are processed differently by the brain and often work better!
+                                            </div>
+                                        )}
+
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    setShowCalibration(false);
+                                                    setOrbPosition({ x: 0, y: -80 }); // Reset to front
+                                                }}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '12px',
+                                                    background: '#4ade80',
+                                                    color: 'black',
+                                                    border: 'none',
+                                                    borderRadius: '6px',
+                                                    cursor: 'pointer',
+                                                    fontWeight: '600'
+                                                }}
+                                            >
+                                                Apply Settings ✓
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setCalibrationStep(0);
+                                                }}
+                                                style={{
+                                                    padding: '12px 16px',
+                                                    background: 'transparent',
+                                                    color: 'var(--text-secondary)',
+                                                    border: '1px solid var(--text-secondary)',
+                                                    borderRadius: '6px',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                Redo
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Head visualization - only show when not in calibration */}
+                        {!showCalibration && (
+                        <div
+                            ref={containerRef}
+                            style={{
+                                width: '200px',
+                                height: '200px',
+                                margin: '0 auto 16px',
+                                position: 'relative',
+                                cursor: 'crosshair'
+                            }}
+                            onMouseDown={handleMouseDown}
+                            onMouseMove={handleMouseMove}
+                            onMouseUp={handleMouseUp}
+                            onMouseLeave={handleMouseUp}
+                        >
+                            {/* Head circle */}
+                            <div style={{
+                                position: 'absolute',
+                                top: '50%',
+                                left: '50%',
+                                transform: 'translate(-50%, -50%)',
+                                width: '160px',
+                                height: '160px',
+                                borderRadius: '50%',
+                                border: '3px solid var(--text-secondary)',
+                                background: 'rgba(255,255,255,0.05)'
+                            }}>
+                                {/* Nose indicator */}
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '-15px',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    width: '0',
+                                    height: '0',
+                                    borderLeft: '8px solid transparent',
+                                    borderRight: '8px solid transparent',
+                                    borderBottom: '12px solid var(--text-secondary)'
+                                }} />
+                                {/* Left ear */}
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '50%',
+                                    left: '-12px',
+                                    transform: 'translateY(-50%)',
+                                    width: '10px',
+                                    height: '24px',
+                                    borderRadius: '5px',
+                                    background: 'var(--text-secondary)'
+                                }} />
+                                {/* Right ear */}
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '50%',
+                                    right: '-12px',
+                                    transform: 'translateY(-50%)',
+                                    width: '10px',
+                                    height: '24px',
+                                    borderRadius: '5px',
+                                    background: 'var(--text-secondary)'
+                                }} />
+                                {/* Labels */}
+                                <span style={{ position: 'absolute', top: '-30px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>FRONT</span>
+                                <span style={{ position: 'absolute', bottom: '-25px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>BACK</span>
+                                <span style={{ position: 'absolute', top: '50%', left: '-35px', transform: 'translateY(-50%)', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>L</span>
+                                <span style={{ position: 'absolute', top: '50%', right: '-35px', transform: 'translateY(-50%)', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>R</span>
+                            </div>
+
+                            {/* Sound orb - highly visible */}
+                            <div style={{
+                                position: 'absolute',
+                                top: '50%',
+                                left: '50%',
+                                transform: `translate(calc(-50% + ${orbPosition.x}px), calc(-50% + ${orbPosition.y}px))`,
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '50%',
+                                background: '#ff6b35',
+                                border: '3px solid #fff',
+                                boxShadow: '0 0 20px #ff6b35, 0 0 40px rgba(255, 107, 53, 0.5), inset 0 0 10px rgba(255,255,255,0.3)',
+                                cursor: isDragging ? 'grabbing' : 'grab',
+                                transition: isDragging ? 'none' : 'transform 0.1s ease',
+                                zIndex: 10
+                            }}>
+                                {/* Inner glow dot */}
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '50%',
+                                    left: '50%',
+                                    transform: 'translate(-50%, -50%)',
+                                    width: '10px',
+                                    height: '10px',
+                                    borderRadius: '50%',
+                                    background: '#fff'
+                                }} />
+                            </div>
+                        </div>
+                        )}
+
+                        {/* Current values display */}
+                        <div style={{
+                            background: 'rgba(0,0,0,0.3)',
+                            borderRadius: '8px',
+                            padding: '12px',
+                            fontFamily: 'monospace',
+                            fontSize: '0.75rem',
+                            marginBottom: '16px'
+                        }}>
+                            <div style={{ marginBottom: '8px', fontWeight: 'bold', color: 'var(--accent)' }}>
+                                Position: {getPositionLabel()} ({Math.round(normalizedAngle)}°)
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                <div>
+                                    <div style={{ color: 'var(--text-secondary)' }}>Pan Position:</div>
+                                    <div style={{ color: '#4ade80' }}>{panPosition.toFixed(2)}</div>
+                                </div>
+                                <div>
+                                    <div style={{ color: 'var(--text-secondary)' }}>Depth Mult:</div>
+                                    <div style={{ color: '#4ade80' }}>{baseDepthMultiplier.toFixed(2)}</div>
+                                </div>
+                                <div>
+                                    <div style={{ color: 'var(--text-secondary)' }}>Hard L/R Gain:</div>
+                                    <div style={{ color: '#f472b6' }}>{hardLeftGain.toFixed(2)} / {hardRightGain.toFixed(2)}</div>
+                                </div>
+                                <div>
+                                    <div style={{ color: 'var(--text-secondary)' }}>ITD L/R Delay:</div>
+                                    <div style={{ color: '#f472b6' }}>{(itdLeftDelay * 1000).toFixed(2)}ms / {(itdRightDelay * 1000).toFixed(2)}ms</div>
+                                </div>
+                                <div>
+                                    <div style={{ color: 'var(--text-secondary)' }}>Filter L/R (Hz):</div>
+                                    <div style={{ color: '#a78bfa' }}>{Math.round(leftFilterFreq)} / {Math.round(rightFilterFreq)}</div>
+                                </div>
+                            </div>
+
+                            {/* Ear indicators */}
+                            <div style={{ marginTop: '12px', display: 'flex', gap: '16px', justifyContent: 'center' }}>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.5rem' }}>👂</div>
+                                    <div style={{
+                                        height: '8px',
+                                        width: '60px',
+                                        background: 'rgba(255,255,255,0.2)',
+                                        borderRadius: '4px',
+                                        overflow: 'hidden'
+                                    }}>
+                                        <div style={{
+                                            height: '100%',
+                                            width: `${hardLeftGain * 100}%`,
+                                            background: '#4ade80',
+                                            transition: 'width 0.1s'
+                                        }} />
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>LEFT</div>
+                                </div>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.5rem', transform: 'scaleX(-1)' }}>👂</div>
+                                    <div style={{
+                                        height: '8px',
+                                        width: '60px',
+                                        background: 'rgba(255,255,255,0.2)',
+                                        borderRadius: '4px',
+                                        overflow: 'hidden'
+                                    }}>
+                                        <div style={{
+                                            height: '100%',
+                                            width: `${hardRightGain * 100}%`,
+                                            background: '#4ade80',
+                                            transition: 'width 0.1s'
+                                        }} />
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>RIGHT</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Advanced Settings */}
+                        <div style={{
+                            background: 'rgba(0,0,0,0.3)',
+                            borderRadius: '8px',
+                            padding: '12px',
+                            marginBottom: '16px'
+                        }}>
+                            <div style={{ fontWeight: 'bold', marginBottom: '12px', color: 'var(--accent)', fontSize: '0.875rem' }}>
+                                ⚙️ Fine-Tune Settings
+                            </div>
+
+                            {/* Cross Bleed */}
+                            <div style={{ marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Cross Bleed (opposite ear)</span>
+                                    <span style={{ color: '#4ade80' }}>{(crossBleed * 100).toFixed(0)}%</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="0.3"
+                                    step="0.01"
+                                    value={crossBleed}
+                                    onChange={(e) => setCrossBleed(parseFloat(e.target.value))}
+                                    style={{ width: '100%', accentColor: 'var(--accent)' }}
+                                />
+                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                    0% = complete isolation, 30% = some bleed to other ear
+                                </div>
+                            </div>
+
+                            {/* Back Depth */}
+                            <div style={{ marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Back Volume</span>
+                                    <span style={{ color: '#4ade80' }}>{(backDepth * 100).toFixed(0)}%</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0.3"
+                                    max="1.0"
+                                    step="0.05"
+                                    value={backDepth}
+                                    onChange={(e) => setBackDepth(parseFloat(e.target.value))}
+                                    style={{ width: '100%', accentColor: 'var(--accent)' }}
+                                />
+                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                    Volume when sound is behind you (simulates distance)
+                                </div>
+                            </div>
+
+                            {/* Pan Curve */}
+                            <div style={{ marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Pan Aggressiveness</span>
+                                    <span style={{ color: '#4ade80' }}>{panCurve.toFixed(1)}x</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="4"
+                                    step="0.1"
+                                    value={panCurve}
+                                    onChange={(e) => setPanCurve(parseFloat(e.target.value))}
+                                    style={{ width: '100%', accentColor: 'var(--accent)' }}
+                                />
+                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                    Higher = faster L/R separation as orb moves from center
+                                </div>
+                            </div>
+
+                            {/* Hard Pan Threshold */}
+                            <div style={{ marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Center Dead Zone</span>
+                                    <span style={{ color: '#4ade80' }}>{(hardPanThreshold * 100).toFixed(0)}%</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="0.5"
+                                    step="0.05"
+                                    value={hardPanThreshold}
+                                    onChange={(e) => setHardPanThreshold(parseFloat(e.target.value))}
+                                    style={{ width: '100%', accentColor: 'var(--accent)' }}
+                                />
+                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                    Size of center zone where both ears hear equally
+                                </div>
+                            </div>
+
+                            {/* ITD Amount */}
+                            <div style={{ marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Time Delay (ITD)</span>
+                                    <span style={{ color: '#f472b6' }}>{(itdAmount * 0.7).toFixed(2)}ms</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1.5"
+                                    step="0.1"
+                                    value={itdAmount}
+                                    onChange={(e) => setItdAmount(parseFloat(e.target.value))}
+                                    style={{ width: '100%', accentColor: '#f472b6' }}
+                                />
+                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                    Sound reaches closer ear first (0.7ms is realistic max)
+                                </div>
+                            </div>
+
+                            {/* Directional Depth */}
+                            <div style={{ marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Rear Ear Damping</span>
+                                    <span style={{ color: '#f472b6' }}>{(directionalDepth * 100).toFixed(0)}%</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="0.4"
+                                    step="0.05"
+                                    value={directionalDepth}
+                                    onChange={(e) => setDirectionalDepth(parseFloat(e.target.value))}
+                                    style={{ width: '100%', accentColor: '#f472b6' }}
+                                />
+                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                    Extra quieting when sound is behind that ear (pinna effect)
+                                </div>
+                            </div>
+
+                            {/* Head Shadow (Low-pass filter) */}
+                            <div style={{ marginBottom: '8px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Head Shadow (Muffling)</span>
+                                    <span style={{ color: '#a78bfa' }}>{(headShadow * 100).toFixed(0)}%</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.1"
+                                    value={headShadow}
+                                    onChange={(e) => setHeadShadow(parseFloat(e.target.value))}
+                                    style={{ width: '100%', accentColor: '#a78bfa' }}
+                                />
+                                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                    Cuts high frequencies when behind/opposite (darker, muffled sound)
+                                </div>
+                            </div>
+
+                            {/* Reset button */}
+                            <button
+                                onClick={() => {
+                                    setCrossBleed(0);
+                                    setBackDepth(0.55);
+                                    setPanCurve(2.0);
+                                    setHardPanThreshold(0.1);
+                                    setItdAmount(0.7);
+                                    setDirectionalDepth(0.15);
+                                    setHeadShadow(0.5);
+                                }}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px',
+                                    background: 'rgba(255,255,255,0.1)',
+                                    border: '1px solid var(--text-secondary)',
+                                    borderRadius: '4px',
+                                    color: 'var(--text-secondary)',
+                                    cursor: 'pointer',
+                                    fontSize: '0.75rem'
+                                }}
+                            >
+                                Reset to Defaults
+                            </button>
+                        </div>
+
+                        {/* Copy settings button */}
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                                onClick={() => {
+                                    const settings = {
+                                        // Current position
+                                        panPosition: panPosition.toFixed(3),
+                                        depthMultiplier: baseDepthMultiplier.toFixed(2),
+                                        hardLeftGain: hardLeftGain.toFixed(3),
+                                        hardRightGain: hardRightGain.toFixed(3),
+                                        angle: Math.round(normalizedAngle),
+                                        position: getPositionLabel(),
+                                        // Tuning parameters
+                                        tuning: {
+                                            crossBleed: crossBleed.toFixed(2),
+                                            backDepth: backDepth.toFixed(2),
+                                            panCurve: panCurve.toFixed(1),
+                                            hardPanThreshold: hardPanThreshold.toFixed(2),
+                                            itdAmount: itdAmount.toFixed(2),
+                                            directionalDepth: directionalDepth.toFixed(2),
+                                            headShadow: headShadow.toFixed(2)
+                                        },
+                                        // Current ITD delays
+                                        itd: {
+                                            leftDelayMs: (itdLeftDelay * 1000).toFixed(3),
+                                            rightDelayMs: (itdRightDelay * 1000).toFixed(3)
+                                        },
+                                        // Current filter frequencies
+                                        filters: {
+                                            leftHz: Math.round(leftFilterFreq),
+                                            rightHz: Math.round(rightFilterFreq)
+                                        }
+                                    };
+                                    const text = JSON.stringify(settings, null, 2);
+                                    navigator.clipboard.writeText(text);
+                                    alert('Settings copied! Paste them to share with the developer.');
+                                }}
+                                style={{
+                                    flex: 1,
+                                    padding: '12px',
+                                    background: 'var(--accent)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                }}
+                            >
+                                📋 Copy Settings
+                            </button>
+                            <button
+                                onClick={onClose}
+                                style={{
+                                    padding: '12px 24px',
+                                    background: 'transparent',
+                                    color: 'var(--text-primary)',
+                                    border: '1px solid var(--text-secondary)',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         // Advanced Controls Component (Story 3-2)
-        const AdvancedControls = ({ 
+        const AdvancedControls = ({
             // Parameter states (from existing Epic 1 hooks)
             speed, setSpeed,
             intensity, setIntensity,
@@ -1261,7 +2403,9 @@
             sensorLocked, setSensorLocked,
             setA11yAnnouncement,
             // Story 3-3: Save preset handler
-            onSavePreset
+            onSavePreset,
+            // Spatial tuner
+            onOpenTuner
         }) => {
             return (
                 <details 
@@ -1428,7 +2572,7 @@
                     
                     {/* Story 3-3: Save Preset Button */}
                     {!sensorLocked && onSavePreset && (
-                        <button 
+                        <button
                             type="button"
                             onClick={onSavePreset}
                             className="primary-btn"
@@ -1438,7 +2582,29 @@
                             💾 Save as Custom Preset
                         </button>
                     )}
-                    
+
+                    {/* Spatial Audio Tuner Button */}
+                    {onOpenTuner && (
+                        <button
+                            type="button"
+                            onClick={onOpenTuner}
+                            style={{
+                                marginTop: '8px',
+                                width: '100%',
+                                padding: '12px',
+                                background: 'rgba(255,255,255,0.1)',
+                                border: '1px dashed var(--text-secondary)',
+                                borderRadius: '8px',
+                                color: 'var(--text-primary)',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem'
+                            }}
+                            aria-label="Open spatial audio tuner"
+                        >
+                            🎯 Open Spatial Tuner (Debug)
+                        </button>
+                    )}
+
                     {/* Sensor Lock Notice */}
                     {sensorLocked && (
                         <div className="sensor-lock-notice" role="status" aria-live="polite">
@@ -2046,7 +3212,11 @@ function App() {
             const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
             const [editingPreset, setEditingPreset] = useState(null);
             const [allPresets, setAllPresets] = useState([]);
-            
+
+            // Spatial Audio Tuner (debugging tool)
+            const [showSpatialTuner, setShowSpatialTuner] = useState(false);
+            const spatialTunerActiveRef = useRef(false);
+
             // File intake notifications
             const [toastMessage, setToastMessage] = useState('');
             const [toastType, setToastType] = useState('info');
@@ -2108,6 +3278,12 @@ function App() {
             const toastTimeoutRef = useRef(null);
             const activeSessionIdRef = useRef(null);
             const sessionRitualFlagRef = useRef(false);
+
+            // Audio parameter refs - allows rotation interval to read current values
+            const speedRef = useRef(speed);
+            const intensityRef = useRef(intensity);
+            const spatialDepthRef = useRef(spatialDepth);
+            const movementPatternRef = useRef(movementPattern);
 
             const cleanupBlobUrl = () => {
                 if (currentBlobUrlRef.current) {
@@ -2431,6 +3607,13 @@ function App() {
                 currentTrackIndexRef.current = currentTrackIndex;
             }, [currentTrackIndex]);
 
+            // Keep audio parameter refs in sync with state for rotation interval
+            useEffect(() => { speedRef.current = speed; }, [speed]);
+            useEffect(() => { intensityRef.current = intensity; }, [intensity]);
+            useEffect(() => { spatialDepthRef.current = spatialDepth; }, [spatialDepth]);
+            useEffect(() => { movementPatternRef.current = movementPattern; }, [movementPattern]);
+            useEffect(() => { spatialTunerActiveRef.current = showSpatialTuner; }, [showSpatialTuner]);
+
             // Clear accessibility announcements after 3 seconds to prevent re-announcements
             useEffect(() => {
                 if (a11yAnnouncement) {
@@ -2726,6 +3909,24 @@ function App() {
                 crossGainLeft.gain.value = 0.03 * spatialDepth;
                 crossGainRight.gain.value = 0.03 * spatialDepth;
 
+                // ITD (Inter-aural Time Difference) delay nodes
+                // Max ITD is ~0.7ms (0.0007s) when sound is directly to one side
+                const itdDelayLeft = context.createDelay(0.001); // max 1ms
+                const itdDelayRight = context.createDelay(0.001);
+                itdDelayLeft.delayTime.value = 0;
+                itdDelayRight.delayTime.value = 0;
+
+                // Low-pass filters for "head shadow" effect
+                // High frequencies are blocked more by the head, making sounds behind/opposite darker
+                const lpFilterLeft = context.createBiquadFilter();
+                const lpFilterRight = context.createBiquadFilter();
+                lpFilterLeft.type = 'lowpass';
+                lpFilterRight.type = 'lowpass';
+                lpFilterLeft.frequency.value = 20000; // Start fully open
+                lpFilterRight.frequency.value = 20000;
+                lpFilterLeft.Q.value = 0.7; // Gentle rolloff
+                lpFilterRight.Q.value = 0.7;
+
                 rotationNodesRef.current = {
                     leftToLeftGain,
                     leftToRightGain,
@@ -2734,7 +3935,11 @@ function App() {
                     delayGainLeft,
                     delayGainRight,
                     crossGainLeft,
-                    crossGainRight
+                    crossGainRight,
+                    itdDelayLeft,
+                    itdDelayRight,
+                    lpFilterLeft,
+                    lpFilterRight
                 };
 
                 source.connect(splitter);
@@ -2744,10 +3949,18 @@ function App() {
                 splitter.connect(rightToLeftGain, 1);
                 splitter.connect(rightToRightGain, 1);
 
-                leftToLeftGain.connect(merger, 0, 0);
-                leftToRightGain.connect(merger, 0, 1);
-                rightToLeftGain.connect(merger, 0, 0);
-                rightToRightGain.connect(merger, 0, 1);
+                // Route through ITD delays and low-pass filters before merger
+                // Left channel: gains -> ITD delay -> low-pass filter -> merger
+                leftToLeftGain.connect(itdDelayLeft);
+                rightToLeftGain.connect(itdDelayLeft);
+                itdDelayLeft.connect(lpFilterLeft);
+                lpFilterLeft.connect(merger, 0, 0);
+
+                // Right channel: gains -> ITD delay -> low-pass filter -> merger
+                rightToRightGain.connect(itdDelayRight);
+                leftToRightGain.connect(itdDelayRight);
+                itdDelayRight.connect(lpFilterRight);
+                lpFilterRight.connect(merger, 0, 1);
 
                 leftToLeftGain.connect(delayLeft);
                 delayLeft.connect(delayGainLeft);
@@ -2784,6 +3997,58 @@ function App() {
                 }
             };
 
+            // Apply gains directly from Spatial Tuner (bypasses rotation interval)
+            const applyTunerGains = React.useCallback((leftGain, rightGain, crossGain, itdLeftDelay = 0, itdRightDelay = 0, leftFilterFreq = 20000, rightFilterFreq = 20000) => {
+                const nodes = rotationNodesRef.current;
+                const ctx = audioContextRef.current;
+                if (!nodes || !ctx) return;
+
+                const clamp = (val) => Math.max(0.0001, Math.min(1, val));
+                const now = ctx.currentTime;
+                const rampTime = now + 0.05; // Fast 50ms ramp
+
+                // Apply the gains directly
+                if (nodes.leftToLeftGain) {
+                    nodes.leftToLeftGain.gain.setValueAtTime(clamp(nodes.leftToLeftGain.gain.value), now);
+                    nodes.leftToLeftGain.gain.exponentialRampToValueAtTime(clamp(leftGain * 0.5), rampTime);
+                }
+                if (nodes.rightToRightGain) {
+                    nodes.rightToRightGain.gain.setValueAtTime(clamp(nodes.rightToRightGain.gain.value), now);
+                    nodes.rightToRightGain.gain.exponentialRampToValueAtTime(clamp(rightGain * 0.5), rampTime);
+                }
+                // Cross-channel (near zero for hard pan)
+                if (nodes.leftToRightGain) {
+                    nodes.leftToRightGain.gain.setValueAtTime(clamp(nodes.leftToRightGain.gain.value), now);
+                    nodes.leftToRightGain.gain.exponentialRampToValueAtTime(clamp(crossGain), rampTime);
+                }
+                if (nodes.rightToLeftGain) {
+                    nodes.rightToLeftGain.gain.setValueAtTime(clamp(nodes.rightToLeftGain.gain.value), now);
+                    nodes.rightToLeftGain.gain.exponentialRampToValueAtTime(clamp(crossGain), rampTime);
+                }
+
+                // Apply ITD (Inter-aural Time Difference) delays
+                // Sound on right = delay left ear, sound on left = delay right ear
+                if (nodes.itdDelayLeft) {
+                    nodes.itdDelayLeft.delayTime.setValueAtTime(nodes.itdDelayLeft.delayTime.value, now);
+                    nodes.itdDelayLeft.delayTime.linearRampToValueAtTime(Math.min(0.001, itdLeftDelay), rampTime);
+                }
+                if (nodes.itdDelayRight) {
+                    nodes.itdDelayRight.delayTime.setValueAtTime(nodes.itdDelayRight.delayTime.value, now);
+                    nodes.itdDelayRight.delayTime.linearRampToValueAtTime(Math.min(0.001, itdRightDelay), rampTime);
+                }
+
+                // Apply low-pass filter frequencies for "head shadow" effect
+                // This makes sounds darker/muffled when behind or on opposite side
+                if (nodes.lpFilterLeft) {
+                    nodes.lpFilterLeft.frequency.setValueAtTime(nodes.lpFilterLeft.frequency.value, now);
+                    nodes.lpFilterLeft.frequency.exponentialRampToValueAtTime(Math.max(200, leftFilterFreq), rampTime);
+                }
+                if (nodes.lpFilterRight) {
+                    nodes.lpFilterRight.frequency.setValueAtTime(nodes.lpFilterRight.frequency.value, now);
+                    nodes.lpFilterRight.frequency.exponentialRampToValueAtTime(Math.max(200, rightFilterFreq), rampTime);
+                }
+            }, []);
+
             const startRotation = () => {
                 if (rotationIntervalRef.current) {
                     clearInterval(rotationIntervalRef.current);
@@ -2796,6 +4061,11 @@ function App() {
                 // Use a slightly longer interval to allow meaningful ramps (avoid overlapping automation)
                 const ROTATION_INTERVAL_MS = 100; // 100ms ticks
                 rotationIntervalRef.current = setInterval(() => {
+                    // Skip rotation when Spatial Tuner is active (tuner controls audio directly)
+                    if (spatialTunerActiveRef.current) {
+                        return;
+                    }
+
                     const nodes = rotationNodesRef.current;
                     const ctx = audioContextRef.current;
                     if (
@@ -2809,16 +4079,36 @@ function App() {
                         return;
                     }
                     
-                    const angle = 2 * Math.PI * speed * time;
+                    // Read current values from refs (not stale closure)
+                    const currentSpeed = speedRef.current;
+                    const currentMovement = movementPatternRef.current;
+                    const currentIntensity = intensityRef.current;
+                    const currentSpatialDepth = spatialDepthRef.current;
+
+                    const angle = 2 * Math.PI * currentSpeed * time;
                     let panPosition = 0;
 
                     // Calculate pan position based on movement pattern
-                    switch(movementPattern) {
+                    switch(currentMovement) {
                         case 'circle':
                             panPosition = Math.sin(angle);
                             break;
                         case 'figure8':
-                            panPosition = Math.sin(angle) * Math.cos(angle / 2);
+                            // True figure-8: Loop on right side, then loop on left side
+                            // Creates the sensation of sound tracing an "8" around your head
+                            const f8Cycle = ((angle / (2 * Math.PI)) % 1 + 1) % 1; // 0 to 1, normalized
+                            if (f8Cycle < 0.5) {
+                                // Right side loop: center → full right → center
+                                const rightPhase = f8Cycle * 2; // 0 to 1
+                                panPosition = Math.sin(rightPhase * Math.PI); // 0 → 1 → 0
+                            } else {
+                                // Left side loop: center → full left → center
+                                const leftPhase = (f8Cycle - 0.5) * 2; // 0 to 1
+                                panPosition = -Math.sin(leftPhase * Math.PI); // 0 → -1 → 0
+                            }
+                            // Add subtle depth variation (quieter at the "crossing point" of the 8)
+                            const f8DepthPhase = Math.abs(Math.sin(f8Cycle * 2 * Math.PI));
+                            window._quadrantDepthMultiplier = 0.7 + 0.3 * f8DepthPhase; // 0.7 to 1.0
                             break;
                         case 'leftright':
                             panPosition = Math.sin(angle);
@@ -2866,39 +4156,58 @@ function App() {
                     }
                     
                     // Apply intensity to pan position
-                    panPosition *= intensity;
+                    panPosition *= currentIntensity;
                     
                     // CRITICAL FIX: Normalized gain distribution to prevent clipping
                     // Total energy must equal 1.0 to prevent gain accumulation
                     const normalizationFactor = 0.5; // Base gain per channel before panning
-                    const crossChannelMix = 0.15; // Reduced cross-channel bleeding
 
-                    // For the 'quadrant' pattern, apply 360-degree depth simulation
-                    // Back position gets quieter (0.55x) to create immersive circular sound
-                    const quadrantGainMultiplier = movementPattern === 'quadrant'
+                    // Quadrant uses HARD panning (no cross-channel) for clear L/R separation
+                    const isHardPan = currentMovement === 'quadrant';
+                    const crossChannelMix = isHardPan ? 0 : 0.15; // Zero bleeding for quadrant
+
+                    // For 'quadrant' and 'figure8' patterns, apply depth simulation
+                    // Creates immersive 3D sound by varying volume based on perceived position
+                    const use3DDepth = currentMovement === 'quadrant' || currentMovement === 'figure8';
+                    const depthGainMultiplier = use3DDepth
                         ? (window._quadrantDepthMultiplier || 1.0)
                         : 1.0;
 
-                    
-                    // Main channel gains (normalized to prevent sum > 1.0)
-                    const leftChannelGain = (1 - panPosition) * 0.5; // 0.0 to 1.0
-                    const rightChannelGain = (1 + panPosition) * 0.5; // 0.0 to 1.0
-                    
-                    // Apply normalization to prevent clipping
-                    //const targetLeftGain = Math.max(0.001, leftChannelGain * normalizationFactor);
-                    //const targetRightGain = Math.max(0.001, rightChannelGain * normalizationFactor);
+                    // Main channel gains - Quadrant uses hard panning for maximum separation
+                    let leftChannelGain, rightChannelGain;
+                    if (isHardPan) {
+                        // HARD PAN: When right, left is silent. When left, right is silent.
+                        // panPosition: -1 = full left, 0 = center, +1 = full right
+                        if (panPosition > 0.1) {
+                            // Panning right: left ear gets less/none
+                            leftChannelGain = Math.max(0, 1 - panPosition * 2); // Drops to 0 at pan=0.5+
+                            rightChannelGain = 1;
+                        } else if (panPosition < -0.1) {
+                            // Panning left: right ear gets less/none
+                            leftChannelGain = 1;
+                            rightChannelGain = Math.max(0, 1 + panPosition * 2); // Drops to 0 at pan=-0.5+
+                        } else {
+                            // Center (back/front): both ears equal
+                            leftChannelGain = 0.5;
+                            rightChannelGain = 0.5;
+                        }
+                    } else {
+                        // Standard soft panning for other patterns
+                        leftChannelGain = (1 - panPosition) * 0.5; // 0.0 to 1.0
+                        rightChannelGain = (1 + panPosition) * 0.5; // 0.0 to 1.0
+                    }
 
-                    // Apply the quadrant multiplier
-                    const targetLeftGain = Math.max(0.001, leftChannelGain * normalizationFactor * quadrantGainMultiplier);
-                    const targetRightGain = Math.max(0.001, rightChannelGain * normalizationFactor * quadrantGainMultiplier);
+                    // Apply depth multiplier for 3D spatial patterns
+                    const targetLeftGain = Math.max(0.001, leftChannelGain * normalizationFactor * depthGainMultiplier);
+                    const targetRightGain = Math.max(0.001, rightChannelGain * normalizationFactor * depthGainMultiplier);
 
-                    // Cross-channel gains (proportional to opposite channel, heavily attenuated)
-                    const targetLeftToRight = Math.max(0.001, rightChannelGain * crossChannelMix * normalizationFactor);
-                    const targetRightToLeft = Math.max(0.001, leftChannelGain * crossChannelMix * normalizationFactor);
+                    // Cross-channel gains - ZERO for quadrant (hard pan), small for others
+                    const targetLeftToRight = isHardPan ? 0.001 : Math.max(0.001, rightChannelGain * crossChannelMix * normalizationFactor);
+                    const targetRightToLeft = isHardPan ? 0.001 : Math.max(0.001, leftChannelGain * crossChannelMix * normalizationFactor);
 
-                    // Also update delay and cross-delay gains to add spatial perception cues (proportional to pan)
-                    const delayBase = 0.05 * spatialDepth;
-                    const crossDelayBase = 0.03 * spatialDepth;
+                    // Delay/cross-delay gains - minimal for quadrant to keep separation clean
+                    const delayBase = isHardPan ? 0.02 : 0.05 * currentSpatialDepth;
+                    const crossDelayBase = isHardPan ? 0 : 0.03 * currentSpatialDepth;
                     const targetDelayLeft = Math.max(0.0001, delayBase * Math.abs(panPosition));
                     const targetDelayRight = Math.max(0.0001, delayBase * Math.abs(panPosition));
                     const targetCrossDelayLeft = Math.max(0.0001, crossDelayBase * Math.abs(panPosition));
@@ -4167,6 +5476,7 @@ return (
                                 setSensorLocked={setSensorLocked}
                                 setA11yAnnouncement={setA11yAnnouncement}
                                 onSavePreset={openSavePresetDialog}
+                                onOpenTuner={() => setShowSpatialTuner(true)}
                             />
 
                             {/* Story 3-3: PresetList Component */}
@@ -4705,6 +6015,15 @@ return (
                             existingPreset={editingPreset}
                         />
                     )}
+
+                    {/* Spatial Audio Tuner (Debug Tool) */}
+                    <SpatialAudioTuner
+                        isOpen={showSpatialTuner}
+                        onClose={() => setShowSpatialTuner(false)}
+                        onApplyGains={applyTunerGains}
+                        currentVolume={volume}
+                        onVolumeChange={setVolume}
+                    />
                 </div>
             );
         }
