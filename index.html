@@ -5138,6 +5138,8 @@ function App() {
             const gainChainRef = useRef(null);
             const binauralNodesRef = useRef(null);
             const noiseNodesRef = useRef(null);
+            const pausedBinauralGainRef = useRef(null);
+            const pausedNoiseGainRef = useRef(null);
             const visualWaveGainRef = useRef(visualWaveGain);
             const visualizerTypeRef = useRef(visualizerType);
             const playlistRef = useRef(playlist);
@@ -7389,15 +7391,41 @@ function App() {
                     }
                     return;
                 }
-                
+
                 const audio = audioElementRef.current;
-                
+
                 if (isPlaying) {
+                    // Pause main audio
                     audio.pause();
+
+                    // Mute binaural beats (store original gain for resume)
+                    if (binauralNodesRef.current?.gain) {
+                        pausedBinauralGainRef.current = binauralNodesRef.current.gain.gain.value;
+                        binauralNodesRef.current.gain.gain.value = 0;
+                    }
+
+                    // Mute noise (store original gain for resume)
+                    if (noiseNodesRef.current?.gain) {
+                        pausedNoiseGainRef.current = noiseNodesRef.current.gain.gain.value;
+                        noiseNodesRef.current.gain.gain.value = 0;
+                    }
+
                     setIsPlaying(false);
                     endSession(true);
                 } else {
                     audio.play().then(() => {
+                        // Restore binaural beats
+                        if (binauralNodesRef.current?.gain && pausedBinauralGainRef.current !== null) {
+                            binauralNodesRef.current.gain.gain.value = pausedBinauralGainRef.current;
+                            pausedBinauralGainRef.current = null;
+                        }
+
+                        // Restore noise
+                        if (noiseNodesRef.current?.gain && pausedNoiseGainRef.current !== null) {
+                            noiseNodesRef.current.gain.gain.value = pausedNoiseGainRef.current;
+                            pausedNoiseGainRef.current = null;
+                        }
+
                         setIsPlaying(true);
                         if (!activeSessionIdRef.current && nowPlayingTrack) {
                             startSession({ track: nowPlayingTrack, ritualUsed: sessionRitualFlagRef.current });
