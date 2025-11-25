@@ -6438,17 +6438,33 @@ function App() {
 
                         for (let i = 0; i < bufferLength; i++) {
                             const barHeight = ((frequencyData[i] / 255) * centerY * 0.9) * visualGain;
-                            const hue = (i / bufferLength) * 180 + 180;
 
-                            // Top bars (full brightness)
-                            ctx.fillStyle = `hsl(${hue}, 70%, 60%)`;
+                            // Top bars - blues -> yellow -> orange -> red (no greens)
+                            const topGradient = ctx.createLinearGradient(0, centerY - barHeight, 0, centerY);
+                            topGradient.addColorStop(0, `hsl(0, 90%, 50%)`);     // Red (loudest)
+                            topGradient.addColorStop(0.12, `hsl(15, 90%, 50%)`);  // Orange-red
+                            topGradient.addColorStop(0.25, `hsl(35, 95%, 50%)`);  // Orange
+                            topGradient.addColorStop(0.38, `hsl(50, 90%, 50%)`);  // Yellow
+                            topGradient.addColorStop(0.5, `hsl(200, 80%, 55%)`);  // Light blue
+                            topGradient.addColorStop(0.65, `hsl(210, 80%, 50%)`); // Sky blue
+                            topGradient.addColorStop(0.8, `hsl(220, 75%, 55%)`);  // Blue
+                            topGradient.addColorStop(0.92, `hsl(230, 70%, 55%)`); // Medium blue
+                            topGradient.addColorStop(1, `hsl(240, 70%, 60%)`);    // Deep blue (center)
+                            ctx.fillStyle = topGradient;
                             ctx.fillRect(x, centerY - barHeight, barWidth, barHeight);
 
-                            // Bottom bars (reflection - slightly darker/faded)
-                            const gradient = ctx.createLinearGradient(0, centerY, 0, centerY + barHeight);
-                            gradient.addColorStop(0, `hsla(${hue}, 70%, 60%, 0.8)`);
-                            gradient.addColorStop(1, `hsla(${hue}, 70%, 40%, 0.3)`);
-                            ctx.fillStyle = gradient;
+                            // Bottom bars (reflection - same spectrum, faded)
+                            const bottomGradient = ctx.createLinearGradient(0, centerY, 0, centerY + barHeight);
+                            bottomGradient.addColorStop(0, `hsla(240, 70%, 60%, 0.8)`);    // Deep blue at center
+                            bottomGradient.addColorStop(0.08, `hsla(230, 70%, 55%, 0.75)`); // Medium blue
+                            bottomGradient.addColorStop(0.2, `hsla(220, 75%, 55%, 0.65)`);  // Blue
+                            bottomGradient.addColorStop(0.35, `hsla(210, 80%, 50%, 0.55)`); // Sky blue
+                            bottomGradient.addColorStop(0.5, `hsla(200, 80%, 55%, 0.45)`);  // Light blue
+                            bottomGradient.addColorStop(0.62, `hsla(50, 90%, 50%, 0.4)`);   // Yellow
+                            bottomGradient.addColorStop(0.75, `hsla(35, 95%, 50%, 0.35)`);  // Orange
+                            bottomGradient.addColorStop(0.88, `hsla(15, 90%, 50%, 0.3)`);   // Orange-red
+                            bottomGradient.addColorStop(1, `hsla(0, 90%, 45%, 0.25)`);     // Red (faded)
+                            ctx.fillStyle = bottomGradient;
                             ctx.fillRect(x, centerY, barWidth, barHeight);
 
                             x += barWidth + 1;
