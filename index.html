@@ -2832,18 +2832,34 @@ function App() {
                             }
                             break;
                         case 'quadrant':
-                            // Smooth quadrant: interpolate between four anchor points to create perceivable sweeps
-                            // Anchor positions: [1, 0, -1, 0] corresponding to Right -> Center -> Left -> Center
+                            // 360-degree circular sound: Right -> Back(quiet) -> Left -> Front -> repeat
+                            // Creates immersive feeling of sound orbiting around your head
                             const fullCycle = (angle / (2 * Math.PI)); // cycles (may be >1)
                             const cyclePos = fullCycle - Math.floor(fullCycle); // 0..1 within cycle
-                            const segment = Math.floor(cyclePos * 4); // 0..3
+                            const segment = Math.floor(cyclePos * 4); // 0=right, 1=back, 2=left, 3=front
                             const segmentPhase = (cyclePos * 4) - segment; // 0..1 within segment
 
-                            const anchors = [1, 0, -1, 0];
-                            const a = anchors[segment];
-                            const b = anchors[(segment + 1) % anchors.length];
-                            // Linear interpolation between anchor points (can be swapped to smoother easing later)
-                            panPosition = a + (b - a) * segmentPhase;
+                            // Pan positions: Right(1) -> Center(0) -> Left(-1) -> Center(0)
+                            const panAnchors = [1, 0, -1, 0];
+                            const panA = panAnchors[segment];
+                            const panB = panAnchors[(segment + 1) % panAnchors.length];
+
+                            // Depth/volume multipliers: Right(1.0) -> Back(0.55) -> Left(1.0) -> Front(1.0)
+                            // Back position is quieter to simulate sound being behind your head
+                            const depthAnchors = [1.0, 0.55, 1.0, 1.0];
+                            const depthA = depthAnchors[segment];
+                            const depthB = depthAnchors[(segment + 1) % depthAnchors.length];
+
+                            // Smooth easing for more natural circular motion (ease-in-out)
+                            const easeInOut = (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+                            const smoothPhase = easeInOut(segmentPhase);
+
+                            // Interpolate pan position with easing
+                            panPosition = panA + (panB - panA) * smoothPhase;
+
+                            // Store depth multiplier for gain calculation (accessed below)
+                            // Using a variable name that won't conflict
+                            window._quadrantDepthMultiplier = depthA + (depthB - depthA) * smoothPhase;
                             break;
                         default:
                             panPosition = Math.sin(angle);
@@ -2857,9 +2873,11 @@ function App() {
                     const normalizationFactor = 0.5; // Base gain per channel before panning
                     const crossChannelMix = 0.15; // Reduced cross-channel bleeding
 
-                    // For the 'quadrant' pattern, reduce gain in the center position but tolerate floating point precision
-                    const isQuadrantCenter = movementPattern === 'quadrant' && Math.abs(panPosition) < 0.12;
-                    const quadrantGainMultiplier = isQuadrantCenter ? 0.85 : 1.0;
+                    // For the 'quadrant' pattern, apply 360-degree depth simulation
+                    // Back position gets quieter (0.55x) to create immersive circular sound
+                    const quadrantGainMultiplier = movementPattern === 'quadrant'
+                        ? (window._quadrantDepthMultiplier || 1.0)
+                        : 1.0;
 
                     
                     // Main channel gains (normalized to prevent sum > 1.0)
