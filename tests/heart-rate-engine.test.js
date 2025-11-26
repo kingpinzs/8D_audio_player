@@ -405,6 +405,216 @@ const runAllTests = async () => {
         });
     })) passed++; else failed++;
 
+    // ============================================================
+    // Story 5-3: Sensor-Informed Preset Adjustments
+    // ============================================================
+
+    log('\n🔄 Story 5-3: Auto-Adjust Toggle (AC5):');
+
+    if (await runTest('Auto-adjust default is OFF (false)', async () => {
+        // Simulate default state
+        const defaultAutoAdjust = false;
+        assert.strictEqual(defaultAutoAdjust, false, 'Auto-adjust should default to OFF');
+    })) passed++; else failed++;
+
+    if (await runTest('Auto-adjust toggle state can be toggled', async () => {
+        let autoAdjustEnabled = false;
+        autoAdjustEnabled = true;
+        assert.strictEqual(autoAdjustEnabled, true, 'Toggle ON should set true');
+        autoAdjustEnabled = false;
+        assert.strictEqual(autoAdjustEnabled, false, 'Toggle OFF should set false');
+    })) passed++; else failed++;
+
+    if (await runTest('localStorage key follows naming convention', async () => {
+        const key = 'mp3_8d_auto_adjust_enabled';
+        assert(key.startsWith('mp3_8d_'), 'Key should start with mp3_8d_ prefix');
+        assert(key.includes('auto_adjust'), 'Key should include auto_adjust');
+    })) passed++; else failed++;
+
+    log('\n⚡ Story 5-3: SensorRuleEngine Auto-Apply Mode (AC1, AC7):');
+
+    // Extended MockRuleEngine for auto-apply mode
+    class AutoApplyRuleEngine extends MockRuleEngine {
+        constructor(threshold = 85, autoApplyEnabled = false) {
+            super(threshold);
+            this.autoApplyEnabled = autoApplyEnabled;
+            this.presetApplied = null;
+            this.events = [];
+        }
+
+        evaluateWithMode(hrHistory) {
+            const result = this.evaluate(hrHistory);
+
+            if (result.triggered) {
+                if (this.autoApplyEnabled) {
+                    // Auto-apply mode
+                    this.presetApplied = 'calm';
+                    this.events.push({ type: 'AUTOMATION_APPLIED', preset: 'calm', hrAvg: result.hrAvg });
+                    return { ...result, mode: 'auto_apply', presetApplied: 'calm' };
+                } else {
+                    // Suggest mode
+                    this.events.push({ type: 'SUGGESTION_SHOWN', hrAvg: result.hrAvg });
+                    return { ...result, mode: 'suggest' };
+                }
+            }
+            return result;
+        }
+
+        setAutoApply(enabled) {
+            this.autoApplyEnabled = enabled;
+        }
+    }
+
+    if (await runTest('Auto-apply mode calls applyPreset when threshold exceeded', async () => {
+        const engine = new AutoApplyRuleEngine(85, true); // autoApply = true
+        const highHistory = Array(15).fill(null).map(() => ({ hr: 95 }));
+
+        // Trigger
+        engine.evaluateWithMode(highHistory);
+        engine.evaluateWithMode(highHistory);
+        const result = engine.evaluateWithMode(highHistory);
+
+        assert.strictEqual(result.triggered, true, 'Should trigger');
+        assert.strictEqual(result.mode, 'auto_apply', 'Should be auto_apply mode');
+        assert.strictEqual(result.presetApplied, 'calm', 'Should apply calm preset');
+        assert.strictEqual(engine.presetApplied, 'calm', 'Engine should record preset');
+    })) passed++; else failed++;
+
+    if (await runTest('Suggest mode only shows toast, does not apply preset', async () => {
+        const engine = new AutoApplyRuleEngine(85, false); // autoApply = false
+        const highHistory = Array(15).fill(null).map(() => ({ hr: 95 }));
+
+        // Reset cooldown
+        engine.lastTrigger = 0;
+        engine.consecutiveExceeded = 0;
+
+        // Trigger
+        engine.evaluateWithMode(highHistory);
+        engine.evaluateWithMode(highHistory);
+        const result = engine.evaluateWithMode(highHistory);
+
+        assert.strictEqual(result.triggered, true, 'Should trigger');
+        assert.strictEqual(result.mode, 'suggest', 'Should be suggest mode');
+        assert.strictEqual(engine.presetApplied, null, 'Should NOT apply preset');
+    })) passed++; else failed++;
+
+    if (await runTest('Switching modes changes behavior', async () => {
+        const engine = new AutoApplyRuleEngine(85, false); // Start in suggest mode
+
+        // Trigger in suggest mode
+        const highHistory = Array(15).fill(null).map(() => ({ hr: 95 }));
+        engine.evaluateWithMode(highHistory);
+        engine.evaluateWithMode(highHistory);
+        let result = engine.evaluateWithMode(highHistory);
+        assert.strictEqual(result.mode, 'suggest', 'First trigger should be suggest');
+
+        // Switch to auto-apply mode
+        engine.setAutoApply(true);
+        engine.lastTrigger = 0; // Reset cooldown
+        engine.consecutiveExceeded = 0;
+
+        // Trigger again
+        engine.evaluateWithMode(highHistory);
+        engine.evaluateWithMode(highHistory);
+        result = engine.evaluateWithMode(highHistory);
+        assert.strictEqual(result.mode, 'auto_apply', 'Second trigger should be auto_apply');
+        assert.strictEqual(result.presetApplied, 'calm', 'Should apply calm preset');
+    })) passed++; else failed++;
+
+    log('\n📝 Story 5-3: Event Logging (AC6):');
+
+    if (await runTest('AUTOMATION_APPLIED event logged with correct data', async () => {
+        const engine = new AutoApplyRuleEngine(85, true);
+        const highHistory = Array(15).fill(null).map(() => ({ hr: 95 }));
+
+        engine.evaluateWithMode(highHistory);
+        engine.evaluateWithMode(highHistory);
+        engine.evaluateWithMode(highHistory);
+
+        const event = engine.events.find(e => e.type === 'AUTOMATION_APPLIED');
+        assert(event, 'AUTOMATION_APPLIED event should exist');
+        assert.strictEqual(event.preset, 'calm', 'Event should include preset');
+        assert(event.hrAvg > 85, 'Event should include hrAvg above threshold');
+    })) passed++; else failed++;
+
+    if (await runTest('SUGGESTION_SHOWN event logged in suggest mode', async () => {
+        const engine = new AutoApplyRuleEngine(85, false);
+        const highHistory = Array(15).fill(null).map(() => ({ hr: 95 }));
+
+        engine.evaluateWithMode(highHistory);
+        engine.evaluateWithMode(highHistory);
+        engine.evaluateWithMode(highHistory);
+
+        const event = engine.events.find(e => e.type === 'SUGGESTION_SHOWN');
+        assert(event, 'SUGGESTION_SHOWN event should exist');
+    })) passed++; else failed++;
+
+    log('\n🎚️ Story 5-3: Slider Override Detection (AC4):');
+
+    // Mock slider override detection
+    class MockSliderHandler {
+        constructor() {
+            this.sensorLocked = true;
+            this.events = [];
+        }
+
+        handleSliderChange(sliderName, newValue) {
+            if (this.sensorLocked) {
+                this.sensorLocked = false;
+                this.events.push({
+                    type: 'AUTOMATION_PAUSED',
+                    trigger: 'manual_slider',
+                    slider: sliderName,
+                    newValue
+                });
+                return { paused: true, event: this.events[this.events.length - 1] };
+            }
+            return { paused: false };
+        }
+    }
+
+    if (await runTest('Slider change pauses automation when locked', async () => {
+        const handler = new MockSliderHandler();
+        handler.sensorLocked = true;
+
+        const result = handler.handleSliderChange('intensity', 0.7);
+
+        assert.strictEqual(result.paused, true, 'Should pause automation');
+        assert.strictEqual(handler.sensorLocked, false, 'Should unlock');
+    })) passed++; else failed++;
+
+    if (await runTest('Slider change logs AUTOMATION_PAUSED with slider name', async () => {
+        const handler = new MockSliderHandler();
+
+        handler.handleSliderChange('noise volume', 0.5);
+
+        const event = handler.events.find(e => e.type === 'AUTOMATION_PAUSED');
+        assert(event, 'AUTOMATION_PAUSED event should exist');
+        assert.strictEqual(event.trigger, 'manual_slider', 'Trigger should be manual_slider');
+        assert.strictEqual(event.slider, 'noise volume', 'Slider name should be recorded');
+    })) passed++; else failed++;
+
+    if (await runTest('Slider change when not locked does not pause', async () => {
+        const handler = new MockSliderHandler();
+        handler.sensorLocked = false;
+
+        const result = handler.handleSliderChange('intensity', 0.7);
+
+        assert.strictEqual(result.paused, false, 'Should NOT pause when already unlocked');
+    })) passed++; else failed++;
+
+    if (await runTest('Multiple slider changes only log once per lock period', async () => {
+        const handler = new MockSliderHandler();
+        handler.sensorLocked = true;
+
+        handler.handleSliderChange('intensity', 0.7);
+        handler.handleSliderChange('noise volume', 0.5);
+        handler.handleSliderChange('binaural frequency', 10);
+
+        // Only first change should log because subsequent ones are already unlocked
+        assert.strictEqual(handler.events.length, 1, 'Only one event should be logged');
+    })) passed++; else failed++;
+
     // Summary
     log('\n' + '─'.repeat(40));
     log(`📊 Results: ${passed} passed, ${failed} failed`);

@@ -439,6 +439,43 @@
             transform: translateY(0);
         }
 
+        /* Story 5-3: Lock Icon Button Styles (AC2) */
+        .lock-icon-btn {
+            background: transparent;
+            border: none;
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .lock-icon-btn:hover {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .lock-icon-btn:focus-visible {
+            outline: 2px solid var(--accent-primary, #6366f1);
+            outline-offset: 2px;
+        }
+
+        .lock-icon-btn.unlocked .lock-icon {
+            opacity: 0.6;
+        }
+
+        .lock-icon-btn.unlocked:hover .lock-icon {
+            opacity: 1;
+        }
+
+        /* Pulse animation for when automation applies changes */
+        @keyframes lock-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        .lock-icon-btn.pulse .lock-icon {
+            animation: lock-pulse 0.3s ease-in-out 2;
+        }
+
         .hero-card {
             display: flex;
             flex-direction: column;
@@ -2343,6 +2380,40 @@
 
         .threshold-help-text {
             margin: 0;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Story 5-3: Auto-Adjust Toggle (AC5) */
+        .sensor-auto-adjust-setting {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--card-border);
+        }
+
+        .auto-adjust-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .auto-adjust-checkbox {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent-primary, #6366f1);
+            cursor: pointer;
+        }
+
+        .auto-adjust-text {
+            flex: 1;
+        }
+
+        .auto-adjust-help-text {
+            margin: 8px 0 0 28px;
             font-size: 12px;
             color: var(--text-muted);
         }
@@ -5226,8 +5297,40 @@
             // Story 3-3: Save preset handler
             onSavePreset,
             // Spatial tuner
-            onOpenTuner
+            onOpenTuner,
+            // Story 5-3: Sensor automation props (AC2, AC3)
+            sensorStatus,
+            autoAdjustEnabled,
+            onAutoAdjustChange,
+            showToast,
+            logSensorEvent
         }) => {
+            const isSensorConnected = sensorStatus === 'connected';
+
+            // Story 5-3: Handler to detect manual slider interaction and pause automation (AC4)
+            const handleSliderChange = (sliderName, setter, parser = parseFloat) => (e) => {
+                const newValue = parser(e.target.value);
+
+                // If automation is active, pause it (user override)
+                if (sensorLocked) {
+                    setSensorLocked(false);
+                    if (logSensorEvent) {
+                        logSensorEvent('AUTOMATION_PAUSED', {
+                            trigger: 'manual_slider',
+                            slider: sliderName,
+                            newValue
+                        });
+                    }
+                    if (showToast) {
+                        showToast('Manual adjustment detected. Sensor automation paused.', 'info');
+                    }
+                    setA11yAnnouncement(`Manual ${sliderName} adjustment. Sensor automation paused.`);
+                }
+
+                // Apply the new value
+                setter(newValue);
+            };
+
             return (
                 <details 
                     open={isExpanded} 
@@ -5244,52 +5347,49 @@
                         <label className="control-group">
                             <span className="control-label">Rotation Speed</span>
                             <div className="control-input">
-                                <input 
-                                    type="range" 
-                                    min={PARAM_RANGES.speed.min} 
-                                    max={PARAM_RANGES.speed.max} 
-                                    step={PARAM_RANGES.speed.step} 
-                                    value={speed} 
-                                    onChange={(e) => setSpeed(parseFloat(e.target.value))} 
-                                    disabled={sensorLocked}
+                                <input
+                                    type="range"
+                                    min={PARAM_RANGES.speed.min}
+                                    max={PARAM_RANGES.speed.max}
+                                    step={PARAM_RANGES.speed.step}
+                                    value={speed}
+                                    onChange={handleSliderChange('rotation speed', setSpeed)}
                                     aria-label="Rotation speed"
                                 />
                                 <output>{speed.toFixed(2)}</output>
                             </div>
                             <span className="control-hint">How fast sound orbits your head</span>
                         </label>
-                        
+
                         {/* Intensity Slider */}
                         <label className="control-group">
                             <span className="control-label">Intensity</span>
                             <div className="control-input">
-                                <input 
-                                    type="range" 
-                                    min={PARAM_RANGES.intensity.min} 
-                                    max={PARAM_RANGES.intensity.max} 
-                                    step={PARAM_RANGES.intensity.step} 
-                                    value={intensity} 
-                                    onChange={(e) => setIntensity(parseFloat(e.target.value))} 
-                                    disabled={sensorLocked}
+                                <input
+                                    type="range"
+                                    min={PARAM_RANGES.intensity.min}
+                                    max={PARAM_RANGES.intensity.max}
+                                    step={PARAM_RANGES.intensity.step}
+                                    value={intensity}
+                                    onChange={handleSliderChange('intensity', setIntensity)}
                                     aria-label="Intensity"
                                 />
                                 <output>{intensity.toFixed(2)}</output>
                             </div>
                             <span className="control-hint">Strength of 8D effect</span>
                         </label>
-                        
+
                         {/* Spatial Depth Slider */}
                         <label className="control-group">
                             <span className="control-label">Spatial Depth</span>
                             <div className="control-input">
-                                <input 
-                                    type="range" 
-                                    min={PARAM_RANGES.spatialDepth.min} 
-                                    max={PARAM_RANGES.spatialDepth.max} 
-                                    step={PARAM_RANGES.spatialDepth.step} 
-                                    value={spatialDepth} 
-                                    onChange={(e) => setSpatialDepth(parseFloat(e.target.value))} 
-                                    disabled={sensorLocked}
+                                <input
+                                    type="range"
+                                    min={PARAM_RANGES.spatialDepth.min}
+                                    max={PARAM_RANGES.spatialDepth.max}
+                                    step={PARAM_RANGES.spatialDepth.step}
+                                    value={spatialDepth}
+                                    onChange={handleSliderChange('spatial depth', setSpatialDepth)}
                                     aria-label="Spatial depth"
                                 />
                                 <output>{spatialDepth.toFixed(2)}</output>
@@ -5301,10 +5401,9 @@
                         <label className="control-group">
                             <span className="control-label">Movement Pattern</span>
                             <div className="control-input">
-                                <select 
-                                    value={movementPattern} 
-                                    onChange={(e) => setMovementPattern(e.target.value)}
-                                    disabled={sensorLocked}
+                                <select
+                                    value={movementPattern}
+                                    onChange={handleSliderChange('movement pattern', setMovementPattern, (v) => v)}
                                     aria-label="Movement pattern"
                                 >
                                     <option value="circle">Circle - Steady orbit</option>
@@ -5316,51 +5415,60 @@
                             </div>
                             <span className="control-hint">Path sound travels around you</span>
                         </label>
-                        
+
                         {/* Binaural Beats Checkbox */}
                         <label className="control-group checkbox-group">
-                            <input 
-                                type="checkbox" 
-                                checked={binauralEnabled} 
-                                onChange={(e) => setBinauralEnabled(e.target.checked)}
-                                disabled={sensorLocked}
+                            <input
+                                type="checkbox"
+                                checked={binauralEnabled}
+                                onChange={(e) => {
+                                    if (sensorLocked) {
+                                        setSensorLocked(false);
+                                        if (logSensorEvent) {
+                                            logSensorEvent('AUTOMATION_PAUSED', { trigger: 'manual_slider', slider: 'binaural enabled' });
+                                        }
+                                        if (showToast) {
+                                            showToast('Manual adjustment detected. Sensor automation paused.', 'info');
+                                        }
+                                        setA11yAnnouncement('Manual binaural adjustment. Sensor automation paused.');
+                                    }
+                                    setBinauralEnabled(e.target.checked);
+                                }}
                                 aria-label="Enable binaural beats"
                             />
                             <span className="control-label">Binaural Beats</span>
                         </label>
-                        
+
                         {/* Binaural Frequency Slider (conditional) */}
                         {binauralEnabled && (
                             <label className="control-group">
                                 <span className="control-label">Binaural Frequency</span>
                                 <div className="control-input">
-                                    <input 
-                                        type="range" 
-                                        min={PARAM_RANGES.binauralFreq.min} 
-                                        max={PARAM_RANGES.binauralFreq.max} 
-                                        step={PARAM_RANGES.binauralFreq.step} 
-                                        value={binauralFreq} 
-                                        onChange={(e) => setBinauralFreq(parseInt(e.target.value))} 
-                                        disabled={sensorLocked}
+                                    <input
+                                        type="range"
+                                        min={PARAM_RANGES.binauralFreq.min}
+                                        max={PARAM_RANGES.binauralFreq.max}
+                                        step={PARAM_RANGES.binauralFreq.step}
+                                        value={binauralFreq}
+                                        onChange={handleSliderChange('binaural frequency', setBinauralFreq, parseInt)}
                                         aria-label="Binaural frequency"
                                     />
                                     <output>
-                                        {binauralFreq} Hz 
+                                        {binauralFreq} Hz
                                         <span className="freq-band">({getBinauralBand(binauralFreq)})</span>
                                     </output>
                                 </div>
                                 <span className="control-hint">{getBinauralHint(binauralFreq)}</span>
                             </label>
                         )}
-                        
+
                         {/* Noise Type Dropdown */}
                         <label className="control-group">
                             <span className="control-label">Noise Type</span>
                             <div className="control-input">
-                                <select 
-                                    value={noiseType} 
-                                    onChange={(e) => setNoiseType(e.target.value)}
-                                    disabled={sensorLocked}
+                                <select
+                                    value={noiseType}
+                                    onChange={handleSliderChange('noise type', setNoiseType, (v) => v)}
                                     aria-label="Noise type"
                                 >
                                     <option value="pink">Pink - Balanced warmth</option>
@@ -5375,14 +5483,13 @@
                         <label className="control-group">
                             <span className="control-label">Noise Volume</span>
                             <div className="control-input">
-                                <input 
-                                    type="range" 
-                                    min={PARAM_RANGES.noiseVolume.min} 
-                                    max={PARAM_RANGES.noiseVolume.max} 
-                                    step={PARAM_RANGES.noiseVolume.step} 
-                                    value={noiseVolume} 
-                                    onChange={(e) => setNoiseVolume(parseFloat(e.target.value))} 
-                                    disabled={sensorLocked}
+                                <input
+                                    type="range"
+                                    min={PARAM_RANGES.noiseVolume.min}
+                                    max={PARAM_RANGES.noiseVolume.max}
+                                    step={PARAM_RANGES.noiseVolume.step}
+                                    value={noiseVolume}
+                                    onChange={handleSliderChange('noise volume', setNoiseVolume)}
                                     aria-label="Noise volume"
                                 />
                                 <output>{noiseVolume.toFixed(2)}</output>
@@ -5390,9 +5497,9 @@
                             <span className="control-hint">Loudness of background noise</span>
                         </label>
                     </div>
-                    
+
                     {/* Story 3-3: Save Preset Button */}
-                    {!sensorLocked && onSavePreset && (
+                    {onSavePreset && (
                         <button
                             type="button"
                             onClick={onSavePreset}
@@ -5426,20 +5533,77 @@
                         </button>
                     )}
 
-                    {/* Sensor Lock Notice */}
-                    {sensorLocked && (
+                    {/* Story 5-3: Sensor Automation Lock Status (AC2, AC3) */}
+                    {isSensorConnected && (
                         <div className="sensor-lock-notice" role="status" aria-live="polite">
-                            <span className="lock-icon">🔒</span>
-                            <span className="lock-message">Parameters locked by adaptive mode</span>
-                            <button 
-                                onClick={() => {
-                                    setSensorLocked(false);
-                                    setA11yAnnouncement('Adaptive mode disabled. Controls unlocked.');
-                                }}
-                                className="unlock-btn"
-                            >
-                                Unlock Manual Control
-                            </button>
+                            {sensorLocked ? (
+                                <>
+                                    <button
+                                        type="button"
+                                        className="lock-icon-btn"
+                                        onClick={() => {
+                                            setSensorLocked(false);
+                                            if (logSensorEvent) {
+                                                logSensorEvent('AUTOMATION_PAUSED', { trigger: 'lock_icon' });
+                                            }
+                                            if (showToast) {
+                                                showToast('Sensor automation paused. Toggle Auto-adjust to resume.', 'info');
+                                            }
+                                            setA11yAnnouncement('Sensor automation paused. Controls unlocked.');
+                                        }}
+                                        title="Sensor automation active. Click to pause."
+                                        aria-label="Sensor automation active, click to take manual control"
+                                    >
+                                        <span className="lock-icon" aria-hidden="true">🔒</span>
+                                    </button>
+                                    <span className="lock-message">Parameters locked by adaptive mode</span>
+                                    <button
+                                        onClick={() => {
+                                            setSensorLocked(false);
+                                            if (logSensorEvent) {
+                                                logSensorEvent('AUTOMATION_PAUSED', { trigger: 'lock_icon' });
+                                            }
+                                            if (showToast) {
+                                                showToast('Sensor automation paused. Toggle Auto-adjust to resume.', 'info');
+                                            }
+                                            setA11yAnnouncement('Adaptive mode disabled. Controls unlocked.');
+                                        }}
+                                        className="unlock-btn"
+                                    >
+                                        Unlock Manual Control
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <button
+                                        type="button"
+                                        className="lock-icon-btn unlocked"
+                                        onClick={() => {
+                                            if (autoAdjustEnabled) {
+                                                setSensorLocked(true);
+                                                if (logSensorEvent) {
+                                                    logSensorEvent('AUTO_ADJUST_ENABLED', { trigger: 'lock_icon' });
+                                                }
+                                                if (showToast) {
+                                                    showToast('Sensor automation resumed.', 'info');
+                                                }
+                                                setA11yAnnouncement('Sensor automation resumed. Controls locked.');
+                                            } else {
+                                                if (showToast) {
+                                                    showToast('Enable Auto-adjust in Settings to use sensor automation.', 'info');
+                                                }
+                                            }
+                                        }}
+                                        title={autoAdjustEnabled ? "Automation paused. Click to resume." : "Enable Auto-adjust in Settings to use sensor automation."}
+                                        aria-label={autoAdjustEnabled ? "Automation paused, click to resume" : "Automation disabled, enable in settings"}
+                                    >
+                                        <span className="lock-icon" aria-hidden="true">🔓</span>
+                                    </button>
+                                    <span className="lock-message">
+                                        {autoAdjustEnabled ? 'Automation paused - Click lock to resume' : 'Manual control active'}
+                                    </span>
+                                </>
+                            )}
                         </div>
                     )}
                 </details>
@@ -5877,7 +6041,11 @@
             isSimulating,
             simulatorEnabled,
             onStartSimulation,
-            onStopSimulation
+            onStopSimulation,
+            // Story 5-3: Auto-adjust props (AC5, AC6)
+            autoAdjustEnabled,
+            onAutoAdjustChange,
+            logSensorEvent
         }) => {
             // AC3: Browser compatibility messaging
             const showBrowserMessage = !bluetoothSupported || !serialSupported;
@@ -6113,6 +6281,34 @@
                             </div>
                             <p id="threshold-help" className="threshold-help-text">
                                 Alert when heart rate exceeds this for 30+ seconds
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Story 5-3: Auto-Adjust Toggle (AC5, AC6) */}
+                    {isConnected && (
+                        <div className="sensor-auto-adjust-setting">
+                            <label className="auto-adjust-label">
+                                <input
+                                    type="checkbox"
+                                    checked={autoAdjustEnabled}
+                                    onChange={(e) => {
+                                        const newValue = e.target.checked;
+                                        onAutoAdjustChange(newValue);
+                                        if (logSensorEvent) {
+                                            logSensorEvent(
+                                                newValue ? 'AUTO_ADJUST_ENABLED' : 'AUTO_ADJUST_DISABLED',
+                                                { trigger: 'toggle', enabled: newValue }
+                                            );
+                                        }
+                                    }}
+                                    className="auto-adjust-checkbox"
+                                    aria-describedby="auto-adjust-help"
+                                />
+                                <span className="auto-adjust-text">Auto-adjust audio</span>
+                            </label>
+                            <p id="auto-adjust-help" className="auto-adjust-help-text">
+                                When enabled, app automatically adjusts audio based on heart rate
                             </p>
                         </div>
                     )}
@@ -7711,6 +7907,15 @@ function App() {
                     return saved ? parseInt(saved, 10) : 85;
                 } catch {
                     return 85;
+                }
+            });
+            // Story 5-3: Auto-adjust toggle (AC5)
+            const [autoAdjustEnabled, setAutoAdjustEnabled] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('mp3_8d_auto_adjust_enabled');
+                    return saved === 'true';
+                } catch {
+                    return false;
                 }
             });
             const [isSimulating, setIsSimulating] = useState(false); // Sensor simulator active
@@ -10292,28 +10497,57 @@ function App() {
                             }
 
                             // Trigger threshold exceeded
-                            console.log('[SensorRuleEngine] Threshold exceeded! Triggering suggestion');
                             lastThresholdTriggerRef.current = now;
                             consecutiveExceededRef.current = 0;
 
                             logSensorEvent('THRESHOLD_EXCEEDED', { hr: Math.round(hrAvg), threshold });
-                            logSensorEvent('SUGGESTION_SHOWN');
 
-                            // Show suggestion toast
-                            setSuggestionToastData({
-                                hr: Math.round(hrAvg),
-                                threshold,
-                                timestamp: now
-                            });
-                            setShowSuggestionToast(true);
-                            setA11yAnnouncement(`Heart rate elevated at ${Math.round(hrAvg)} bpm. Suggestion: Switch to Calm preset.`);
+                            // Story 5-3: Check auto-adjust mode (AC1, AC7)
+                            if (autoAdjustEnabled) {
+                                // Auto-apply mode: Apply preset directly with performance measurement
+                                console.log('[SensorRuleEngine] Auto-applying preset: calm');
+                                performance.mark('sensor-preset-start');
+
+                                const calmPreset = MODE_LIBRARY.find(m => m.id === 'calm');
+                                if (calmPreset) {
+                                    applyPreset(calmPreset, 'calm');
+
+                                    performance.mark('sensor-preset-end');
+                                    const measure = performance.measure('sensor-preset-apply', 'sensor-preset-start', 'sensor-preset-end');
+                                    console.log(`[SensorRuleEngine] Preset applied in ${measure.duration.toFixed(2)}ms`);
+
+                                    logSensorEvent('AUTOMATION_APPLIED', {
+                                        hr: Math.round(hrAvg),
+                                        hrAvg: Math.round(hrAvg),
+                                        threshold,
+                                        presetApplied: 'calm',
+                                        trigger: 'rule_engine',
+                                        latencyMs: measure.duration
+                                    });
+
+                                    showToast('Auto-adjusted to Calm preset', 'info');
+                                    setA11yAnnouncement(`Heart rate elevated. Automatically switched to Calm preset.`);
+                                }
+                            } else {
+                                // Suggest mode: Show suggestion toast
+                                console.log('[SensorRuleEngine] Threshold exceeded! Triggering suggestion');
+                                logSensorEvent('SUGGESTION_SHOWN');
+
+                                setSuggestionToastData({
+                                    hr: Math.round(hrAvg),
+                                    threshold,
+                                    timestamp: now
+                                });
+                                setShowSuggestionToast(true);
+                                setA11yAnnouncement(`Heart rate elevated at ${Math.round(hrAvg)} bpm. Suggestion: Switch to Calm preset.`);
+                            }
                         }
                     } else {
                         // Reset consecutive counter if below threshold
                         consecutiveExceededRef.current = 0;
                     }
                 }, 10000); // 10 seconds
-            }, [hrThreshold, logSensorEvent, setA11yAnnouncement]);
+            }, [hrThreshold, autoAdjustEnabled, logSensorEvent, applyPreset, showToast, setA11yAnnouncement]);
 
             // Stop the rule engine
             const stopRuleEngine = React.useCallback(() => {
@@ -10342,6 +10576,21 @@ function App() {
                     console.warn('[SensorBridge] Failed to persist HR threshold:', err);
                 }
             }, [hrThreshold]);
+
+            // Story 5-3: Persist auto-adjust toggle to localStorage (AC5)
+            useEffect(() => {
+                try {
+                    localStorage.setItem('mp3_8d_auto_adjust_enabled', String(autoAdjustEnabled));
+                    // Wire toggle to sensorLocked state
+                    if (autoAdjustEnabled && (sensorStatus === 'connected' || isSimulating)) {
+                        setSensorLocked(true);
+                    } else if (!autoAdjustEnabled) {
+                        setSensorLocked(false);
+                    }
+                } catch (err) {
+                    console.warn('[SensorBridge] Failed to persist auto-adjust setting:', err);
+                }
+            }, [autoAdjustEnabled, sensorStatus, isSimulating]);
 
             // ============================================================
             // Story 5-2: Sensor Simulator (AC8)
@@ -11968,6 +12217,11 @@ return (
                                 setA11yAnnouncement={setA11yAnnouncement}
                                 onSavePreset={openSavePresetDialog}
                                 onOpenTuner={() => setShowSpatialTuner(true)}
+                                sensorStatus={sensorStatus}
+                                autoAdjustEnabled={autoAdjustEnabled}
+                                onAutoAdjustChange={setAutoAdjustEnabled}
+                                showToast={showToast}
+                                logSensorEvent={logSensorEvent}
                             />
 
                             {/* Story 3-3: PresetList Component */}
@@ -12002,6 +12256,9 @@ return (
                                     simulatorEnabled={simulatorEnabled}
                                     onStartSimulation={startSensorSimulation}
                                     onStopSimulation={stopSensorSimulation}
+                                    autoAdjustEnabled={autoAdjustEnabled}
+                                    onAutoAdjustChange={setAutoAdjustEnabled}
+                                    logSensorEvent={logSensorEvent}
                                 />
                             )}
 

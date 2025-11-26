@@ -63,11 +63,11 @@ development_status:
   epic-4-retrospective: completed
 
   # Epic 5 - Sensor & Adaptive Loop
-  epic-5: contexted
+  epic-5: done
   5-1-capability-detection-consent-ui: done
   5-2-heart-rate-subscription-threshold-engine: done
-  5-3-sensor-informed-preset-adjustments: drafted
-  epic-5-retrospective: optional
+  5-3-sensor-informed-preset-adjustments: done
+  epic-5-retrospective: completed
 
   # Epic 6 - PWA Reliability & Accessibility
   epic-6: backlog
