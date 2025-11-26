@@ -8459,9 +8459,8 @@
 
                 // Capture beforeinstallprompt event
                 const handleBeforeInstallPrompt = (e) => {
-                    // Prevent the mini-infobar from appearing on mobile
-                    e.preventDefault();
-                    // Store the event for later use
+                    // Let the native browser install banner appear first
+                    // Store the event for later use (fallback if user dismisses native prompt)
                     installPromptDeferredRef.current = e;
                     setCanInstall(true);
                     console.log('[PWA] Install prompt available');
