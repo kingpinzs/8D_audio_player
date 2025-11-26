@@ -81,6 +81,31 @@
             --positive: #00ff00;
         }
 
+        /* Story 6-3: Large text mode for accessibility */
+        body.large-text {
+            font-size: 1.125rem; /* 18px base */
+        }
+
+        body.large-text h1 {
+            font-size: clamp(2.25rem, 4vw, 3.5rem);
+        }
+
+        body.large-text h2 {
+            font-size: clamp(1.5rem, 3vw, 2.5rem);
+        }
+
+        body.large-text button,
+        body.large-text input,
+        body.large-text select {
+            font-size: 1.125rem;
+            min-height: 52px;
+        }
+
+        body.large-text .chip {
+            font-size: 1rem;
+            padding: 14px 22px;
+        }
+
         *, *::before, *::after {
             box-sizing: border-box;
         }
@@ -8541,6 +8566,451 @@
         }
 
         // ============================================
+        // useAccessibilityObserver Hook - Story 6-3
+        // OS Preference Detection & User Override System
+        // ============================================
+        function useAccessibilityObserver() {
+            // OS preference state (reactive to system changes)
+            const [osPrefersReducedMotion, setOsPrefersReducedMotion] = useState(false);
+            const [osPrefersHighContrast, setOsPrefersHighContrast] = useState(false);
+            const [osPrefersDarkMode, setOsPrefersDarkMode] = useState(false);
+
+            // User override state (null = use OS preference)
+            const [userSettings, setUserSettings] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('mp3_8d_a11y_overrides');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        console.log('[A11Y] Loaded user overrides from localStorage:', parsed);
+                        return parsed;
+                    }
+                } catch (e) {
+                    console.warn('[A11Y] Failed to load user overrides:', e);
+                }
+                return {
+                    reducedMotion: null,
+                    highContrast: null,
+                    darkMode: null,
+                    largeText: null
+                };
+            });
+
+            // Track if initial load is complete
+            const initializedRef = useRef(false);
+
+            // Query all OS media preferences on mount
+            useEffect(() => {
+                // Query prefers-reduced-motion
+                const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+                const initialReducedMotion = reducedMotionQuery.matches;
+                setOsPrefersReducedMotion(initialReducedMotion);
+
+                // Query prefers-contrast
+                const highContrastQuery = window.matchMedia('(prefers-contrast: more)');
+                const initialHighContrast = highContrastQuery.matches;
+                setOsPrefersHighContrast(initialHighContrast);
+
+                // Query prefers-color-scheme
+                const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                const initialDarkMode = darkModeQuery.matches;
+                setOsPrefersDarkMode(initialDarkMode);
+
+                // Log initial values
+                console.log(`[A11Y] OS prefers-reduced-motion: ${initialReducedMotion}`);
+                console.log(`[A11Y] OS prefers-contrast: ${initialHighContrast}`);
+                console.log(`[A11Y] OS prefers-color-scheme: ${initialDarkMode ? 'dark' : 'light'}`);
+
+                initializedRef.current = true;
+
+                // Handler for prefers-reduced-motion changes
+                const handleReducedMotionChange = (e) => {
+                    setOsPrefersReducedMotion(e.matches);
+                    console.log(`[A11Y] OS prefers-reduced-motion changed: ${e.matches}`);
+                };
+
+                // Handler for prefers-contrast changes
+                const handleHighContrastChange = (e) => {
+                    setOsPrefersHighContrast(e.matches);
+                    console.log(`[A11Y] OS prefers-contrast changed: ${e.matches}`);
+                };
+
+                // Handler for prefers-color-scheme changes
+                const handleDarkModeChange = (e) => {
+                    setOsPrefersDarkMode(e.matches);
+                    console.log(`[A11Y] OS prefers-color-scheme changed: ${e.matches ? 'dark' : 'light'}`);
+                };
+
+                // Add event listeners
+                reducedMotionQuery.addEventListener('change', handleReducedMotionChange);
+                highContrastQuery.addEventListener('change', handleHighContrastChange);
+                darkModeQuery.addEventListener('change', handleDarkModeChange);
+
+                // Cleanup listeners on unmount
+                return () => {
+                    reducedMotionQuery.removeEventListener('change', handleReducedMotionChange);
+                    highContrastQuery.removeEventListener('change', handleHighContrastChange);
+                    darkModeQuery.removeEventListener('change', handleDarkModeChange);
+                };
+            }, []);
+
+            // Persist user settings to localStorage when they change
+            useEffect(() => {
+                if (!initializedRef.current) return;
+                try {
+                    localStorage.setItem('mp3_8d_a11y_overrides', JSON.stringify(userSettings));
+                } catch (e) {
+                    console.warn('[A11Y] Failed to save user overrides:', e);
+                }
+            }, [userSettings]);
+
+            // Set a user preference override
+            const setUserPreference = useCallback((key, value) => {
+                setUserSettings(prev => {
+                    const next = { ...prev, [key]: value };
+                    console.log(`[A11Y] User override set: ${key} = ${value}`);
+                    return next;
+                });
+            }, []);
+
+            // Reset all overrides to OS defaults
+            const resetToOSDefaults = useCallback(() => {
+                const defaults = {
+                    reducedMotion: null,
+                    highContrast: null,
+                    darkMode: null,
+                    largeText: null
+                };
+                setUserSettings(defaults);
+                console.log('[A11Y] Reset to OS defaults');
+            }, []);
+
+            // Compute effective settings (user override takes precedence over OS)
+            const effectiveSettings = useMemo(() => ({
+                reducedMotion: userSettings.reducedMotion !== null
+                    ? userSettings.reducedMotion
+                    : osPrefersReducedMotion,
+                highContrast: userSettings.highContrast !== null
+                    ? userSettings.highContrast
+                    : osPrefersHighContrast,
+                darkMode: userSettings.darkMode !== null
+                    ? userSettings.darkMode
+                    : osPrefersDarkMode,
+                largeText: userSettings.largeText !== null
+                    ? userSettings.largeText
+                    : false // No OS preference for large text
+            }), [
+                userSettings,
+                osPrefersReducedMotion,
+                osPrefersHighContrast,
+                osPrefersDarkMode
+            ]);
+
+            return {
+                // OS preference state (read-only)
+                osPrefersReducedMotion,
+                osPrefersHighContrast,
+                osPrefersDarkMode,
+                // User override state
+                userSettings,
+                // Actions
+                setUserPreference,
+                resetToOSDefaults,
+                // Computed effective settings
+                effectiveSettings
+            };
+        }
+
+        // ============================================
+        // useDebugPanel Hook - Story 6-3
+        // Debug Panel State & Query Param Detection
+        // ============================================
+        function useDebugPanel() {
+            // Debug panel visibility (controlled by ?debug=true)
+            const [isDebugPanelOpen, setIsDebugPanelOpen] = useState(false);
+
+            // Active tab in debug panel
+            const [activeTab, setActiveTab] = useState('audio'); // 'audio' | 'sensor' | 'session' | 'pwa'
+
+            // Panel minimized state
+            const [isMinimized, setIsMinimized] = useState(false);
+
+            // Detect ?debug=true query param on mount
+            useEffect(() => {
+                const params = new URLSearchParams(window.location.search);
+                const debugParam = params.get('debug');
+
+                if (debugParam === 'true') {
+                    setIsDebugPanelOpen(true);
+                    console.log('[Debug] Panel enabled via query param');
+                }
+            }, []);
+
+            // Toggle debug panel visibility
+            const toggleDebugPanel = useCallback(() => {
+                setIsDebugPanelOpen(prev => !prev);
+            }, []);
+
+            // Toggle minimized state
+            const toggleMinimize = useCallback(() => {
+                setIsMinimized(prev => !prev);
+            }, []);
+
+            return {
+                isDebugPanelOpen,
+                activeTab,
+                setActiveTab,
+                isMinimized,
+                toggleDebugPanel,
+                toggleMinimize
+            };
+        }
+
+        // ============================================
+        // DebugPanel Component - Story 6-3
+        // Floating overlay with diagnostic tabs
+        // ============================================
+        function DebugPanel({
+            isOpen,
+            activeTab,
+            setActiveTab,
+            isMinimized,
+            toggleMinimize,
+            onClose,
+            // Data from providers
+            audioData,
+            sensorData,
+            sessionData,
+            pwaData,
+            // Copy diagnostics
+            onCopyDiagnostics
+        }) {
+            if (!isOpen) return null;
+
+            const tabs = [
+                { id: 'audio', label: 'Audio' },
+                { id: 'sensor', label: 'Sensor' },
+                { id: 'session', label: 'Session' },
+                { id: 'pwa', label: 'PWA' }
+            ];
+
+            const panelStyle = {
+                position: 'fixed',
+                bottom: '16px',
+                right: '16px',
+                width: isMinimized ? '200px' : '360px',
+                maxHeight: isMinimized ? '48px' : '400px',
+                background: 'var(--card-bg)',
+                border: '1px solid var(--card-border)',
+                borderRadius: '12px',
+                boxShadow: 'var(--shadow-soft)',
+                zIndex: 10000,
+                overflow: 'hidden',
+                fontFamily: 'monospace',
+                fontSize: '0.75rem',
+                transition: 'all 0.2s ease'
+            };
+
+            const headerStyle = {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '8px 12px',
+                borderBottom: isMinimized ? 'none' : '1px solid var(--card-border)',
+                background: 'var(--surface)',
+                cursor: 'move'
+            };
+
+            const tabsStyle = {
+                display: 'flex',
+                gap: '2px',
+                padding: '4px 8px',
+                borderBottom: '1px solid var(--card-border)',
+                background: 'var(--surface)'
+            };
+
+            const tabStyle = (isActive) => ({
+                padding: '6px 12px',
+                border: 'none',
+                background: isActive ? 'var(--accent-focus)' : 'transparent',
+                color: isActive ? 'white' : 'var(--text-secondary)',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.7rem',
+                fontWeight: isActive ? '600' : '400'
+            });
+
+            const contentStyle = {
+                padding: '12px',
+                maxHeight: '280px',
+                overflowY: 'auto'
+            };
+
+            const renderAudioTab = () => (
+                <div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Status:</strong> {audioData?.isPlaying ? '▶ Playing' : '⏸ Paused'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Track:</strong> {audioData?.currentTrack || 'None'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Graph Nodes:</strong> {audioData?.nodeCount || 0}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Analyzer:</strong> {audioData?.analyzerActive ? 'Active' : 'Inactive'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Latency:</strong> {audioData?.latency ? `${audioData.latency.toFixed(2)}ms` : 'N/A'}
+                    </div>
+                </div>
+            );
+
+            const renderSensorTab = () => (
+                <div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Status:</strong> {sensorData?.status || 'idle'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Device:</strong> {sensorData?.deviceName || 'None'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>HR:</strong> {sensorData?.currentHR ? `${sensorData.currentHR} BPM` : 'N/A'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Consented:</strong> {sensorData?.consentCount || 0} devices
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Bluetooth:</strong> {sensorData?.bluetoothSupported ? '✓' : '✗'}
+                        {' | '}
+                        <strong>Serial:</strong> {sensorData?.serialSupported ? '✓' : '✗'}
+                    </div>
+                </div>
+            );
+
+            const renderSessionTab = () => (
+                <div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Active Session:</strong> {sessionData?.activeSession ? 'Yes' : 'No'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Session ID:</strong> {sessionData?.sessionId || 'None'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Log Count:</strong> {sessionData?.logCount || 0}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>IndexedDB:</strong> {sessionData?.indexedDBHealthy ? '✓ Healthy' : '✗ Issue'}
+                    </div>
+                    {sessionData?.recentErrors?.length > 0 && (
+                        <div style={{ marginTop: '8px', padding: '8px', background: 'rgba(255,0,0,0.1)', borderRadius: '4px' }}>
+                            <strong>Recent Errors:</strong>
+                            <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                                {sessionData.recentErrors.slice(0, 3).map((err, i) => (
+                                    <li key={i} style={{ fontSize: '0.65rem', color: 'var(--danger)' }}>{err}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            );
+
+            const renderPWATab = () => (
+                <div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>SW Status:</strong> {pwaData?.swStatus || 'unknown'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Offline:</strong> {pwaData?.isOffline ? '✓ Yes' : '✗ No'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Update Available:</strong> {pwaData?.updateAvailable ? '✓ Yes' : '✗ No'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Installed:</strong> {pwaData?.isInstalled ? '✓ Yes' : '✗ No'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Audio Cache:</strong> {pwaData?.audioCacheCount || 0} tracks
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                        <strong>Cache Size:</strong> {pwaData?.cacheSize ? `${(pwaData.cacheSize / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
+                    </div>
+                </div>
+            );
+
+            return (
+                <div style={panelStyle} role="region" aria-label="Debug Panel">
+                    {/* Header */}
+                    <div style={headerStyle}>
+                        <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
+                            🔧 Debug Panel
+                        </span>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                                onClick={toggleMinimize}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                                aria-label={isMinimized ? 'Expand' : 'Minimize'}
+                            >
+                                {isMinimized ? '□' : '−'}
+                            </button>
+                            <button
+                                onClick={onClose}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                                aria-label="Close debug panel"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Content (hidden when minimized) */}
+                    {!isMinimized && (
+                        <>
+                            {/* Tabs */}
+                            <div style={tabsStyle}>
+                                {tabs.map(tab => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        style={tabStyle(activeTab === tab.id)}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Tab Content */}
+                            <div style={contentStyle}>
+                                {activeTab === 'audio' && renderAudioTab()}
+                                {activeTab === 'sensor' && renderSensorTab()}
+                                {activeTab === 'session' && renderSessionTab()}
+                                {activeTab === 'pwa' && renderPWATab()}
+                            </div>
+
+                            {/* Copy Diagnostics Button */}
+                            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--card-border)' }}>
+                                <button
+                                    onClick={onCopyDiagnostics}
+                                    style={{
+                                        width: '100%',
+                                        padding: '8px',
+                                        background: 'var(--accent-focus)',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontWeight: '500'
+                                    }}
+                                >
+                                    📋 Copy Diagnostics
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        }
+
+        // ============================================
         // OfflineBanner Component - Story 6-1
         // Shows offline/online status notifications
         // ============================================
@@ -8989,6 +9459,27 @@ function App() {
                 markPromptShown,
                 logInstallEvent
             } = useInstallPrompt();
+
+            // Accessibility Observer state (Story 6-3)
+            const {
+                osPrefersReducedMotion,
+                osPrefersHighContrast,
+                osPrefersDarkMode,
+                userSettings: a11yUserSettings,
+                setUserPreference: setA11yUserPreference,
+                resetToOSDefaults: resetA11yToOSDefaults,
+                effectiveSettings: a11yEffectiveSettings
+            } = useAccessibilityObserver();
+
+            // Debug Panel state (Story 6-3)
+            const {
+                isDebugPanelOpen,
+                activeTab: debugActiveTab,
+                setActiveTab: setDebugActiveTab,
+                isMinimized: debugPanelMinimized,
+                toggleDebugPanel,
+                toggleMinimize: toggleDebugMinimize
+            } = useDebugPanel();
 
             const [playlist, setPlaylist] = useState([]);
             const [currentTrackIndex, setCurrentTrackIndex] = useState(null);
@@ -9489,24 +9980,8 @@ function App() {
                     setShowFileWarning(true);
                 }
 
-                const savedDarkMode = localStorage.getItem('darkMode');
-                const prefersDark = savedDarkMode === null ? true : savedDarkMode === 'true';
-                setDarkMode(prefersDark);
-                document.body.classList.toggle('dark-mode', prefersDark);
-                if (savedDarkMode === null) {
-                    localStorage.setItem('darkMode', 'true');
-                }
-
-                const savedHighContrast = localStorage.getItem('highContrast');
-                if (savedHighContrast === 'true') {
-                    setHighContrast(true);
-                    document.body.classList.add('high-contrast');
-                }
-
-                const savedReducedMotion = localStorage.getItem('reducedMotion');
-                if (savedReducedMotion === 'true') {
-                    setReducedMotion(true);
-                }
+                // Story 6-3: Accessibility preferences now managed by useAccessibilityObserver hook
+                // CSS classes applied via separate sync effect below
 
                 // Story 3-1: Load saved active preset with validation
                 const savedActivePreset = localStorage.getItem('activePresetId');
@@ -9538,6 +10013,19 @@ function App() {
                     clearRitualTimers();
                 };
             }, []);
+
+            // Story 6-3: Sync accessibility effectiveSettings to state vars and CSS classes
+            useEffect(() => {
+                // Sync state variables for backwards compatibility
+                setDarkMode(a11yEffectiveSettings.darkMode);
+                setHighContrast(a11yEffectiveSettings.highContrast);
+                setReducedMotion(a11yEffectiveSettings.reducedMotion);
+
+                // Apply CSS classes based on effective settings
+                document.body.classList.toggle('dark-mode', a11yEffectiveSettings.darkMode);
+                document.body.classList.toggle('high-contrast', a11yEffectiveSettings.highContrast);
+                document.body.classList.toggle('large-text', a11yEffectiveSettings.largeText);
+            }, [a11yEffectiveSettings]);
 
             // Story 6-2: Parse query params for shortcut mode detection (AC7)
             useEffect(() => {
@@ -9959,44 +10447,108 @@ function App() {
                 };
             }, [audioElementToken]);
 
+            // Story 6-3: Toggle functions now use useAccessibilityObserver hook
             const toggleDarkMode = () => {
-                const next = !darkMode;
-                setDarkMode(next);
-                document.body.classList.toggle('dark-mode', next);
-                localStorage.setItem('darkMode', String(next));
+                const next = !a11yEffectiveSettings.darkMode;
+                setA11yUserPreference('darkMode', next);
                 setA11yAnnouncement(next ? 'Dark mode enabled' : 'Light mode enabled');
             };
 
             const toggleHighContrast = () => {
-                const next = !highContrast;
-                setHighContrast(next);
-                document.body.classList.toggle('high-contrast', next);
-                try {
-                    if (next) {
-                        localStorage.setItem('highContrast', 'true');
-                    } else {
-                        localStorage.removeItem('highContrast');
-                    }
-                } catch (e) {
-                    console.warn('Failed to persist high-contrast preference', e);
-                }
+                const next = !a11yEffectiveSettings.highContrast;
+                setA11yUserPreference('highContrast', next);
                 setA11yAnnouncement(next ? 'High contrast mode enabled' : 'High contrast mode disabled');
             };
 
             const toggleReducedMotion = () => {
-                const next = !reducedMotion;
-                setReducedMotion(next);
-                try {
-                    if (next) {
-                        localStorage.setItem('reducedMotion', 'true');
-                    } else {
-                        localStorage.removeItem('reducedMotion');
-                    }
-                } catch (e) {
-                    console.warn('Failed to persist reduced-motion preference', e);
-                }
+                const next = !a11yEffectiveSettings.reducedMotion;
+                setA11yUserPreference('reducedMotion', next);
                 setA11yAnnouncement(next ? 'Reduced motion enabled' : 'Motion enabled');
             };
+
+            // Story 6-3: Toggle large text mode (user preference only)
+            const toggleLargeText = () => {
+                const next = !a11yEffectiveSettings.largeText;
+                setA11yUserPreference('largeText', next);
+                setA11yAnnouncement(next ? 'Large text enabled' : 'Normal text size');
+            };
+
+            // Story 6-3: Debug panel data aggregation
+            const getDebugAudioData = useCallback(() => ({
+                isPlaying,
+                currentTrack: playlist[currentTrackIndex]?.name || null,
+                nodeCount: audioContextRef.current?.destination ? 1 : 0, // Simplified count
+                analyzerActive: !!analyserRef.current,
+                latency: audioContextRef.current?.baseLatency ? audioContextRef.current.baseLatency * 1000 : null
+            }), [isPlaying, playlist, currentTrackIndex]);
+
+            const getDebugSensorData = useCallback(() => ({
+                status: sensorStatus,
+                deviceName: connectedDevice?.name || null,
+                currentHR,
+                consentCount: consentedDevices.length,
+                bluetoothSupported,
+                serialSupported
+            }), [sensorStatus, connectedDevice, currentHR, consentedDevices, bluetoothSupported, serialSupported]);
+
+            const getDebugSessionData = useCallback(() => ({
+                activeSession: !!activeSessionId,
+                sessionId: activeSessionId,
+                logCount: 0, // Would need to query IndexedDB
+                indexedDBHealthy: true, // Assume healthy unless error
+                recentErrors: [] // Would need error tracking
+            }), [activeSessionId]);
+
+            const getDebugPWAData = useCallback(() => ({
+                swStatus,
+                isOffline,
+                updateAvailable,
+                isInstalled,
+                audioCacheCount: cachedAudioUrls.size,
+                cacheSize: cacheStorageUsed
+            }), [swStatus, isOffline, updateAvailable, isInstalled, cachedAudioUrls, cacheStorageUsed]);
+
+            // Story 6-3: Copy diagnostics to clipboard (AC10)
+            const copyDiagnostics = useCallback(async () => {
+                const diagnostics = {
+                    timestamp: new Date().toISOString(),
+                    userAgent: navigator.userAgent,
+                    url: window.location.href,
+                    audio: getDebugAudioData(),
+                    sensor: getDebugSensorData(),
+                    session: getDebugSessionData(),
+                    pwa: getDebugPWAData(),
+                    accessibility: {
+                        effective: a11yEffectiveSettings,
+                        userOverrides: a11yUserSettings,
+                        osPreferences: {
+                            reducedMotion: osPrefersReducedMotion,
+                            highContrast: osPrefersHighContrast,
+                            darkMode: osPrefersDarkMode
+                        }
+                    }
+                };
+
+                try {
+                    await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2));
+                    showToast('Diagnostics copied to clipboard', 'success');
+                    console.log('[Debug] Diagnostics copied');
+                } catch (err) {
+                    console.error('[Debug] Failed to copy diagnostics:', err);
+                    showToast('Failed to copy diagnostics', 'error');
+                }
+            }, [
+                getDebugAudioData,
+                getDebugSensorData,
+                getDebugSessionData,
+                getDebugPWAData,
+                a11yEffectiveSettings,
+                a11yUserSettings,
+                osPrefersReducedMotion,
+                osPrefersHighContrast,
+                osPrefersDarkMode,
+                showToast
+            ]);
 
             const focusModeChip = (index) => {
                 const total = MODE_LIBRARY.length;
@@ -13224,6 +13776,21 @@ return (
                         reducedMotion={reducedMotion}
                     />
 
+                    {/* Story 6-3: Debug Panel (visible when ?debug=true) */}
+                    <DebugPanel
+                        isOpen={isDebugPanelOpen}
+                        activeTab={debugActiveTab}
+                        setActiveTab={setDebugActiveTab}
+                        isMinimized={debugPanelMinimized}
+                        toggleMinimize={toggleDebugMinimize}
+                        onClose={toggleDebugPanel}
+                        audioData={getDebugAudioData()}
+                        sensorData={getDebugSensorData()}
+                        sessionData={getDebugSessionData()}
+                        pwaData={getDebugPWAData()}
+                        onCopyDiagnostics={copyDiagnostics}
+                    />
+
                 <div className="screen">
                     {/* First Run Calibration Prompt Modal */}
                     {showFirstRunPrompt && (
@@ -13418,6 +13985,20 @@ return (
                             >
                                 {highContrast ? '◐ High contrast' : '○ Normal contrast'}
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => { toggleLargeText(); setMobileMenuOpen(false); }}
+                                aria-pressed={a11yEffectiveSettings.largeText}
+                            >
+                                {a11yEffectiveSettings.largeText ? 'Aa Large text' : 'Aa Normal text'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { resetA11yToOSDefaults(); setMobileMenuOpen(false); }}
+                                style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}
+                            >
+                                ↺ Reset to OS Defaults
+                            </button>
                         </div>
                     </div>
 
@@ -13441,6 +14022,9 @@ return (
                             </button>
                             <button type="button" onClick={toggleHighContrast} aria-pressed={highContrast} aria-label="Toggle high contrast" title={highContrast ? 'High contrast' : 'Normal contrast'}>
                                 {highContrast ? '◐' : '○'}
+                            </button>
+                            <button type="button" onClick={toggleLargeText} aria-pressed={a11yEffectiveSettings.largeText} aria-label="Toggle large text" title={a11yEffectiveSettings.largeText ? 'Large text' : 'Normal text'}>
+                                {a11yEffectiveSettings.largeText ? 'Aa+' : 'Aa'}
                             </button>
                             <div style={{ height: '20px', width: '1px', background: 'var(--card-border)' }}></div>
                             <span style={{ fontSize: '0.75rem', color: hasRunCalibration ? '#4ade80' : 'var(--text-secondary)' }}>

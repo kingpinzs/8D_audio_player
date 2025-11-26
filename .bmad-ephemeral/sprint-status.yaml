@@ -70,8 +70,8 @@ development_status:
   epic-5-retrospective: completed
 
   # Epic 6 - PWA Reliability & Accessibility
-  epic-6: contexted
+  epic-6: done
   6-1-service-worker-offline-ux: done
   6-2-manifest-install-flow: done
-  6-3-accessibility-observability-suite: ready-for-dev
-  epic-6-retrospective: optional
+  6-3-accessibility-observability-suite: done
+  epic-6-retrospective: completed

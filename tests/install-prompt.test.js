@@ -190,7 +190,7 @@ const indexHtml = fs.readFileSync(indexPath, 'utf8');
 
 test('index.html has manifest link', () => {
     assert(indexHtml.includes('rel="manifest"'), 'should have manifest link');
-    assert(indexHtml.includes('href="/manifest.json"'), 'manifest href should point to /manifest.json');
+    assert(indexHtml.includes('href="./manifest.json"'), 'manifest href should use relative path for GitHub Pages compatibility');
 });
 
 test('index.html has theme-color meta tag', () => {

@@ -7,7 +7,11 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "node tests/file-intake.test.js && node tests/url-validation.test.js && node tests/gain-staging.test.js && node tests/session-logging.test.js && node tests/preset-crud.test.js && node tests/sensor-consent.test.js && node tests/heart-rate-engine.test.js && node tests/service-worker.test.js && node tests/install-prompt.test.js",
+    "test": "node tests/file-intake.test.js && node tests/url-validation.test.js && node tests/gain-staging.test.js && node tests/session-logging.test.js && node tests/preset-crud.test.js && node tests/sensor-consent.test.js && node tests/heart-rate-engine.test.js && node tests/service-worker.test.js && node tests/install-prompt.test.js && node tests/accessibility.test.js",
+    "test:rtl": "jest --config jest.config.js",
+    "test:all": "npm test && npm run test:rtl",
+    "test:a11y": "node tests/a11y-runner.js",
+    "lighthouse": "node tests/lighthouse-runner.js",
     "sw:generate": "workbox generateSW workbox-config.js"
   },
   "repository": {
@@ -23,7 +27,20 @@
   "homepage": "https://github.com/kingpinzs/8D_audio_player#readme",
   "description": "",
   "devDependencies": {
+    "@babel/core": "^7.28.5",
+    "@babel/preset-env": "^7.28.5",
+    "@babel/preset-react": "^7.28.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "axe-core": "^4.10.0",
+    "babel-jest": "^29.7.0",
     "fake-indexeddb": "^6.2.5",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "lighthouse": "^12.2.0",
+    "pa11y": "^8.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "workbox-cli": "^7.4.0"
   }
 }
