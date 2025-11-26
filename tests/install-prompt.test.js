@@ -269,7 +269,7 @@ test('InstallPrompt has "Not now" dismiss button', () => {
 });
 
 test('InstallPrompt has app icon display', () => {
-    assert(indexHtml.includes('/icons/icon-192.png'), 'should display app icon');
+    assert(indexHtml.includes('./icons/icon-192.png'), 'should display app icon');
 });
 
 // ===========================================
