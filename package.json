@@ -7,7 +7,8 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "node tests/file-intake.test.js && node tests/url-validation.test.js && node tests/gain-staging.test.js && node tests/session-logging.test.js && node tests/preset-crud.test.js && node tests/sensor-consent.test.js && node tests/heart-rate-engine.test.js"
+    "test": "node tests/file-intake.test.js && node tests/url-validation.test.js && node tests/gain-staging.test.js && node tests/session-logging.test.js && node tests/preset-crud.test.js && node tests/sensor-consent.test.js && node tests/heart-rate-engine.test.js && node tests/service-worker.test.js",
+    "sw:generate": "workbox generateSW workbox-config.js"
   },
   "repository": {
     "type": "git",
@@ -22,6 +23,7 @@
   "homepage": "https://github.com/kingpinzs/8D_audio_player#readme",
   "description": "",
   "devDependencies": {
-    "fake-indexeddb": "^6.2.5"
+    "fake-indexeddb": "^6.2.5",
+    "workbox-cli": "^7.4.0"
   }
 }

@@ -2542,6 +2542,278 @@
             color: var(--text-primary);
         }
 
+        /* Story 6-1: Offline Banner */
+        .offline-banner {
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #1c1917;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(245, 158, 11, 0.3);
+            z-index: 1200;
+            animation: slideDown 0.3s ease-out;
+            max-width: 90vw;
+            font-weight: 500;
+        }
+
+        .offline-banner.no-motion {
+            animation: none;
+        }
+
+        .offline-banner.online {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: white;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        .offline-banner-icon {
+            font-size: 20px;
+        }
+
+        .offline-banner-text {
+            font-size: 14px;
+        }
+
+        .offline-banner-dismiss {
+            padding: 4px 8px;
+            background: rgba(0, 0, 0, 0.2);
+            color: inherit;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+
+        .offline-banner-dismiss:hover {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        /* Story 6-1: Update Toast */
+        .update-toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--accent-focus, #6d8bff);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            z-index: 1100;
+            animation: slideUp 0.3s ease-out;
+            max-width: 90vw;
+        }
+
+        .update-toast.no-motion {
+            animation: none;
+        }
+
+        .update-toast-icon {
+            font-size: 24px;
+        }
+
+        .update-toast-text {
+            flex: 1;
+        }
+
+        .update-toast-text strong {
+            display: block;
+            font-size: 14px;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .update-toast-text span {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .update-toast-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .update-btn {
+            padding: 8px 16px;
+            background: var(--accent-focus, #6d8bff);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: filter 0.15s ease;
+        }
+
+        .update-btn:hover {
+            filter: brightness(1.1);
+        }
+
+        .update-dismiss-btn {
+            padding: 8px 12px;
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        /* Story 6-1: Offline Settings */
+        .offline-settings {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 16px;
+            border: 1px solid var(--card-border);
+        }
+
+        .offline-settings-title {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .offline-cache-toggle {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .offline-cache-toggle label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .offline-cache-toggle input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .offline-cache-toggle-text {
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .offline-cache-help {
+            margin: 8px 0 0 26px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .offline-storage-usage {
+            margin-top: 12px;
+            padding: 10px;
+            background: var(--bg-secondary, rgba(255,255,255,0.03));
+            border-radius: 8px;
+            font-size: 12px;
+        }
+
+        .offline-storage-label {
+            color: var(--text-secondary);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .offline-storage-value {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .offline-storage-bar {
+            margin-top: 6px;
+            height: 4px;
+            background: var(--bg-tertiary, rgba(255,255,255,0.1));
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .offline-storage-bar-fill {
+            height: 100%;
+            background: var(--accent-focus, #6d8bff);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .offline-clear-btn {
+            margin-top: 10px;
+            padding: 6px 12px;
+            background: transparent;
+            color: var(--danger, #f05d7b);
+            border: 1px solid var(--danger, #f05d7b);
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .offline-clear-btn:hover {
+            background: var(--danger, #f05d7b);
+            color: white;
+        }
+
+        /* Story 6-1: Cached Track Indicator (AC8) */
+        .cached-indicator {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            margin-left: 4px;
+            color: var(--positive, #3ad8a7);
+            opacity: 0.9;
+        }
+
+        .cached-indicator-icon {
+            position: relative;
+        }
+
+        .cached-indicator-tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--card-border);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.15s ease;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .cached-indicator:hover .cached-indicator-tooltip {
+            opacity: 1;
+            visibility: visible;
+        }
+
         /* Story 4-3: Insights Dashboard Styles */
         .insights-panel {
             background: var(--card-bg);
@@ -7734,8 +8006,347 @@
             );
         };
 
+        // ============================================
+        // useServiceWorker Hook - Story 6-1
+        // Service Worker Registration & Offline State
+        // ============================================
+        function useServiceWorker() {
+            // SW lifecycle states: unsupported | installing | waiting | active | error
+            const [swStatus, setSwStatus] = useState(() => {
+                if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+                    return 'unsupported';
+                }
+                return 'installing'; // Will update once we check
+            });
+
+            // Online/offline state
+            const [isOffline, setIsOffline] = useState(() =>
+                typeof navigator !== 'undefined' ? !navigator.onLine : false
+            );
+
+            // New SW version waiting to activate
+            const [updateAvailable, setUpdateAvailable] = useState(false);
+
+            // Reference to the waiting SW for update flow
+            const waitingSwRef = useRef(null);
+
+            // Reference to track if we've registered
+            const registeredRef = useRef(false);
+
+            useEffect(() => {
+                // Skip if unsupported or already registered
+                if (swStatus === 'unsupported' || registeredRef.current) {
+                    return;
+                }
+
+                // Setup online/offline listeners
+                const handleOnline = () => {
+                    setIsOffline(false);
+                    console.log('[SW] Network status: online');
+                };
+                const handleOffline = () => {
+                    setIsOffline(true);
+                    console.log('[SW] Network status: offline');
+                };
+
+                window.addEventListener('online', handleOnline);
+                window.addEventListener('offline', handleOffline);
+
+                // Register service worker
+                const registerSW = async () => {
+                    try {
+                        registeredRef.current = true;
+                        const registration = await navigator.serviceWorker.register('/sw.js');
+                        console.log(`[SW] Registered: ${registration.scope}`);
+
+                        // Check initial state
+                        if (registration.active) {
+                            setSwStatus('active');
+                            // Log cache info if available
+                            if ('caches' in window) {
+                                const cacheNames = await caches.keys();
+                                console.log(`[SW] Cache populated: ${cacheNames.length} caches`);
+                            }
+                        }
+
+                        // Handle SW updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            console.log('[SW] Update found, new worker installing...');
+                            setSwStatus('installing');
+
+                            newWorker.addEventListener('statechange', () => {
+                                console.log(`[SW] Worker state changed: ${newWorker.state}`);
+
+                                if (newWorker.state === 'installed') {
+                                    if (registration.active) {
+                                        // New SW waiting, current one active
+                                        setSwStatus('waiting');
+                                        setUpdateAvailable(true);
+                                        waitingSwRef.current = newWorker;
+                                        console.log('[SW] Update available');
+                                    } else {
+                                        // First install complete
+                                        setSwStatus('active');
+                                        console.log('[SW] First install complete');
+                                    }
+                                } else if (newWorker.state === 'activated') {
+                                    setSwStatus('active');
+                                    setUpdateAvailable(false);
+                                    waitingSwRef.current = null;
+                                }
+                            });
+                        });
+
+                        // Handle controller changes (when new SW takes over)
+                        navigator.serviceWorker.addEventListener('controllerchange', () => {
+                            console.log('[SW] Controller changed, reloading...');
+                            // Reload to use new SW
+                            window.location.reload();
+                        });
+
+                        // Check if there's already a waiting worker (e.g., from previous page load)
+                        if (registration.waiting) {
+                            setSwStatus('waiting');
+                            setUpdateAvailable(true);
+                            waitingSwRef.current = registration.waiting;
+                            console.log('[SW] Update available (from previous load)');
+                        }
+
+                    } catch (error) {
+                        console.error('[SW] Registration failed:', error);
+                        setSwStatus('error');
+                        registeredRef.current = false;
+                    }
+                };
+
+                registerSW();
+
+                return () => {
+                    window.removeEventListener('online', handleOnline);
+                    window.removeEventListener('offline', handleOffline);
+                };
+            }, [swStatus]);
+
+            // Function to apply the waiting update
+            const applyUpdate = useCallback(() => {
+                if (waitingSwRef.current) {
+                    console.log('[SW] Applying update...');
+                    // Tell the waiting SW to skip waiting
+                    waitingSwRef.current.postMessage({ type: 'SKIP_WAITING' });
+                    // The controllerchange event will trigger a reload
+                }
+            }, []);
+
+            return {
+                swStatus,
+                isOffline,
+                updateAvailable,
+                applyUpdate
+            };
+        }
+
+        // ============================================
+        // OfflineBanner Component - Story 6-1
+        // Shows offline/online status notifications
+        // ============================================
+        function OfflineBanner({ isOffline, reducedMotion }) {
+            const [showBanner, setShowBanner] = useState(false);
+            const [wasOffline, setWasOffline] = useState(false);
+            const [showOnlineMessage, setShowOnlineMessage] = useState(false);
+            const dismissTimeoutRef = useRef(null);
+
+            useEffect(() => {
+                if (isOffline) {
+                    setShowBanner(true);
+                    setWasOffline(true);
+                    setShowOnlineMessage(false);
+                    // Clear any pending dismiss
+                    if (dismissTimeoutRef.current) {
+                        clearTimeout(dismissTimeoutRef.current);
+                    }
+                } else if (wasOffline) {
+                    // Was offline, now online - show "Back online" message
+                    setShowOnlineMessage(true);
+                    // Auto-dismiss after 3 seconds
+                    dismissTimeoutRef.current = setTimeout(() => {
+                        setShowBanner(false);
+                        setShowOnlineMessage(false);
+                        setWasOffline(false);
+                    }, 3000);
+                }
+
+                return () => {
+                    if (dismissTimeoutRef.current) {
+                        clearTimeout(dismissTimeoutRef.current);
+                    }
+                };
+            }, [isOffline, wasOffline]);
+
+            const handleDismiss = () => {
+                setShowBanner(false);
+                setShowOnlineMessage(false);
+                if (dismissTimeoutRef.current) {
+                    clearTimeout(dismissTimeoutRef.current);
+                }
+            };
+
+            if (!showBanner) return null;
+
+            return (
+                <div
+                    className={`offline-banner ${showOnlineMessage ? 'online' : ''} ${reducedMotion ? 'no-motion' : ''}`}
+                    role="alert"
+                    aria-live="assertive"
+                >
+                    <span className="offline-banner-icon" aria-hidden="true">
+                        {showOnlineMessage ? '✓' : '📡'}
+                    </span>
+                    <span className="offline-banner-text">
+                        {showOnlineMessage
+                            ? "You're back online!"
+                            : "You're offline. Cached content available."}
+                    </span>
+                    <button
+                        className="offline-banner-dismiss"
+                        onClick={handleDismiss}
+                        aria-label="Dismiss notification"
+                    >
+                        ✕
+                    </button>
+                </div>
+            );
+        }
+
+        // ============================================
+        // UpdateToast Component - Story 6-1
+        // Shows when a SW update is available
+        // ============================================
+        function UpdateToast({ isVisible, onUpdate, onDismiss, reducedMotion }) {
+            const [dismissed, setDismissed] = useState(false);
+
+            useEffect(() => {
+                if (isVisible) {
+                    setDismissed(false);
+                }
+            }, [isVisible]);
+
+            const handleDismiss = () => {
+                setDismissed(true);
+                if (onDismiss) onDismiss();
+            };
+
+            if (!isVisible || dismissed) return null;
+
+            return (
+                <div
+                    className={`update-toast ${reducedMotion ? 'no-motion' : ''}`}
+                    role="alertdialog"
+                    aria-labelledby="update-heading"
+                    aria-describedby="update-description"
+                >
+                    <span className="update-toast-icon" aria-hidden="true">🔄</span>
+                    <div className="update-toast-text">
+                        <strong id="update-heading">Update available</strong>
+                        <span id="update-description">Click to refresh and get the latest version.</span>
+                    </div>
+                    <div className="update-toast-actions">
+                        <button
+                            type="button"
+                            className="update-btn"
+                            onClick={onUpdate}
+                        >
+                            Update
+                        </button>
+                        <button
+                            type="button"
+                            className="update-dismiss-btn"
+                            onClick={handleDismiss}
+                            aria-label="Dismiss update notification"
+                        >
+                            Later
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // ============================================
+        // OfflineSettings Component - Story 6-1
+        // Audio cache consent toggle with storage usage
+        // ============================================
+        function OfflineSettings({
+            audioCacheConsent,
+            onConsentChange,
+            cacheStorageUsed,
+            onClearCache
+        }) {
+            // Format bytes to human readable
+            const formatBytes = (bytes) => {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+            };
+
+            // Estimate max storage (simplified - actual quota varies by browser/device)
+            const estimatedMaxStorage = 100 * 1024 * 1024; // 100 MB estimate for audio
+            const storagePercent = Math.min(100, (cacheStorageUsed / estimatedMaxStorage) * 100);
+
+            return (
+                <div className="offline-settings">
+                    <h4 className="offline-settings-title">Offline Settings</h4>
+
+                    <div className="offline-cache-toggle">
+                        <label>
+                            <input
+                                type="checkbox"
+                                checked={audioCacheConsent}
+                                onChange={(e) => onConsentChange(e.target.checked)}
+                                aria-describedby="audio-cache-help"
+                            />
+                            <span className="offline-cache-toggle-text">Cache audio for offline</span>
+                        </label>
+                    </div>
+
+                    <p id="audio-cache-help" className="offline-cache-help">
+                        Enable to cache audio files for offline playback (uses device storage)
+                    </p>
+
+                    {audioCacheConsent && (
+                        <div className="offline-storage-usage">
+                            <span className="offline-storage-label">Storage used:</span>
+                            <span className="offline-storage-value">{formatBytes(cacheStorageUsed)}</span>
+
+                            <div className="offline-storage-bar">
+                                <div
+                                    className="offline-storage-bar-fill"
+                                    style={{ width: `${storagePercent}%` }}
+                                />
+                            </div>
+
+                            {cacheStorageUsed > 0 && (
+                                <button
+                                    type="button"
+                                    className="offline-clear-btn"
+                                    onClick={onClearCache}
+                                >
+                                    Clear audio cache
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
 function App() {
             const defaultMode = MODE_LIBRARY[0];
+
+            // Service Worker state (Story 6-1)
+            const { swStatus, isOffline, updateAvailable, applyUpdate } = useServiceWorker();
+
             const [playlist, setPlaylist] = useState([]);
             const [currentTrackIndex, setCurrentTrackIndex] = useState(null);
             // Track ratings: { trackId: { modeId: 'boost'|'neutral'|'remove' } }
@@ -7867,7 +8478,8 @@ function App() {
             const [a11yAnnouncement, setA11yAnnouncement] = useState('');
             const [needsAudio, setNeedsAudio] = useState(false);
             const [intakeTab, setIntakeTab] = useState('files');
-            const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+            // Derived from useServiceWorker hook - no duplicate state needed
+            const isOnline = !isOffline;
             const [reducedMotion, setReducedMotion] = useState(false);
             const [dragActive, setDragActive] = useState(false);
             const [audioElementToken, setAudioElementToken] = useState(0);
@@ -7918,6 +8530,19 @@ function App() {
                     return false;
                 }
             });
+            // Story 6-1: Audio cache consent for offline playback (AC7)
+            const [audioCacheConsent, setAudioCacheConsent] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('mp3_8d_audio_cache_consent');
+                    return saved === 'true';
+                } catch {
+                    return false; // Default: OFF (explicit opt-in required)
+                }
+            });
+            // Story 6-1: Storage usage for audio cache
+            const [cacheStorageUsed, setCacheStorageUsed] = useState(0);
+            // Story 6-1: Set of cached audio URLs for offline indicator (AC8)
+            const [cachedAudioUrls, setCachedAudioUrls] = useState(new Set());
             const [isSimulating, setIsSimulating] = useState(false); // Sensor simulator active
             const [showSuggestionToast, setShowSuggestionToast] = useState(false);
             const [suggestionToastData, setSuggestionToastData] = useState(null);
@@ -8258,14 +8883,9 @@ function App() {
                     }
                 }
 
-                const handleOnline = () => setIsOnline(true);
-                const handleOffline = () => setIsOnline(false);
-                window.addEventListener('online', handleOnline);
-                window.addEventListener('offline', handleOffline);
+                // Online/offline listeners moved to useServiceWorker hook
 
                 return () => {
-                    window.removeEventListener('online', handleOnline);
-                    window.removeEventListener('offline', handleOffline);
                     endSession(true);
                     disposeAudioGraph();
                     teardownAudioElement();
@@ -10592,6 +11212,79 @@ function App() {
                 }
             }, [autoAdjustEnabled, sensorStatus, isSimulating]);
 
+            // Story 6-1: Persist audio cache consent to localStorage (AC7)
+            useEffect(() => {
+                try {
+                    localStorage.setItem('mp3_8d_audio_cache_consent', String(audioCacheConsent));
+                    console.log(`[SW] Audio cache consent: ${audioCacheConsent ? 'enabled' : 'disabled'}`);
+                } catch (err) {
+                    console.warn('[SW] Failed to persist audio cache consent:', err);
+                }
+            }, [audioCacheConsent]);
+
+            // Story 6-1: Calculate and update cache storage usage and cached URLs
+            const updateCacheStorageUsage = useCallback(async () => {
+                if (!('caches' in window)) {
+                    setCacheStorageUsed(0);
+                    setCachedAudioUrls(new Set());
+                    return;
+                }
+                try {
+                    const cache = await caches.open('audio-cache');
+                    const keys = await cache.keys();
+                    let totalSize = 0;
+                    const urls = new Set();
+                    for (const request of keys) {
+                        const response = await cache.match(request);
+                        if (response) {
+                            const blob = await response.clone().blob();
+                            totalSize += blob.size;
+                            urls.add(request.url);
+                        }
+                    }
+                    setCacheStorageUsed(totalSize);
+                    setCachedAudioUrls(urls);
+                } catch (err) {
+                    console.warn('[SW] Failed to calculate cache storage:', err);
+                    setCacheStorageUsed(0);
+                    setCachedAudioUrls(new Set());
+                }
+            }, []);
+
+            // Update storage usage on mount and when consent changes
+            useEffect(() => {
+                if (audioCacheConsent) {
+                    updateCacheStorageUsage();
+                } else {
+                    setCacheStorageUsed(0);
+                }
+            }, [audioCacheConsent, updateCacheStorageUsage]);
+
+            // Story 6-1: Clear audio cache function
+            const handleClearAudioCache = useCallback(async () => {
+                if (!('caches' in window)) return;
+                try {
+                    const deleted = await caches.delete('audio-cache');
+                    if (deleted) {
+                        console.log('[SW] Audio cache cleared');
+                        setCacheStorageUsed(0);
+                        setCachedAudioUrls(new Set());
+                    }
+                } catch (err) {
+                    console.error('[SW] Failed to clear audio cache:', err);
+                }
+            }, []);
+
+            // Story 6-1: Check if a track URL is cached (AC8)
+            const isTrackCached = useCallback((track) => {
+                if (!audioCacheConsent || cachedAudioUrls.size === 0) return false;
+                // Check if track URL is in cached set
+                if (track.url) {
+                    return cachedAudioUrls.has(track.url);
+                }
+                return false;
+            }, [audioCacheConsent, cachedAudioUrls]);
+
             // ============================================================
             // Story 5-2: Sensor Simulator (AC8)
             // ============================================================
@@ -11832,6 +12525,17 @@ function App() {
             }
 
 return (
+                <>
+                    {/* Story 6-1: Offline/Online Banner */}
+                    <OfflineBanner isOffline={isOffline} reducedMotion={reducedMotion} />
+
+                    {/* Story 6-1: SW Update Toast */}
+                    <UpdateToast
+                        isVisible={updateAvailable}
+                        onUpdate={applyUpdate}
+                        reducedMotion={reducedMotion}
+                    />
+
                 <div className="screen">
                     {/* First Run Calibration Prompt Modal */}
                     {showFirstRunPrompt && (
@@ -12261,6 +12965,14 @@ return (
                                     logSensorEvent={logSensorEvent}
                                 />
                             )}
+
+                            {/* Story 6-1: Offline Settings */}
+                            <OfflineSettings
+                                audioCacheConsent={audioCacheConsent}
+                                onConsentChange={setAudioCacheConsent}
+                                cacheStorageUsed={cacheStorageUsed}
+                                onClearCache={handleClearAudioCache}
+                            />
 
                             <article
                                 className="hero-card"
@@ -12779,16 +13491,18 @@ return (
                                         <input
                                             id="stream-url"
                                             type="url"
-                                            placeholder="https://example.com/track.mp3"
+                                            placeholder={!isOnline ? "Streaming unavailable offline" : "https://example.com/track.mp3"}
                                             value={urlInput}
                                             onChange={(e) => setUrlInput(e.target.value)}
-                                            onKeyDown={(e) => e.key === 'Enter' && addUrl()}
+                                            onKeyDown={(e) => e.key === 'Enter' && !isOffline && addUrl()}
+                                            disabled={!isOnline}
+                                            aria-disabled={!isOnline}
                                         />
-                                        <button 
-                                            type="button" 
-                                            className="primary-btn" 
-                                            onClick={addUrl} 
-                                            disabled={!urlInput.trim() || isValidatingUrl}
+                                        <button
+                                            type="button"
+                                            className="primary-btn"
+                                            onClick={addUrl}
+                                            disabled={!isOnline || !urlInput.trim() || isValidatingUrl}
                                         >
                                             {isValidatingUrl ? 'Validating...' : 'Add URL'}
                                         </button>
@@ -12907,6 +13621,19 @@ return (
                                                         {track.name}
                                                         {trackRating === 'boost' && (
                                                             <span style={{ fontSize: '0.8rem' }}>{icons.boost.icon}</span>
+                                                        )}
+                                                        {/* Story 6-1: Cached track indicator (AC8) */}
+                                                        {isTrackCached(track) && (
+                                                            <span
+                                                                className="cached-indicator"
+                                                                title="Available offline"
+                                                                aria-label="Track available offline"
+                                                            >
+                                                                <span className="cached-indicator-icon">
+                                                                    ☁️✓
+                                                                    <span className="cached-indicator-tooltip">Available offline</span>
+                                                                </span>
+                                                            </span>
                                                         )}
                                                     </div>
 
@@ -13687,16 +14414,18 @@ return (
                                         <input
                                             id="mobile-stream-url"
                                             type="url"
-                                            placeholder="https://example.com/track.mp3"
+                                            placeholder={!isOnline ? "Streaming unavailable offline" : "https://example.com/track.mp3"}
                                             value={urlInput}
                                             onChange={(e) => setUrlInput(e.target.value)}
-                                            onKeyDown={(e) => e.key === 'Enter' && addUrl()}
+                                            onKeyDown={(e) => e.key === 'Enter' && !isOffline && addUrl()}
+                                            disabled={!isOnline}
+                                            aria-disabled={!isOnline}
                                         />
                                         <button
                                             type="button"
                                             className="primary-btn"
                                             onClick={addUrl}
-                                            disabled={!urlInput.trim() || isValidatingUrl}
+                                            disabled={!isOnline || !urlInput.trim() || isValidatingUrl}
                                             style={{ marginTop: '8px' }}
                                         >
                                             {isValidatingUrl ? 'Validating...' : 'Add URL'}
@@ -13790,6 +14519,16 @@ return (
                                                             {track.name}
                                                             {trackRating === 'boost' && (
                                                                 <span style={{ marginLeft: '4px', fontSize: '0.8rem' }}>{icons.boost.icon}</span>
+                                                            )}
+                                                            {/* Story 6-1: Cached track indicator (AC8) */}
+                                                            {isTrackCached(track) && (
+                                                                <span
+                                                                    className="cached-indicator"
+                                                                    title="Available offline"
+                                                                    aria-label="Track available offline"
+                                                                >
+                                                                    ☁️✓
+                                                                </span>
                                                             )}
                                                         </span>
                                                     </div>
@@ -14406,6 +15145,7 @@ return (
                         </div>
                     )}
                 </div>
+                </>
             );
         }
 
