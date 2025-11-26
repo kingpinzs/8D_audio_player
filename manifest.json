@@ -1,0 +1,57 @@
+{
+  "name": "mp3_to_8D - Focus Audio",
+  "short_name": "8D Audio",
+  "description": "Spatial audio for focus and calm",
+  "start_url": "/index.html?source=pwa",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#1a1a2e",
+  "background_color": "#1a1a2e",
+  "categories": ["health", "wellness", "music"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Start Focus",
+      "short_name": "Focus",
+      "description": "Launch with Focus preset",
+      "url": "/index.html?mode=focus",
+      "icons": [
+        {
+          "src": "/icons/focus.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Start Calm",
+      "short_name": "Calm",
+      "description": "Launch with Calm preset",
+      "url": "/index.html?mode=calm",
+      "icons": [
+        {
+          "src": "/icons/calm.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}

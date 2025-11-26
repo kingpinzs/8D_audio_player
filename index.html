@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>8D Audio Player - Live Streaming Edition</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#1a1a2e">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -2676,6 +2679,169 @@
             border-radius: 8px;
             font-size: 13px;
             cursor: pointer;
+        }
+
+        /* Story 6-2: Install Prompt */
+        .install-prompt {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            background: var(--card-bg);
+            border: 1px solid var(--accent-energize, #ffb562);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            margin: 16px 0;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .install-prompt.no-motion {
+            animation: none;
+        }
+
+        .install-prompt:focus {
+            outline: 2px solid var(--accent-focus, #6d8bff);
+            outline-offset: 2px;
+        }
+
+        .install-prompt-icon {
+            flex-shrink: 0;
+        }
+
+        .install-prompt-icon img {
+            display: block;
+            border-radius: 10px;
+        }
+
+        .install-prompt-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .install-prompt-title {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .install-prompt-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .install-prompt-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .install-btn {
+            padding: 8px 16px;
+            background: var(--accent-energize, #ffb562);
+            color: #1a1a2e;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: filter 0.15s ease;
+        }
+
+        .install-btn:hover:not(:disabled) {
+            filter: brightness(1.1);
+        }
+
+        .install-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .install-dismiss-btn {
+            padding: 8px 12px;
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .install-dismiss-btn:hover {
+            background: var(--surface);
+        }
+
+        /* Story 6-2: Safari Install Instructions */
+        .safari-instructions {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 18px;
+            background: var(--card-bg);
+            border: 1px solid var(--accent-calm, #4edbc6);
+            border-radius: 12px;
+            margin: 16px 0;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .safari-instructions.no-motion {
+            animation: none;
+        }
+
+        .safari-instructions-icon {
+            font-size: 28px;
+            flex-shrink: 0;
+        }
+
+        .safari-instructions-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .safari-instructions-title {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .safari-instructions-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin: 0 0 8px 0;
+        }
+
+        .safari-share-hint {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--accent-calm, #4edbc6);
+            font-weight: 500;
+        }
+
+        .safari-share-icon {
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        .safari-instructions-dismiss {
+            padding: 8px 16px;
+            background: var(--accent-calm, #4edbc6);
+            color: #1a1a2e;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            flex-shrink: 0;
+            align-self: center;
+        }
+
+        .safari-instructions-dismiss:hover {
+            filter: brightness(1.1);
         }
 
         /* Story 6-1: Offline Settings */
@@ -8147,6 +8313,179 @@
         }
 
         // ============================================
+        // useInstallPrompt Hook - Story 6-2
+        // PWA Install Prompt State & Actions
+        // ============================================
+        function useInstallPrompt() {
+            // Can the app be installed?
+            const [canInstall, setCanInstall] = useState(false);
+
+            // Has the app already been installed (standalone mode)?
+            const [isInstalled, setIsInstalled] = useState(() => {
+                // Check localStorage first for persisted state
+                try {
+                    const stored = localStorage.getItem('mp3_8d_is_installed');
+                    if (stored === 'true') return true;
+                } catch {}
+                // Check if running in standalone mode
+                if (typeof window !== 'undefined' && window.matchMedia) {
+                    return window.matchMedia('(display-mode: standalone)').matches;
+                }
+                return false;
+            });
+
+            // Deferred install prompt event
+            const installPromptDeferredRef = useRef(null);
+
+            // Track if prompt has been shown this session (for telemetry)
+            const promptShownRef = useRef(false);
+
+            // Track if user dismissed the prompt (for "Not now" cooldown)
+            const [promptDismissed, setPromptDismissed] = useState(() => {
+                try {
+                    const dismissedAt = localStorage.getItem('mp3_8d_install_dismissed');
+                    if (dismissedAt) {
+                        // Show again after 24 hours
+                        const dismissedTime = parseInt(dismissedAt, 10);
+                        const oneDayMs = 24 * 60 * 60 * 1000;
+                        return Date.now() - dismissedTime < oneDayMs;
+                    }
+                } catch {}
+                return false;
+            });
+
+            // Log install event to SessionLogging
+            const logInstallEvent = useCallback((eventType, metadata = {}) => {
+                const event = {
+                    type: eventType,
+                    timestamp: Date.now(),
+                    userAgent: navigator.userAgent,
+                    platform: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+                    ...metadata
+                };
+
+                console.log(`[PWA] ${eventType}`, event);
+
+                // Store in SessionLogging IndexedDB
+                if (typeof SessionLogging !== 'undefined' && SessionLogging.addSession) {
+                    SessionLogging.addSession({
+                        ...event,
+                        profileId: 'pwa_install',
+                        presetId: null,
+                        ritualUsed: false
+                    }).catch(err => console.warn('[PWA] Failed to log event:', err));
+                }
+            }, []);
+
+            useEffect(() => {
+                // Check standalone mode via media query
+                const standaloneQuery = window.matchMedia('(display-mode: standalone)');
+
+                const handleDisplayModeChange = (e) => {
+                    if (e.matches) {
+                        setIsInstalled(true);
+                        setCanInstall(false);
+                        localStorage.setItem('mp3_8d_is_installed', 'true');
+                        console.log('[PWA] Running in standalone mode');
+                        logInstallEvent('APP_INSTALLED');
+                    }
+                };
+
+                // Check initial state
+                if (standaloneQuery.matches) {
+                    setIsInstalled(true);
+                    setCanInstall(false);
+                    localStorage.setItem('mp3_8d_is_installed', 'true');
+                    console.log('[PWA] Running in standalone mode');
+                }
+
+                standaloneQuery.addEventListener('change', handleDisplayModeChange);
+
+                // Capture beforeinstallprompt event
+                const handleBeforeInstallPrompt = (e) => {
+                    // Prevent the mini-infobar from appearing on mobile
+                    e.preventDefault();
+                    // Store the event for later use
+                    installPromptDeferredRef.current = e;
+                    setCanInstall(true);
+                    console.log('[PWA] Install prompt available');
+                };
+
+                window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+                // Handle app installed event
+                const handleAppInstalled = () => {
+                    setIsInstalled(true);
+                    setCanInstall(false);
+                    installPromptDeferredRef.current = null;
+                    localStorage.setItem('mp3_8d_is_installed', 'true');
+                    console.log('[PWA] App was installed');
+                };
+
+                window.addEventListener('appinstalled', handleAppInstalled);
+
+                return () => {
+                    standaloneQuery.removeEventListener('change', handleDisplayModeChange);
+                    window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+                    window.removeEventListener('appinstalled', handleAppInstalled);
+                };
+            }, [logInstallEvent]);
+
+            // Show the native install prompt
+            const showInstallPrompt = useCallback(async () => {
+                if (!installPromptDeferredRef.current) {
+                    console.log('[PWA] No install prompt available');
+                    return 'unavailable';
+                }
+
+                // Show the prompt
+                installPromptDeferredRef.current.prompt();
+
+                // Wait for user choice
+                const { outcome } = await installPromptDeferredRef.current.userChoice;
+                console.log(`[PWA] User choice: ${outcome}`);
+
+                // Log the outcome
+                if (outcome === 'accepted') {
+                    logInstallEvent('INSTALL_ACCEPTED');
+                } else {
+                    logInstallEvent('INSTALL_DISMISSED');
+                }
+
+                // Clear the deferred prompt - it can only be used once
+                installPromptDeferredRef.current = null;
+                setCanInstall(false);
+
+                return outcome;
+            }, [logInstallEvent]);
+
+            // Dismiss the install prompt temporarily
+            const dismissInstallPrompt = useCallback(() => {
+                setPromptDismissed(true);
+                localStorage.setItem('mp3_8d_install_dismissed', String(Date.now()));
+                logInstallEvent('INSTALL_DISMISSED', { source: 'in_app_dismiss' });
+                console.log('[PWA] Install prompt dismissed');
+            }, [logInstallEvent]);
+
+            // Log when prompt is first shown
+            const markPromptShown = useCallback(() => {
+                if (!promptShownRef.current) {
+                    promptShownRef.current = true;
+                    logInstallEvent('INSTALL_PROMPT_SHOWN');
+                }
+            }, [logInstallEvent]);
+
+            return {
+                canInstall: canInstall && !isInstalled && !promptDismissed,
+                isInstalled,
+                showInstallPrompt,
+                dismissInstallPrompt,
+                markPromptShown,
+                logInstallEvent
+            };
+        }
+
+        // ============================================
         // OfflineBanner Component - Story 6-1
         // Shows offline/online status notifications
         // ============================================
@@ -8272,6 +8611,179 @@
         }
 
         // ============================================
+        // InstallPrompt Component - Story 6-2
+        // PWA Install prompt UI with accessibility
+        // ============================================
+        function InstallPrompt({
+            canInstall,
+            onInstall,
+            onDismiss,
+            onShow,
+            reducedMotion
+        }) {
+            const promptRef = useRef(null);
+            const [installing, setInstalling] = useState(false);
+
+            // Mark prompt as shown when it first renders
+            useEffect(() => {
+                if (canInstall && onShow) {
+                    onShow();
+                }
+            }, [canInstall, onShow]);
+
+            // Focus management when prompt opens
+            useEffect(() => {
+                if (canInstall && promptRef.current) {
+                    promptRef.current.focus();
+                }
+            }, [canInstall]);
+
+            const handleInstall = async () => {
+                setInstalling(true);
+                try {
+                    await onInstall();
+                } finally {
+                    setInstalling(false);
+                }
+            };
+
+            if (!canInstall) return null;
+
+            return (
+                <div
+                    ref={promptRef}
+                    className={`install-prompt ${reducedMotion ? 'no-motion' : ''}`}
+                    role="dialog"
+                    aria-labelledby="install-heading"
+                    aria-describedby="install-description"
+                    tabIndex={-1}
+                >
+                    <div className="install-prompt-icon" aria-hidden="true">
+                        <img
+                            src="/icons/icon-192.png"
+                            alt=""
+                            width="48"
+                            height="48"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                    </div>
+                    <div className="install-prompt-content">
+                        <strong id="install-heading" className="install-prompt-title">
+                            8D Audio
+                        </strong>
+                        <span id="install-description" className="install-prompt-text">
+                            Install for quick access
+                        </span>
+                    </div>
+                    <div className="install-prompt-actions">
+                        <button
+                            type="button"
+                            className="install-btn"
+                            onClick={handleInstall}
+                            disabled={installing}
+                        >
+                            {installing ? 'Installing...' : 'Install'}
+                        </button>
+                        <button
+                            type="button"
+                            className="install-dismiss-btn"
+                            onClick={onDismiss}
+                            aria-label="Dismiss install prompt"
+                        >
+                            Not now
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // ============================================
+        // SafariInstallInstructions Component - Story 6-2
+        // Manual A2HS instructions for Safari users
+        // ============================================
+        function SafariInstallInstructions({ reducedMotion }) {
+            // Detect Safari and check if beforeinstallprompt is NOT supported
+            const [showInstructions, setShowInstructions] = useState(() => {
+                // Check localStorage for dismissal
+                try {
+                    const dismissed = localStorage.getItem('mp3_8d_safari_install_dismissed');
+                    if (dismissed === 'true') return false;
+                } catch {}
+
+                // Check if we're on Safari and beforeinstallprompt is not supported
+                if (typeof window === 'undefined') return false;
+
+                const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+                const noBeforeInstallPrompt = !('onbeforeinstallprompt' in window);
+                const notStandalone = !window.matchMedia('(display-mode: standalone)').matches;
+
+                return isSafari && noBeforeInstallPrompt && notStandalone;
+            });
+
+            // Also check if already installed
+            const [isInstalled] = useState(() => {
+                try {
+                    const stored = localStorage.getItem('mp3_8d_is_installed');
+                    if (stored === 'true') return true;
+                } catch {}
+                if (typeof window !== 'undefined' && window.matchMedia) {
+                    return window.matchMedia('(display-mode: standalone)').matches;
+                }
+                return false;
+            });
+
+            const handleDismiss = () => {
+                setShowInstructions(false);
+                try {
+                    localStorage.setItem('mp3_8d_safari_install_dismissed', 'true');
+                } catch {}
+            };
+
+            if (!showInstructions || isInstalled) return null;
+
+            // Detect iOS vs macOS Safari
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+            return (
+                <div
+                    className={`safari-instructions ${reducedMotion ? 'no-motion' : ''}`}
+                    role="region"
+                    aria-label="Installation instructions for Safari"
+                >
+                    <div className="safari-instructions-icon" aria-hidden="true">
+                        📲
+                    </div>
+                    <div className="safari-instructions-content">
+                        <strong className="safari-instructions-title">
+                            Install 8D Audio
+                        </strong>
+                        <p className="safari-instructions-text">
+                            {isIOS
+                                ? 'To install: Tap the Share button, then "Add to Home Screen"'
+                                : 'To install: Click Share in Safari\'s menu, then "Add to Dock"'}
+                        </p>
+                        <div className="safari-share-hint" aria-hidden="true">
+                            {isIOS ? (
+                                <span className="safari-share-icon">⬆</span>
+                            ) : (
+                                <span className="safari-share-icon">↗</span>
+                            )}
+                            <span>→ Add to {isIOS ? 'Home Screen' : 'Dock'}</span>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        className="safari-instructions-dismiss"
+                        onClick={handleDismiss}
+                        aria-label="Dismiss installation instructions"
+                    >
+                        Got it
+                    </button>
+                </div>
+            );
+        }
+
+        // ============================================
         // OfflineSettings Component - Story 6-1
         // Audio cache consent toggle with storage usage
         // ============================================
@@ -8346,6 +8858,16 @@ function App() {
 
             // Service Worker state (Story 6-1)
             const { swStatus, isOffline, updateAvailable, applyUpdate } = useServiceWorker();
+
+            // PWA Install Prompt state (Story 6-2)
+            const {
+                canInstall,
+                isInstalled,
+                showInstallPrompt,
+                dismissInstallPrompt,
+                markPromptShown,
+                logInstallEvent
+            } = useInstallPrompt();
 
             const [playlist, setPlaylist] = useState([]);
             const [currentTrackIndex, setCurrentTrackIndex] = useState(null);
@@ -8894,6 +9416,51 @@ function App() {
                     }
                     clearRitualTimers();
                 };
+            }, []);
+
+            // Story 6-2: Parse query params for shortcut mode detection (AC7)
+            useEffect(() => {
+                const parseAndApplyQueryParams = () => {
+                    const params = new URLSearchParams(window.location.search);
+                    const mode = params.get('mode');
+                    const source = params.get('source');
+
+                    // Log if launched via PWA shortcut
+                    if (source === 'pwa') {
+                        console.log('[PWA] Launched from installed PWA');
+                        logInstallEvent('PWA_LAUNCH', { mode: mode || 'default' });
+                    }
+
+                    // Apply preset based on mode param
+                    if (mode === 'focus') {
+                        const focusPreset = MODE_LIBRARY.find(m => m.id === 'focus');
+                        if (focusPreset) {
+                            console.log('[PWA] Applying Focus preset from shortcut');
+                            // Defer to allow initial render
+                            setTimeout(() => {
+                                applyPreset(focusPreset.preset, focusPreset.id);
+                            }, 100);
+                        }
+                    } else if (mode === 'calm') {
+                        const calmPreset = MODE_LIBRARY.find(m => m.id === 'calm');
+                        if (calmPreset) {
+                            console.log('[PWA] Applying Calm preset from shortcut');
+                            setTimeout(() => {
+                                applyPreset(calmPreset.preset, calmPreset.id);
+                            }, 100);
+                        }
+                    }
+
+                    // Clean the URL by removing query params (but keep in history)
+                    if (mode || source) {
+                        const cleanUrl = window.location.pathname;
+                        window.history.replaceState({}, '', cleanUrl);
+                        console.log('[PWA] Cleaned URL query params');
+                    }
+                };
+
+                parseAndApplyQueryParams();
+            // eslint-disable-next-line react-hooks/exhaustive-deps
             }, []);
 
             // Story 3-3: Load all presets on mount
@@ -13058,6 +13625,18 @@ return (
                                         Add a local file or stream to begin this ritual.
                                     </div>
                                 )}
+
+                                {/* Story 6-2: PWA Install Prompt */}
+                                <InstallPrompt
+                                    canInstall={canInstall}
+                                    onInstall={showInstallPrompt}
+                                    onDismiss={dismissInstallPrompt}
+                                    onShow={markPromptShown}
+                                    reducedMotion={reducedMotion}
+                                />
+
+                                {/* Story 6-2: Safari Manual Install Instructions */}
+                                <SafariInstallInstructions reducedMotion={reducedMotion} />
                             </article>
 
                             <div className="preset-grid">
