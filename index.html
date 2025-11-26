@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>8D Audio Player - Live Streaming Edition</title>
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#1a1a2e">
-    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="./icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/icon-192.png">
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -8222,7 +8223,7 @@
                 const registerSW = async () => {
                     try {
                         registeredRef.current = true;
-                        const registration = await navigator.serviceWorker.register('/sw.js');
+                        const registration = await navigator.serviceWorker.register('./sw.js');
                         console.log(`[SW] Registered: ${registration.scope}`);
 
                         // Check initial state

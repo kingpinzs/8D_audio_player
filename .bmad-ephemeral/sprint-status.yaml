@@ -72,6 +72,6 @@ development_status:
   # Epic 6 - PWA Reliability & Accessibility
   epic-6: contexted
   6-1-service-worker-offline-ux: done
-  6-2-manifest-install-flow: in-progress
-  6-3-accessibility-observability-suite: backlog
+  6-2-manifest-install-flow: done
+  6-3-accessibility-observability-suite: drafted
   epic-6-retrospective: optional
