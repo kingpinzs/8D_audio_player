@@ -2943,6 +2943,61 @@
             color: white;
         }
 
+        /* Install App Section in Offline Settings */
+        .install-app-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--card-border);
+        }
+
+        .install-app-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin: 0 0 12px 0;
+            color: var(--text-primary);
+        }
+
+        .install-app-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin: 0 0 10px 0;
+        }
+
+        .install-app-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 18px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .install-app-btn:hover {
+            filter: brightness(1.1);
+        }
+
+        .install-app-steps {
+            margin: 0;
+            padding-left: 20px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .install-app-steps li {
+            margin-bottom: 6px;
+            line-height: 1.5;
+        }
+
+        .install-app-steps strong {
+            color: var(--text-primary);
+        }
+
         /* Story 6-1: Cached Track Indicator (AC8) */
         .cached-indicator {
             display: inline-flex;
@@ -8787,13 +8842,29 @@
         // ============================================
         // OfflineSettings Component - Story 6-1
         // Audio cache consent toggle with storage usage
+        // Also includes PWA install option for mobile users
         // ============================================
         function OfflineSettings({
             audioCacheConsent,
             onConsentChange,
             cacheStorageUsed,
-            onClearCache
+            onClearCache,
+            // PWA install props
+            canInstall,
+            isInstalled,
+            onInstall
         }) {
+            // Detect platform for install instructions
+            const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+            const isAndroid = /Android/i.test(navigator.userAgent);
+
+            // Check if native install prompt is available
+            const hasNativeInstall = 'onbeforeinstallprompt' in window;
+
+            // Show install section on mobile when not installed
+            const showInstallSection = isMobile && !isInstalled;
             // Format bytes to human readable
             const formatBytes = (bytes) => {
                 if (bytes === 0) return '0 B';
@@ -8847,6 +8918,56 @@
                                 >
                                     Clear audio cache
                                 </button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Install App Section - for mobile users */}
+                    {showInstallSection && (
+                        <div className="install-app-section">
+                            <h4 className="install-app-title">📲 Install App</h4>
+
+                            {/* Native install available (Chrome/Edge on Android) */}
+                            {canInstall && hasNativeInstall && (
+                                <div className="install-app-native">
+                                    <p className="install-app-text">
+                                        Add to your home screen for quick access
+                                    </p>
+                                    <button
+                                        type="button"
+                                        className="install-app-btn"
+                                        onClick={onInstall}
+                                    >
+                                        Install App
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Manual instructions for iOS Safari */}
+                            {isIOS && (
+                                <div className="install-app-manual">
+                                    <p className="install-app-text">
+                                        To install on your {isIOS ? 'iPhone/iPad' : 'device'}:
+                                    </p>
+                                    <ol className="install-app-steps">
+                                        <li>Tap the <strong>Share</strong> button <span aria-hidden="true">⬆</span></li>
+                                        <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+                                        <li>Tap <strong>Add</strong> in the top right</li>
+                                    </ol>
+                                </div>
+                            )}
+
+                            {/* Manual instructions for Android browsers without native install */}
+                            {isAndroid && !canInstall && (
+                                <div className="install-app-manual">
+                                    <p className="install-app-text">
+                                        To install on your Android device:
+                                    </p>
+                                    <ol className="install-app-steps">
+                                        <li>Tap the <strong>menu</strong> (⋮) in your browser</li>
+                                        <li>Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong></li>
+                                    </ol>
+                                </div>
                             )}
                         </div>
                     )}
@@ -13534,12 +13655,15 @@ return (
                                 />
                             )}
 
-                            {/* Story 6-1: Offline Settings */}
+                            {/* Story 6-1: Offline Settings (includes install option) */}
                             <OfflineSettings
                                 audioCacheConsent={audioCacheConsent}
                                 onConsentChange={setAudioCacheConsent}
                                 cacheStorageUsed={cacheStorageUsed}
                                 onClearCache={handleClearAudioCache}
+                                canInstall={canInstall}
+                                isInstalled={isInstalled}
+                                onInstall={showInstallPrompt}
                             />
 
                             <article
