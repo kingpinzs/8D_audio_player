@@ -9,6 +9,7 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="./audio-engine.js"></script>
     <script src="./session-logging.js"></script>
+    <script src="./sensor-consent.js"></script>
     <style>
         :root {
             --bg-1: #f4f6ff;
@@ -1589,6 +1590,1107 @@
             }
         }
 
+        /* Story 4-2: Check-In Modal Styles */
+        .checkin-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .checkin-overlay.no-motion {
+            animation: none;
+        }
+
+        .checkin-modal {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--card-border);
+        }
+
+        .checkin-modal h2 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            color: var(--text-primary);
+        }
+
+        .checkin-subtitle {
+            margin: 0 0 24px 0;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 600px) {
+            .emoji-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .emoji-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 16px;
+            background: var(--bg-secondary, rgba(255,255,255,0.05));
+            border: 2px solid transparent;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-height: 80px;
+            color: var(--text-primary);
+        }
+
+        .checkin-overlay.no-motion .emoji-button {
+            transition: none;
+        }
+
+        .emoji-button:hover {
+            transform: scale(1.05);
+            border-color: var(--chip-accent, var(--accent-primary, #6366f1));
+        }
+
+        .checkin-overlay.no-motion .emoji-button:hover {
+            transform: none;
+        }
+
+        .emoji-button:focus {
+            outline: 2px solid var(--accent-primary, #6366f1);
+            outline-offset: 2px;
+        }
+
+        .emoji-button.selected {
+            border-color: var(--chip-accent, var(--accent-primary, #6366f1));
+            border-width: 3px;
+            background: var(--bg-tertiary, rgba(255,255,255,0.1));
+        }
+
+        .emoji-icon {
+            font-size: 36px;
+            line-height: 1;
+        }
+
+        .emoji-label {
+            font-size: 11px;
+            text-align: center;
+            color: var(--text-muted);
+            line-height: 1.3;
+        }
+
+        .checkin-notes-section {
+            margin-bottom: 24px;
+        }
+
+        .checkin-notes-section label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .checkin-note-hint {
+            color: var(--text-muted);
+            font-weight: normal;
+        }
+
+        .checkin-notes-textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            background: var(--bg-secondary, rgba(255,255,255,0.05));
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        .checkin-notes-textarea:focus {
+            outline: 2px solid var(--accent-primary, #6366f1);
+            outline-offset: 2px;
+        }
+
+        .checkin-char-count {
+            margin-top: 4px;
+            font-size: 12px;
+            color: var(--text-muted);
+            text-align: right;
+        }
+
+        .checkin-modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .checkin-close-button {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: transparent;
+            border: none;
+            font-size: 24px;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px 8px;
+            line-height: 1;
+        }
+
+        .checkin-close-button:hover {
+            color: var(--text-primary);
+        }
+
+        .checkin-close-button:focus {
+            outline: 2px solid var(--accent-primary, #6366f1);
+            border-radius: 4px;
+        }
+
+        /* Story 5-1: Sensor Consent Modal Styles */
+        .sensor-consent-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .sensor-consent-overlay.no-motion {
+            animation: none;
+        }
+
+        .sensor-consent-modal {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 480px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--card-border);
+        }
+
+        .sensor-consent-modal h2 {
+            margin: 0 0 16px 0;
+            font-size: 24px;
+            color: var(--text-primary);
+        }
+
+        .sensor-consent-content {
+            margin-bottom: 24px;
+        }
+
+        .sensor-consent-intro {
+            margin: 0 0 16px 0;
+            color: var(--text-primary);
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        .sensor-consent-list {
+            margin: 0;
+            padding-left: 24px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.8;
+        }
+
+        .sensor-consent-list li {
+            margin-bottom: 4px;
+        }
+
+        .sensor-consent-checkbox {
+            margin-bottom: 24px;
+            padding: 12px;
+            background: var(--surface);
+            border-radius: 8px;
+        }
+
+        .sensor-consent-checkbox .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .sensor-consent-checkbox input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: var(--accent-focus);
+        }
+
+        .consent-hint {
+            display: block;
+            margin-top: 8px;
+            margin-left: 30px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .sensor-consent-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .sensor-consent-actions .primary-btn {
+            min-width: 100px;
+        }
+
+        .sensor-consent-actions .ghost-btn {
+            min-width: 80px;
+        }
+
+        /* Story 5-1: Forget Device Confirmation Modal */
+        .forget-device-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10002;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .forget-device-modal {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--card-border);
+        }
+
+        .forget-device-modal h3 {
+            margin: 0 0 12px 0;
+            font-size: 18px;
+            color: var(--text-primary);
+        }
+
+        .forget-device-modal p {
+            margin: 0 0 20px 0;
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .forget-device-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .forget-device-actions .danger-btn {
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .forget-device-actions .danger-btn:hover {
+            filter: brightness(1.1);
+        }
+
+        /* Story 5-1: Sensor Settings Styles */
+        .sensor-settings {
+            padding: 16px;
+            background: var(--surface);
+            border-radius: 12px;
+            margin-top: 16px;
+        }
+
+        .sensor-settings-title {
+            margin: 0 0 16px 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .sensor-browser-notice {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px;
+            background: rgba(109, 139, 255, 0.1);
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .sensor-browser-notice .notice-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .sensor-browser-notice .notice-message {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .sensor-connected-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: rgba(58, 216, 167, 0.15);
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .sensor-connected-status .status-icon {
+            color: var(--positive);
+            font-weight: bold;
+        }
+
+        .sensor-connected-status .status-text {
+            flex: 1;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .disconnect-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            background: transparent;
+            border: 1px solid var(--card-border);
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        .disconnect-btn:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .sensor-connect-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .sensor-connect-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 20px;
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            background: var(--card-bg);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .sensor-connect-btn:hover:not(:disabled) {
+            border-color: var(--accent-focus);
+            box-shadow: 0 4px 12px rgba(109, 139, 255, 0.2);
+        }
+
+        .sensor-connect-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .sensor-connect-btn .btn-icon {
+            font-size: 18px;
+        }
+
+        .sensor-connect-btn .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--card-border);
+            border-top-color: var(--accent-focus);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .sensor-device-list {
+            margin-top: 20px;
+        }
+
+        .device-list-title {
+            margin: 0 0 12px 0;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .device-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .device-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .device-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .device-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .device-type-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .device-details {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .device-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .device-last-connected {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .device-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .device-reconnect-btn {
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 500;
+            background: var(--accent-focus);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .device-reconnect-btn:hover:not(:disabled) {
+            filter: brightness(1.1);
+        }
+
+        .device-reconnect-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .device-forget-btn {
+            padding: 6px 8px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            opacity: 0.6;
+            transition: all 0.15s ease;
+        }
+
+        .device-forget-btn:hover {
+            opacity: 1;
+            border-color: var(--danger);
+            background: rgba(240, 93, 123, 0.1);
+        }
+
+        .sensor-empty-state {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-secondary);
+        }
+
+        .sensor-empty-state p {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+        }
+
+        .learn-more-link {
+            font-size: 13px;
+            color: var(--accent-focus);
+            text-decoration: none;
+        }
+
+        .learn-more-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Story 5-2: Heart Rate Display & Threshold Settings */
+        .sensor-hr-display {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+
+        .hr-current {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .hr-icon {
+            font-size: 24px;
+            animation: heartbeat 1s ease-in-out infinite;
+        }
+
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .hr-value {
+            font-size: 36px;
+            font-weight: 700;
+            color: #ef4444;
+        }
+
+        .hr-unit {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .hr-average {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+        }
+
+        .hr-avg-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .hr-avg-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .sensor-reconnecting-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            background: rgba(251, 191, 36, 0.1);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            color: #fbbf24;
+            font-size: 14px;
+        }
+
+        .sensor-disconnected-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+
+        .sensor-disconnected-status .status-icon {
+            font-size: 16px;
+        }
+
+        .sensor-disconnected-status .status-text {
+            flex: 1;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .reconnect-btn {
+            padding: 6px 12px;
+            background: var(--accent-primary, #6366f1);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .reconnect-btn:hover {
+            filter: brightness(1.1);
+        }
+
+        .simulated-badge {
+            color: var(--text-muted);
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        .sensor-threshold-setting {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid var(--card-border);
+        }
+
+        .threshold-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .threshold-input-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .threshold-input {
+            width: 80px;
+            padding: 8px 12px;
+            background: var(--input-bg, rgba(255,255,255,0.05));
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 16px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .threshold-input:focus {
+            outline: none;
+            border-color: var(--accent-primary, #6366f1);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        .threshold-unit {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .threshold-help-text {
+            margin: 0;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .sensor-simulator-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--card-border);
+        }
+
+        .sensor-connect-btn.simulator {
+            background: linear-gradient(135deg, #8b5cf6, #6366f1);
+            border-color: transparent;
+        }
+
+        .simulator-note {
+            margin: 8px 0 0 0;
+            font-size: 12px;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* Story 5-2: Sensor Suggestion Toast */
+        .sensor-suggestion-toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 20px;
+            background: var(--card-bg, #1e293b);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            z-index: 1100;
+            animation: slideUp 0.3s ease-out;
+            max-width: 90vw;
+        }
+
+        .sensor-suggestion-toast.no-motion {
+            animation: none;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        .suggestion-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .suggestion-icon {
+            font-size: 28px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .suggestion-text h4 {
+            margin: 0 0 4px 0;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .suggestion-text p {
+            margin: 0;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .suggestion-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .suggestion-accept-btn {
+            padding: 8px 16px;
+            background: var(--accent-primary, #6366f1);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: filter 0.15s ease;
+        }
+
+        .suggestion-accept-btn:hover {
+            filter: brightness(1.1);
+        }
+
+        .suggestion-accept-btn:focus {
+            outline: 2px solid white;
+            outline-offset: 2px;
+        }
+
+        .suggestion-dismiss-btn {
+            padding: 8px 16px;
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .suggestion-dismiss-btn:hover {
+            background: var(--bg-tertiary, rgba(255,255,255,0.05));
+            color: var(--text-primary);
+        }
+
+        /* Story 4-3: Insights Dashboard Styles */
+        .insights-panel {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .insights-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .insights-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: var(--text-primary);
+        }
+
+        .date-range-selector {
+            display: flex;
+            gap: 4px;
+            background: var(--bg-secondary, rgba(255,255,255,0.05));
+            border-radius: 8px;
+            padding: 4px;
+        }
+
+        .date-range-selector button {
+            padding: 6px 12px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 13px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .date-range-selector button:hover {
+            background: var(--bg-tertiary, rgba(255,255,255,0.08));
+        }
+
+        .date-range-selector button.active {
+            background: var(--accent-primary, #6366f1);
+            color: white;
+        }
+
+        .date-range-selector button:focus {
+            outline: 2px solid var(--accent-primary, #6366f1);
+            outline-offset: 2px;
+        }
+
+        .summary-cards {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .summary-card {
+            background: var(--bg-secondary, rgba(255,255,255,0.05));
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .summary-card .card-icon {
+            font-size: 24px;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .summary-card .card-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.2;
+        }
+
+        .summary-card .card-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .summary-card .card-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            opacity: 0.8;
+        }
+
+        .chart-section {
+            margin-bottom: 24px;
+            overflow-x: auto;
+        }
+
+        .chart-section h4 {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin: 0 0 12px 0;
+            font-weight: 500;
+        }
+
+        .chart-section canvas {
+            max-width: 100%;
+            background: var(--bg-secondary, rgba(255,255,255,0.03));
+            border-radius: 8px;
+            display: block;
+        }
+
+        .chart-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-top: 12px;
+            justify-content: center;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+
+        .legend-count {
+            opacity: 0.7;
+        }
+
+        .export-section {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            padding-top: 16px;
+            border-top: 1px solid var(--card-border);
+        }
+
+        .export-section button {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .export-section .primary-btn {
+            background: var(--accent-primary, #6366f1);
+            color: white;
+            border: none;
+        }
+
+        .export-section .primary-btn:hover:not(:disabled) {
+            filter: brightness(1.1);
+        }
+
+        .export-section .primary-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .export-section .ghost-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--card-border);
+        }
+
+        .export-section .ghost-btn:hover:not(:disabled) {
+            background: var(--bg-secondary, rgba(255,255,255,0.05));
+            color: var(--text-primary);
+        }
+
+        .export-section .ghost-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .insights-empty-state {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .insights-empty-state .empty-icon {
+            font-size: 48px;
+            display: block;
+            margin-bottom: 16px;
+        }
+
+        .insights-empty-state p {
+            margin: 0 0 8px;
+            color: var(--text-primary);
+            font-size: 16px;
+        }
+
+        .insights-empty-state small {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* Reduced motion support for insights */
+        @media (prefers-reduced-motion: reduce) {
+            .date-range-selector button {
+                transition: none;
+            }
+            .export-section button {
+                transition: none;
+            }
+        }
+
         /* Mobile Bottom Navigation */
         .mobile-bottom-nav {
             display: none;
@@ -2060,7 +3162,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useRef, useEffect } = React;
+        const { useState, useRef, useEffect, useMemo, useCallback } = React;
 
         const MODE_LIBRARY = [
             {
@@ -4345,9 +5447,1572 @@
         };
 
         // ============================================================
+        // Story 5-1: Sensor Consent Modal Component (AC4)
+        // Privacy-focused onboarding modal for sensor connections
+        // ============================================================
+
+        const SensorConsentModal = ({
+            isOpen,
+            sensorType,  // 'bluetooth' | 'serial'
+            onConfirm,
+            onCancel,
+            skipConsent,
+            setSkipConsent,
+            reducedMotion,
+            setA11yAnnouncement
+        }) => {
+            const modalRef = useRef(null);
+            const firstButtonRef = useRef(null);
+
+            // Focus management - focus first button when modal opens
+            useEffect(() => {
+                if (isOpen && firstButtonRef.current) {
+                    setTimeout(() => {
+                        firstButtonRef.current.focus();
+                    }, 50);
+
+                    if (setA11yAnnouncement) {
+                        setA11yAnnouncement('Connect Your Sensor. Your heart rate data stays on this device. We never upload biometric data to any server.');
+                    }
+                }
+            }, [isOpen, setA11yAnnouncement]);
+
+            // Disable body scroll when modal open
+            useEffect(() => {
+                if (isOpen) {
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    document.body.style.overflow = '';
+                }
+                return () => {
+                    document.body.style.overflow = '';
+                };
+            }, [isOpen]);
+
+            // Focus trap and Escape key handler
+            const handleKeyDown = (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    onCancel();
+                    return;
+                }
+
+                if (e.key === 'Tab' && modalRef.current) {
+                    const focusableElements = modalRef.current.querySelectorAll(
+                        'button, input[type="checkbox"], [tabindex="0"]'
+                    );
+                    const focusableArray = Array.from(focusableElements);
+                    const firstElement = focusableArray[0];
+                    const lastElement = focusableArray[focusableArray.length - 1];
+
+                    if (e.shiftKey && document.activeElement === firstElement) {
+                        e.preventDefault();
+                        lastElement.focus();
+                    } else if (!e.shiftKey && document.activeElement === lastElement) {
+                        e.preventDefault();
+                        firstElement.focus();
+                    }
+                }
+            };
+
+            const handleSkipChange = (e) => {
+                const checked = e.target.checked;
+                setSkipConsent(checked);
+                try {
+                    if (checked) {
+                        localStorage.setItem('mpe_8d_skip_sensor_consent', 'true');
+                    } else {
+                        localStorage.removeItem('mpe_8d_skip_sensor_consent');
+                    }
+                } catch (err) {
+                    console.warn('[SensorBridge] Failed to persist consent preference:', err);
+                }
+            };
+
+            const handleConfirm = () => {
+                if (setA11yAnnouncement) {
+                    setA11yAnnouncement('Connecting to sensor...');
+                }
+                onConfirm();
+            };
+
+            if (!isOpen) return null;
+
+            const sensorLabel = sensorType === 'bluetooth' ? 'Bluetooth Sensor' : 'Serial Device';
+
+            return (
+                <div
+                    className={`sensor-consent-overlay ${reducedMotion ? 'no-motion' : ''}`}
+                    onClick={(e) => e.target === e.currentTarget && onCancel()}
+                >
+                    <div
+                        ref={modalRef}
+                        className="sensor-consent-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="sensor-consent-heading"
+                        aria-describedby="sensor-consent-description"
+                        onKeyDown={handleKeyDown}
+                    >
+                        <h2 id="sensor-consent-heading">Connect Your Sensor</h2>
+
+                        <div id="sensor-consent-description" className="sensor-consent-content">
+                            <p className="sensor-consent-intro">
+                                Your heart rate data stays on this device. We never upload biometric data to any server.
+                                You can disconnect or forget your device at any time.
+                            </p>
+
+                            <ul className="sensor-consent-list">
+                                <li>Data stored locally in your browser</li>
+                                <li>No internet connection required</li>
+                                <li>"Forget Device" erases all stored data</li>
+                            </ul>
+                        </div>
+
+                        <div className="sensor-consent-checkbox">
+                            <label className="checkbox-label">
+                                <input
+                                    type="checkbox"
+                                    checked={skipConsent}
+                                    onChange={handleSkipChange}
+                                    aria-describedby="skip-consent-hint"
+                                />
+                                <span>Don't show this again</span>
+                            </label>
+                            <small id="skip-consent-hint" className="consent-hint">
+                                You can always disconnect or forget devices in settings
+                            </small>
+                        </div>
+
+                        <div className="sensor-consent-actions">
+                            <button
+                                ref={firstButtonRef}
+                                type="button"
+                                className="primary-btn"
+                                onClick={handleConfirm}
+                                aria-label={`Connect ${sensorLabel}`}
+                            >
+                                Connect
+                            </button>
+                            <button
+                                type="button"
+                                className="ghost-btn"
+                                onClick={onCancel}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ============================================================
+        // Story 4-2: Check-In Modal Component
+        // ============================================================
+
+        const CheckInModal = ({
+            isOpen,
+            onSubmit,
+            onSkip,
+            sessionId,
+            reducedMotion,
+            setA11yAnnouncement
+        }) => {
+            const [selectedEmoji, setSelectedEmoji] = useState(null);
+            const [notes, setNotes] = useState('');
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const modalRef = useRef(null);
+            const firstEmojiRef = useRef(null);
+            const autoDismissRef = useRef(null);
+
+            const emojis = [
+                { code: '😰', label: 'Anxious or stressed', value: 'anxious' },
+                { code: '😐', label: 'Neutral or unchanged', value: 'neutral' },
+                { code: '😊', label: 'Calm and relaxed', value: 'calm' },
+                { code: '😌', label: 'Focused and clear', value: 'focused' },
+                { code: '🎉', label: 'Energized and joyful', value: 'energized' }
+            ];
+
+            // Focus management - focus first emoji when modal opens
+            useEffect(() => {
+                if (isOpen && firstEmojiRef.current) {
+                    // Small delay to ensure modal is rendered
+                    setTimeout(() => {
+                        firstEmojiRef.current.focus();
+                    }, 50);
+
+                    // Announce modal opened
+                    if (setA11yAnnouncement) {
+                        setA11yAnnouncement('Check-in modal opened. How do you feel now?');
+                    }
+                }
+            }, [isOpen, setA11yAnnouncement]);
+
+            // Auto-dismiss after 60 seconds
+            useEffect(() => {
+                if (!isOpen) return;
+
+                autoDismissRef.current = setTimeout(() => {
+                    console.log('[SessionLogger] Check-in auto-dismissed after 60 seconds');
+                    onSkip();
+                }, 60000);
+
+                return () => {
+                    if (autoDismissRef.current) {
+                        clearTimeout(autoDismissRef.current);
+                    }
+                };
+            }, [isOpen, onSkip]);
+
+            // Reset state when modal closes
+            useEffect(() => {
+                if (!isOpen) {
+                    setSelectedEmoji(null);
+                    setNotes('');
+                    setIsSubmitting(false);
+                }
+            }, [isOpen]);
+
+            // Disable body scroll when modal open
+            useEffect(() => {
+                if (isOpen) {
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    document.body.style.overflow = '';
+                }
+                return () => {
+                    document.body.style.overflow = '';
+                };
+            }, [isOpen]);
+
+            // Focus trap - cycle through modal elements
+            const handleKeyDown = (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    onSkip();
+                    return;
+                }
+
+                if (e.key === 'Tab' && modalRef.current) {
+                    const focusableElements = modalRef.current.querySelectorAll(
+                        'button, textarea, [tabindex="0"]'
+                    );
+                    const focusableArray = Array.from(focusableElements);
+                    const firstElement = focusableArray[0];
+                    const lastElement = focusableArray[focusableArray.length - 1];
+
+                    if (e.shiftKey && document.activeElement === firstElement) {
+                        e.preventDefault();
+                        lastElement.focus();
+                    } else if (!e.shiftKey && document.activeElement === lastElement) {
+                        e.preventDefault();
+                        firstElement.focus();
+                    }
+                }
+            };
+
+            const handleEmojiSelect = (emoji) => {
+                setSelectedEmoji(emoji);
+                if (setA11yAnnouncement) {
+                    setA11yAnnouncement(`Mood rated as ${emoji.label}`);
+                }
+            };
+
+            const handleSubmit = async () => {
+                if (isSubmitting) return;
+                setIsSubmitting(true);
+
+                try {
+                    await onSubmit({
+                        moodAfter: selectedEmoji?.code || null,
+                        notes: notes.trim()
+                    });
+
+                    const moodDesc = selectedEmoji?.value || 'no mood';
+                    console.log(`[SessionLogger] Check-in completed: ${moodDesc} + ${notes.length} chars`);
+
+                    if (setA11yAnnouncement) {
+                        setA11yAnnouncement('Session saved with mood rating');
+                    }
+                } catch (err) {
+                    console.error('[SessionLogger] Check-in submit error:', err);
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
+            const handleSkip = () => {
+                console.log('[SessionLogger] Check-in skipped');
+                onSkip();
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div
+                    className={`checkin-overlay ${reducedMotion ? 'no-motion' : ''}`}
+                    onClick={(e) => e.target === e.currentTarget && handleSkip()}
+                >
+                    <div
+                        ref={modalRef}
+                        className="checkin-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="checkin-heading"
+                        aria-describedby="checkin-description"
+                        onKeyDown={handleKeyDown}
+                    >
+                        <h2 id="checkin-heading">How do you feel now?</h2>
+                        <p id="checkin-description" className="checkin-subtitle">
+                            Rate your mood after this session (optional)
+                        </p>
+
+                        <div className="emoji-grid" role="radiogroup" aria-label="Mood rating">
+                            {emojis.map((emoji, index) => (
+                                <button
+                                    key={emoji.value}
+                                    ref={index === 0 ? firstEmojiRef : null}
+                                    type="button"
+                                    className={`emoji-button ${selectedEmoji?.value === emoji.value ? 'selected' : ''}`}
+                                    onClick={() => handleEmojiSelect(emoji)}
+                                    aria-label={`Rate mood as ${emoji.label}`}
+                                    aria-pressed={selectedEmoji?.value === emoji.value}
+                                    title={emoji.label}
+                                >
+                                    <span className="emoji-icon" aria-hidden="true">{emoji.code}</span>
+                                    <span className="emoji-label">{emoji.label}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="checkin-notes-section">
+                            <label htmlFor="session-notes">
+                                Optional notes
+                                <span className="checkin-note-hint"> (e.g., what helped?)</span>
+                            </label>
+                            <textarea
+                                id="session-notes"
+                                className="checkin-notes-textarea"
+                                placeholder="What made this session effective or challenging?"
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value.slice(0, 500))}
+                                maxLength={500}
+                                rows={3}
+                                aria-describedby="char-count"
+                            />
+                            <div id="char-count" className="checkin-char-count" aria-live="polite">
+                                {notes.length} / 500 characters
+                            </div>
+                        </div>
+
+                        <div className="checkin-modal-actions">
+                            <button
+                                type="button"
+                                className="primary-btn"
+                                onClick={handleSubmit}
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? 'Saving...' : 'Submit'}
+                            </button>
+                            <button
+                                type="button"
+                                className="ghost-btn"
+                                onClick={handleSkip}
+                                disabled={isSubmitting}
+                            >
+                                Skip
+                            </button>
+                        </div>
+
+                        <button
+                            type="button"
+                            className="checkin-close-button"
+                            onClick={handleSkip}
+                            aria-label="Close check-in modal"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // ============================================================
+        // Story 5-1: Sensor Settings Component (AC1, AC2, AC3, AC8)
+        // ============================================================
+
+        // Relative time formatting helper for "Last connected" display
+        const formatRelativeTime = (timestamp) => {
+            if (!timestamp) return 'Never';
+            const diff = Date.now() - timestamp;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            if (minutes < 1) return 'Just now';
+            if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+            if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+            if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+            return new Date(timestamp).toLocaleDateString();
+        };
+
+        const SensorSettings = ({
+            bluetoothSupported,
+            serialSupported,
+            sensorStatus,
+            connectedDevice,
+            consentedDevices,
+            onConnectBluetooth,
+            onConnectSerial,
+            onReconnect,
+            onForget,
+            onDisconnect,
+            reducedMotion,
+            // Story 5-2: HR monitoring props
+            currentHR,
+            hrHistory,
+            hrThreshold,
+            onThresholdChange,
+            isSimulating,
+            simulatorEnabled,
+            onStartSimulation,
+            onStopSimulation
+        }) => {
+            // AC3: Browser compatibility messaging
+            const showBrowserMessage = !bluetoothSupported || !serialSupported;
+            const isFirefox = !bluetoothSupported && serialSupported;
+            const isSafariOrUnsupported = !bluetoothSupported && !serialSupported;
+
+            const getBrowserMessage = () => {
+                if (isSafariOrUnsupported) {
+                    return {
+                        message: 'Sensor features require Chrome or Edge browser.',
+                        icon: 'ℹ️'
+                    };
+                }
+                if (isFirefox) {
+                    return {
+                        message: 'Bluetooth sensors not supported in Firefox. For heart rate tracking, try Chrome or Edge.',
+                        icon: 'ℹ️'
+                    };
+                }
+                return null;
+            };
+
+            const browserInfo = getBrowserMessage();
+            const isScanning = sensorStatus === 'scanning';
+            const isConnecting = sensorStatus === 'connecting';
+            const isReconnecting = sensorStatus === 'reconnecting';
+            const isConnected = sensorStatus === 'connected';
+            const isDisconnected = sensorStatus === 'disconnected';
+            const isLoading = isScanning || isConnecting || isReconnecting;
+
+            // Story 5-2: Calculate rolling HR average (AC2)
+            const hrAverage = hrHistory && hrHistory.length >= 10
+                ? Math.round(hrHistory.reduce((sum, e) => sum + e.hr, 0) / hrHistory.length)
+                : null;
+
+            return (
+                <div className="sensor-settings">
+                    <h4 className="sensor-settings-title">Sensor Connection</h4>
+
+                    {/* Browser Compatibility Message (AC3) */}
+                    {browserInfo && (
+                        <div className="sensor-browser-notice" role="status">
+                            <span className="notice-icon" aria-hidden="true">{browserInfo.icon}</span>
+                            <span className="notice-message">{browserInfo.message}</span>
+                        </div>
+                    )}
+
+                    {/* Story 5-2: Real-Time HR Display (AC2) */}
+                    {isConnected && currentHR !== null && (
+                        <div className="sensor-hr-display" role="status" aria-live="polite">
+                            <div className="hr-current">
+                                <span className="hr-icon" aria-hidden="true">❤️</span>
+                                <span className="hr-value">{currentHR}</span>
+                                <span className="hr-unit">bpm</span>
+                            </div>
+                            {hrAverage !== null && (
+                                <div className="hr-average">
+                                    <span className="hr-avg-label">Avg:</span>
+                                    <span className="hr-avg-value">{hrAverage} bpm</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Reconnecting Status (AC3) */}
+                    {isReconnecting && (
+                        <div className="sensor-reconnecting-status" role="status" aria-live="assertive">
+                            <span className="spinner" aria-hidden="true"></span>
+                            <span>Reconnecting...</span>
+                        </div>
+                    )}
+
+                    {/* Disconnected Status with Manual Reconnect (AC3) */}
+                    {isDisconnected && connectedDevice && (
+                        <div className="sensor-disconnected-status" role="status">
+                            <span className="status-icon" aria-hidden="true">⚠️</span>
+                            <span className="status-text">Disconnected from {connectedDevice.name}</span>
+                            <button
+                                type="button"
+                                className="reconnect-btn"
+                                onClick={() => onReconnect(connectedDevice)}
+                            >
+                                Reconnect
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Connection Status */}
+                    {isConnected && connectedDevice && (
+                        <div className="sensor-connected-status">
+                            <span className="status-icon" aria-hidden="true">✓</span>
+                            <span className="status-text">
+                                Connected to <strong>{connectedDevice.name}</strong>
+                                {isSimulating && <span className="simulated-badge"> (Simulated)</span>}
+                            </span>
+                            <button
+                                type="button"
+                                className="disconnect-btn"
+                                onClick={isSimulating ? onStopSimulation : onDisconnect}
+                                aria-label={`Disconnect from ${connectedDevice.name}`}
+                            >
+                                {isSimulating ? 'Stop Simulation' : 'Disconnect'}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Connection Buttons (AC1, AC2) */}
+                    {!isConnected && (
+                        <div className="sensor-connect-actions">
+                            {bluetoothSupported && (
+                                <button
+                                    type="button"
+                                    className="sensor-connect-btn bluetooth"
+                                    onClick={onConnectBluetooth}
+                                    disabled={isLoading}
+                                    aria-busy={isLoading}
+                                >
+                                    {isLoading ? (
+                                        <>
+                                            <span className="spinner" aria-hidden="true"></span>
+                                            {isScanning ? 'Scanning...' : 'Connecting...'}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="btn-icon" aria-hidden="true">📶</span>
+                                            Connect Bluetooth Sensor
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                            {serialSupported && (
+                                <button
+                                    type="button"
+                                    className="sensor-connect-btn serial"
+                                    onClick={onConnectSerial}
+                                    disabled={isLoading}
+                                    aria-busy={isLoading}
+                                >
+                                    {isLoading ? (
+                                        <>
+                                            <span className="spinner" aria-hidden="true"></span>
+                                            {isScanning ? 'Scanning...' : 'Connecting...'}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="btn-icon" aria-hidden="true">🔌</span>
+                                            Connect Serial Device
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Quick-Connect Device List (AC8) */}
+                    {consentedDevices.length > 0 && !isConnected && (
+                        <div className="sensor-device-list">
+                            <h5 className="device-list-title">Previously Connected</h5>
+                            <ul className="device-list" role="list">
+                                {consentedDevices.map((device) => (
+                                    <li key={device.deviceId} className="device-item">
+                                        <div className="device-info">
+                                            <span className="device-type-icon" aria-hidden="true">
+                                                {device.type === 'bluetooth' ? '📶' : '🔌'}
+                                            </span>
+                                            <div className="device-details">
+                                                <span className="device-name">{device.deviceName}</span>
+                                                <span className="device-last-connected">
+                                                    Last connected: {formatRelativeTime(device.lastConnectedAt)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="device-actions">
+                                            <button
+                                                type="button"
+                                                className="device-reconnect-btn"
+                                                onClick={() => onReconnect(device)}
+                                                disabled={isLoading}
+                                                aria-label={`Reconnect to ${device.deviceName}`}
+                                            >
+                                                Connect
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="device-forget-btn"
+                                                onClick={() => onForget(device)}
+                                                aria-label={`Forget ${device.deviceName}`}
+                                                title="Forget device"
+                                            >
+                                                <span aria-hidden="true">🗑️</span>
+                                            </button>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {/* Empty state when no sensors available */}
+                    {!bluetoothSupported && !serialSupported && !simulatorEnabled && (
+                        <div className="sensor-empty-state">
+                            <p>Sensor features are not available in your browser.</p>
+                            <a
+                                href="https://caniuse.com/web-bluetooth"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="learn-more-link"
+                            >
+                                Learn more about browser support
+                            </a>
+                        </div>
+                    )}
+
+                    {/* Story 5-2: HR Threshold Setting (AC7) */}
+                    {(isConnected || simulatorEnabled) && (
+                        <div className="sensor-threshold-setting">
+                            <label htmlFor="hr-threshold" className="threshold-label">
+                                Heart Rate Threshold
+                            </label>
+                            <div className="threshold-input-group">
+                                <input
+                                    id="hr-threshold"
+                                    type="number"
+                                    min="60"
+                                    max="120"
+                                    step="5"
+                                    value={hrThreshold}
+                                    onChange={(e) => onThresholdChange(parseInt(e.target.value, 10) || 85)}
+                                    className="threshold-input"
+                                    aria-describedby="threshold-help"
+                                />
+                                <span className="threshold-unit">BPM</span>
+                            </div>
+                            <p id="threshold-help" className="threshold-help-text">
+                                Alert when heart rate exceeds this for 30+ seconds
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Story 5-2: Simulator Button (AC8) */}
+                    {simulatorEnabled && !isConnected && !isSimulating && (
+                        <div className="sensor-simulator-section">
+                            <button
+                                type="button"
+                                className="sensor-connect-btn simulator"
+                                onClick={() => onStartSimulation()}
+                            >
+                                <span className="btn-icon" aria-hidden="true">🧪</span>
+                                Start Simulation
+                            </button>
+                            <p className="simulator-note">Developer mode: Test without physical sensor</p>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // ============================================================
+        // Story 5-1: Forget Device Confirmation Modal (AC7)
+        // ============================================================
+
+        const ForgetDeviceModal = ({
+            isOpen,
+            device,
+            onConfirm,
+            onCancel,
+            reducedMotion,
+            setA11yAnnouncement
+        }) => {
+            const modalRef = useRef(null);
+            const cancelButtonRef = useRef(null);
+
+            useEffect(() => {
+                if (isOpen && cancelButtonRef.current) {
+                    setTimeout(() => {
+                        cancelButtonRef.current.focus();
+                    }, 50);
+                    if (setA11yAnnouncement) {
+                        setA11yAnnouncement(`Forget ${device?.deviceName}? This will disconnect and remove all stored data.`);
+                    }
+                }
+            }, [isOpen, device, setA11yAnnouncement]);
+
+            useEffect(() => {
+                if (isOpen) {
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    document.body.style.overflow = '';
+                }
+                return () => {
+                    document.body.style.overflow = '';
+                };
+            }, [isOpen]);
+
+            const handleKeyDown = (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    onCancel();
+                }
+            };
+
+            if (!isOpen || !device) return null;
+
+            return (
+                <div
+                    className={`forget-device-overlay ${reducedMotion ? 'no-motion' : ''}`}
+                    onClick={(e) => e.target === e.currentTarget && onCancel()}
+                >
+                    <div
+                        ref={modalRef}
+                        className="forget-device-modal"
+                        role="alertdialog"
+                        aria-modal="true"
+                        aria-labelledby="forget-device-heading"
+                        aria-describedby="forget-device-description"
+                        onKeyDown={handleKeyDown}
+                    >
+                        <h3 id="forget-device-heading">Forget {device.deviceName}?</h3>
+                        <p id="forget-device-description">
+                            This will disconnect and remove all stored data for this device.
+                            You can reconnect later, but you'll need to go through the pairing process again.
+                        </p>
+                        <div className="forget-device-actions">
+                            <button
+                                ref={cancelButtonRef}
+                                type="button"
+                                className="ghost-btn"
+                                onClick={onCancel}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="danger-btn"
+                                onClick={() => onConfirm(device)}
+                            >
+                                Forget Device
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ============================================================
+        // Story 5-2: Sensor Suggestion Toast (AC5)
+        // ============================================================
+
+        const SensorSuggestionToast = ({
+            isVisible,
+            data,
+            onAccept,
+            onDismiss,
+            onTimeout,
+            reducedMotion
+        }) => {
+            const toastRef = useRef(null);
+            const timeoutRef = useRef(null);
+            const acceptButtonRef = useRef(null);
+
+            // Auto-dismiss after 15 seconds
+            useEffect(() => {
+                if (isVisible) {
+                    timeoutRef.current = setTimeout(() => {
+                        onTimeout();
+                    }, 15000);
+
+                    // Focus the accept button when toast appears
+                    if (acceptButtonRef.current) {
+                        setTimeout(() => acceptButtonRef.current?.focus(), 100);
+                    }
+                }
+
+                return () => {
+                    if (timeoutRef.current) {
+                        clearTimeout(timeoutRef.current);
+                    }
+                };
+            }, [isVisible, onTimeout]);
+
+            // Handle keyboard events
+            const handleKeyDown = (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    onDismiss();
+                }
+            };
+
+            if (!isVisible || !data) return null;
+
+            return (
+                <div
+                    ref={toastRef}
+                    className={`sensor-suggestion-toast ${reducedMotion ? 'no-motion' : ''}`}
+                    role="alertdialog"
+                    aria-modal="false"
+                    aria-labelledby="suggestion-heading"
+                    aria-describedby="suggestion-description"
+                    onKeyDown={handleKeyDown}
+                >
+                    <div className="suggestion-content">
+                        <span className="suggestion-icon" aria-hidden="true">💓</span>
+                        <div className="suggestion-text">
+                            <h4 id="suggestion-heading">Heart rate elevated</h4>
+                            <p id="suggestion-description">
+                                Your heart rate ({data.hr} bpm) has been elevated. Switch to Calm preset?
+                            </p>
+                        </div>
+                    </div>
+                    <div className="suggestion-actions">
+                        <button
+                            ref={acceptButtonRef}
+                            type="button"
+                            className="suggestion-accept-btn"
+                            onClick={onAccept}
+                        >
+                            Switch
+                        </button>
+                        <button
+                            type="button"
+                            className="suggestion-dismiss-btn"
+                            onClick={onDismiss}
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // ============================================================
+        // Story 4-3: Insights Dashboard Helpers
+        // ============================================================
+
+        // Emoji value scale for mood comparison
+        const getEmojiValue = (emoji) => {
+            const values = {
+                '😰': 1,  // anxious
+                '😐': 2,  // neutral
+                '😊': 3,  // calm
+                '😌': 4,  // focused
+                '🎉': 5   // energized
+            };
+            return values[emoji] || null;
+        };
+
+        // Format duration as "Xh Ym"
+        const formatInsightsDuration = (minutes) => {
+            const hours = Math.floor(minutes / 60);
+            const mins = Math.round(minutes % 60);
+            if (hours > 0) {
+                return `${hours}h ${mins}m`;
+            }
+            return `${mins}m`;
+        };
+
+        // Calculate summary statistics from sessions
+        const calculateInsightsSummary = (sessions, previousSessions = []) => {
+            if (!sessions || sessions.length === 0) {
+                return {
+                    totalSessions: 0,
+                    totalMinutes: 0,
+                    avgMinutes: 0,
+                    feltBetterRate: 0,
+                    ratedSessions: 0,
+                    ritualsCompleted: 0,
+                    ritualCompletionRate: 0,
+                    changeFromPrevious: null
+                };
+            }
+
+            const totalSessions = sessions.length;
+            const totalMinutes = sessions.reduce((sum, s) => sum + ((s.duration || 0) / 60), 0);
+            const avgMinutes = totalMinutes / totalSessions;
+
+            const ratedSessions = sessions.filter(s => s.moodAfter !== null).length;
+            const feltBetter = sessions.filter(s => {
+                if (!s.moodAfter) return false;
+                const before = getEmojiValue(s.moodBefore) || 2; // Default neutral if no before
+                const after = getEmojiValue(s.moodAfter);
+                return after > before;
+            }).length;
+            const feltBetterRate = ratedSessions > 0 ? feltBetter / ratedSessions : 0;
+
+            const ritualsCompleted = sessions.filter(s => s.ritualUsed).length;
+            const ritualCompletionRate = ritualsCompleted / totalSessions;
+
+            const changeFromPrevious = previousSessions.length > 0
+                ? totalSessions - previousSessions.length
+                : null;
+
+            return {
+                totalSessions,
+                totalMinutes,
+                avgMinutes,
+                feltBetterRate,
+                ratedSessions,
+                ritualsCompleted,
+                ritualCompletionRate,
+                changeFromPrevious
+            };
+        };
+
+        // Group sessions by day for bar chart
+        const groupSessionsByDay = (sessions, dateRange) => {
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const grouped = {};
+
+            sessions.forEach(session => {
+                const date = new Date(session.timestamp);
+                const dayKey = date.toISOString().split('T')[0];
+                if (!grouped[dayKey]) {
+                    grouped[dayKey] = { date: dayKey, minutes: 0, count: 0 };
+                }
+                grouped[dayKey].minutes += (session.duration || 0) / 60;
+                grouped[dayKey].count += 1;
+            });
+
+            return Object.values(grouped)
+                .sort((a, b) => new Date(a.date) - new Date(b.date))
+                .map(day => ({
+                    ...day,
+                    label: dayNames[new Date(day.date).getDay()]
+                }));
+        };
+
+        // Calculate preset statistics for line chart
+        const calculatePresetStats = (sessions, presetColors = {}) => {
+            const grouped = {};
+
+            sessions.forEach(session => {
+                const id = session.presetId || 'unknown';
+                if (!grouped[id]) {
+                    grouped[id] = {
+                        id,
+                        label: session.presetLabel || id,
+                        count: 0,
+                        completed: 0,
+                        color: presetColors[id] || '#6366f1'
+                    };
+                }
+                grouped[id].count += 1;
+                if (!session.endedManually) {
+                    grouped[id].completed += 1;
+                }
+            });
+
+            return Object.values(grouped).map(preset => ({
+                ...preset,
+                completionRate: preset.count > 0 ? preset.completed / preset.count : 0
+            }));
+        };
+
+        // Calculate mood improvement for donut chart
+        const calculateMoodImprovement = (sessions) => {
+            let feltBetter = 0, same = 0, worse = 0, total = 0;
+
+            sessions.forEach(session => {
+                if (!session.moodAfter) return;
+
+                const before = getEmojiValue(session.moodBefore) || 2;
+                const after = getEmojiValue(session.moodAfter);
+
+                if (after > before) feltBetter++;
+                else if (after === before) same++;
+                else worse++;
+                total++;
+            });
+
+            return { feltBetter, same, worse, total };
+        };
+
+        // Draw bar chart on canvas
+        const drawBarChart = (canvas, data, options = {}) => {
+            if (!canvas || !data || data.length === 0) return;
+
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+            const chartWidth = width - padding.left - padding.right;
+            const chartHeight = height - padding.top - padding.bottom;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+
+            const maxMinutes = Math.max(...data.map(d => d.minutes), 30);
+            const yMax = Math.ceil(maxMinutes / 30) * 30;
+            const barWidth = Math.min(60, Math.max(20, (chartWidth / data.length) - 10));
+            const barGap = (chartWidth - (barWidth * data.length)) / (data.length + 1);
+
+            // Draw grid lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            const gridLines = 4;
+            for (let i = 0; i <= gridLines; i++) {
+                const y = padding.top + (chartHeight * i / gridLines);
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
+
+                // Y-axis labels
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.font = '11px system-ui';
+                ctx.textAlign = 'right';
+                ctx.fillText(`${Math.round(yMax * (gridLines - i) / gridLines)}m`, padding.left - 8, y + 4);
+            }
+
+            // Draw bars
+            const accentColor = options.accent || '#6366f1';
+            data.forEach((day, i) => {
+                const x = padding.left + barGap + (i * (barWidth + barGap));
+                const barHeight = (day.minutes / yMax) * chartHeight;
+                const y = padding.top + chartHeight - barHeight;
+
+                // Bar
+                ctx.fillStyle = accentColor;
+                ctx.fillRect(x, y, barWidth, barHeight);
+
+                // X-axis label
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.font = '11px system-ui';
+                ctx.textAlign = 'center';
+                ctx.fillText(day.label, x + barWidth / 2, height - padding.bottom + 20);
+            });
+        };
+
+        // Draw line chart on canvas
+        const drawLineChart = (canvas, data, options = {}) => {
+            if (!canvas || !data || data.length < 2) return;
+
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+            const chartWidth = width - padding.left - padding.right;
+            const chartHeight = height - padding.top - padding.bottom;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw grid lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            const gridLines = 4;
+            for (let i = 0; i <= gridLines; i++) {
+                const y = padding.top + (chartHeight * i / gridLines);
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
+
+                // Y-axis labels (percentage)
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.font = '11px system-ui';
+                ctx.textAlign = 'right';
+                ctx.fillText(`${Math.round(100 * (gridLines - i) / gridLines)}%`, padding.left - 8, y + 4);
+            }
+
+            const xStep = chartWidth / (data.length - 1);
+
+            // Draw lines and dots
+            data.forEach((preset, i) => {
+                const x = padding.left + (i * xStep);
+                const y = padding.top + chartHeight - (preset.completionRate * chartHeight);
+
+                // Dot
+                ctx.fillStyle = preset.color;
+                ctx.beginPath();
+                ctx.arc(x, y, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                // X-axis label
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.font = '11px system-ui';
+                ctx.textAlign = 'center';
+                const label = preset.label.length > 10 ? preset.label.slice(0, 10) + '…' : preset.label;
+                ctx.fillText(label, x, height - padding.bottom + 20);
+            });
+
+            // Connect dots with line
+            if (data.length > 1) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                data.forEach((preset, i) => {
+                    const x = padding.left + (i * xStep);
+                    const y = padding.top + chartHeight - (preset.completionRate * chartHeight);
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                });
+                ctx.stroke();
+            }
+        };
+
+        // Draw donut chart on canvas
+        const drawDonutChart = (canvas, data, options = {}) => {
+            if (!canvas || !data || data.total === 0) return;
+
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const outerRadius = Math.min(width, height) / 2 - 20;
+            const innerRadius = outerRadius * 0.6;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+
+            const total = data.total;
+            const segments = [
+                { value: data.feltBetter, color: '#4ade80', label: 'better' },
+                { value: data.same, color: '#6b7280', label: 'same' },
+                { value: data.worse, color: '#fb923c', label: 'worse' }
+            ];
+
+            let startAngle = -Math.PI / 2; // Start at top
+
+            segments.forEach(segment => {
+                if (segment.value === 0) return;
+
+                const sliceAngle = (segment.value / total) * Math.PI * 2;
+
+                ctx.fillStyle = segment.color;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, outerRadius, startAngle, startAngle + sliceAngle);
+                ctx.arc(centerX, centerY, innerRadius, startAngle + sliceAngle, startAngle, true);
+                ctx.closePath();
+                ctx.fill();
+
+                startAngle += sliceAngle;
+            });
+
+            // Center text
+            const feltBetterPercent = Math.round((data.feltBetter / total) * 100);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 24px system-ui';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${feltBetterPercent}%`, centerX, centerY - 8);
+            ctx.font = '12px system-ui';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.fillText('felt better', centerX, centerY + 14);
+        };
+
+        // Export sessions as JSON
+        const exportSessionsAsJSON = (sessions, dateRange, summary) => {
+            const sortedSessions = [...sessions].sort((a, b) => a.timestamp - b.timestamp);
+            const data = {
+                exportDate: new Date().toISOString(),
+                profileId: 'default',
+                version: '1.0',
+                dateRange: {
+                    range: dateRange,
+                    start: sortedSessions[0]?.timestamp ? new Date(sortedSessions[0].timestamp).toISOString().split('T')[0] : null,
+                    end: sortedSessions[sortedSessions.length - 1]?.timestamp ? new Date(sortedSessions[sortedSessions.length - 1].timestamp).toISOString().split('T')[0] : null,
+                    days: parseInt(dateRange.replace('d', ''), 10)
+                },
+                summary: {
+                    totalSessions: summary.totalSessions,
+                    totalMinutes: Math.round(summary.totalMinutes),
+                    feltBetterRate: Math.round(summary.feltBetterRate * 100) / 100,
+                    ritualCompletionRate: Math.round(summary.ritualCompletionRate * 100) / 100
+                },
+                sessions: sortedSessions.map(s => ({
+                    timestamp: new Date(s.timestamp).toISOString(),
+                    trackName: s.trackName || 'Unknown Track',
+                    presetLabel: s.presetLabel || 'Unknown',
+                    duration: s.duration || 0,
+                    ritualUsed: Boolean(s.ritualUsed),
+                    moodBefore: s.moodBefore || null,
+                    moodAfter: s.moodAfter || null,
+                    notes: s.notes || '',
+                    endedManually: Boolean(s.endedManually)
+                }))
+            };
+
+            return JSON.stringify(data, null, 2);
+        };
+
+        // Export sessions as CSV
+        const exportSessionsAsCSV = (sessions) => {
+            const headers = [
+                'timestamp',
+                'track',
+                'preset',
+                'duration_seconds',
+                'ritual_used',
+                'mood_before',
+                'mood_after',
+                'notes',
+                'ended_manually'
+            ];
+
+            const escapeCSV = (value) => {
+                if (value === null || value === undefined) return '';
+                const str = String(value);
+                if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                    return `"${str.replace(/"/g, '""')}"`;
+                }
+                return str;
+            };
+
+            const sortedSessions = [...sessions].sort((a, b) => a.timestamp - b.timestamp);
+            const rows = sortedSessions.map(s => [
+                new Date(s.timestamp).toISOString().replace('T', ' ').split('.')[0],
+                escapeCSV(s.trackName || 'Unknown Track'),
+                escapeCSV(s.presetLabel || 'Unknown'),
+                s.duration || 0,
+                s.ritualUsed ? 'true' : 'false',
+                s.moodBefore || '',
+                s.moodAfter || '',
+                escapeCSV(s.notes || ''),
+                s.endedManually ? 'true' : 'false'
+            ]);
+
+            return [
+                headers.join(','),
+                ...rows.map(row => row.join(','))
+            ].join('\n');
+        };
+
+        // ============================================================
+        // Story 4-3: Insights Panel Component
+        // ============================================================
+
+        const InsightsPanel = ({
+            sessions,
+            dateRange,
+            setDateRange,
+            selectedMode,
+            reducedMotion,
+            showToast,
+            allPresets
+        }) => {
+            const [isExporting, setIsExporting] = useState(false);
+            const barChartRef = useRef(null);
+            const lineChartRef = useRef(null);
+            const donutChartRef = useRef(null);
+
+            // Build preset color map
+            const presetColors = useMemo(() => {
+                const colors = {};
+                if (allPresets) {
+                    allPresets.forEach(p => {
+                        colors[p.id] = p.accent || p.color || '#6366f1';
+                    });
+                }
+                return colors;
+            }, [allPresets]);
+
+            // Calculate summary statistics
+            const summary = useMemo(() => {
+                return calculateInsightsSummary(sessions);
+            }, [sessions]);
+
+            // Calculate chart data
+            const barChartData = useMemo(() => {
+                return groupSessionsByDay(sessions, dateRange);
+            }, [sessions, dateRange]);
+
+            const lineChartData = useMemo(() => {
+                return calculatePresetStats(sessions, presetColors);
+            }, [sessions, presetColors]);
+
+            const donutChartData = useMemo(() => {
+                return calculateMoodImprovement(sessions);
+            }, [sessions]);
+
+            // Render bar chart when data changes
+            useEffect(() => {
+                if (barChartRef.current && barChartData.length > 0) {
+                    drawBarChart(barChartRef.current, barChartData, {
+                        accent: selectedMode?.accent || '#6366f1',
+                        reducedMotion
+                    });
+                }
+            }, [barChartData, selectedMode?.accent, reducedMotion]);
+
+            // Render line chart when data changes
+            useEffect(() => {
+                if (lineChartRef.current && lineChartData.length > 1) {
+                    drawLineChart(lineChartRef.current, lineChartData, {
+                        reducedMotion
+                    });
+                }
+            }, [lineChartData, reducedMotion]);
+
+            // Render donut chart when data changes
+            useEffect(() => {
+                if (donutChartRef.current && donutChartData.total > 0) {
+                    drawDonutChart(donutChartRef.current, donutChartData, {
+                        reducedMotion
+                    });
+                }
+            }, [donutChartData, reducedMotion]);
+
+            const handleExport = async (format) => {
+                setIsExporting(true);
+                if (performance?.mark) {
+                    performance.mark('export-start');
+                }
+
+                try {
+                    let content, mimeType, filename;
+                    const dateStr = new Date().toISOString().split('T')[0];
+
+                    if (format === 'json') {
+                        content = exportSessionsAsJSON(sessions, dateRange, summary);
+                        mimeType = 'application/json';
+                        filename = `mp3-8d-sessions-${dateRange}-${dateStr}.json`;
+                    } else {
+                        content = exportSessionsAsCSV(sessions);
+                        mimeType = 'text/csv';
+                        filename = `mp3-8d-sessions-${dateRange}-${dateStr}.csv`;
+                    }
+
+                    const blob = new Blob([content], { type: mimeType });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+
+                    // Cleanup blob URL
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
+
+                    if (performance?.mark) {
+                        performance.mark('export-end');
+                        const measure = performance.measure('export', 'export-start', 'export-end');
+                        performance.clearMarks('export-start');
+                        performance.clearMarks('export-end');
+                        performance.clearMeasures('export');
+                        console.log(`[SessionLogger] Export completed in ${measure.duration.toFixed(2)}ms`);
+                    }
+
+                    showToast(`Exported ${sessions.length} sessions to ${filename}`, 'success');
+                } catch (err) {
+                    console.error('[SessionLogger] Export failed:', err);
+                    showToast('Export failed. See console for details.', 'error');
+                } finally {
+                    setIsExporting(false);
+                }
+            };
+
+            // Empty state: 0 sessions
+            if (!sessions || sessions.length === 0) {
+                return (
+                    <article className="panel insights-panel">
+                        <div className="insights-empty-state">
+                            <span className="empty-icon">📊</span>
+                            <p>No sessions yet</p>
+                            <small>Complete a ritual to start tracking progress.</small>
+                        </div>
+                    </article>
+                );
+            }
+
+            // Empty state: <3 sessions
+            if (sessions.length < 3) {
+                return (
+                    <article className="panel insights-panel">
+                        <div className="insights-empty-state">
+                            <span className="empty-icon">📈</span>
+                            <p>Keep going!</p>
+                            <small>Complete {3 - sessions.length} more session{sessions.length === 2 ? '' : 's'} to unlock insights.</small>
+                        </div>
+                    </article>
+                );
+            }
+
+            const daysLabel = dateRange === '7d' ? '7' : dateRange === '14d' ? '14' : '30';
+
+            return (
+                <article className="panel insights-panel">
+                    <div className="insights-header">
+                        <div>
+                            <p className="eyebrow">Insights</p>
+                            <h3>Session Trends</h3>
+                        </div>
+                        <div className="date-range-selector" role="group" aria-label="Date range selection">
+                            <button
+                                type="button"
+                                className={dateRange === '7d' ? 'active' : ''}
+                                onClick={() => setDateRange('7d')}
+                                aria-pressed={dateRange === '7d'}
+                            >
+                                7 days
+                            </button>
+                            <button
+                                type="button"
+                                className={dateRange === '14d' ? 'active' : ''}
+                                onClick={() => setDateRange('14d')}
+                                aria-pressed={dateRange === '14d'}
+                            >
+                                14 days
+                            </button>
+                            <button
+                                type="button"
+                                className={dateRange === '30d' ? 'active' : ''}
+                                onClick={() => setDateRange('30d')}
+                                aria-pressed={dateRange === '30d'}
+                            >
+                                30 days
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="summary-cards">
+                        <div className="summary-card">
+                            <span className="card-icon">📊</span>
+                            <div className="card-value">{summary.totalSessions}</div>
+                            <div className="card-label">Total Sessions</div>
+                            {summary.changeFromPrevious !== null && (
+                                <div className="card-subtitle">
+                                    {summary.changeFromPrevious >= 0 ? '+' : ''}{summary.changeFromPrevious} from previous
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="summary-card">
+                            <span className="card-icon">⏱️</span>
+                            <div className="card-value">{formatInsightsDuration(summary.totalMinutes)}</div>
+                            <div className="card-label">Total Time</div>
+                            <div className="card-subtitle">Avg: {Math.round(summary.avgMinutes)}m per session</div>
+                        </div>
+
+                        <div className="summary-card">
+                            <span className="card-icon">
+                                {summary.feltBetterRate >= 0.6 ? '😌' : summary.feltBetterRate >= 0.4 ? '😐' : '😰'}
+                            </span>
+                            <div className="card-value">{Math.round(summary.feltBetterRate * 100)}%</div>
+                            <div className="card-label">Felt Better</div>
+                            <div className="card-subtitle">{summary.ratedSessions} of {summary.totalSessions} rated</div>
+                        </div>
+
+                        <div className="summary-card">
+                            <span className="card-icon">🧘</span>
+                            <div className="card-value">{Math.round(summary.ritualCompletionRate * 100)}%</div>
+                            <div className="card-label">Ritual Completion</div>
+                            <div className="card-subtitle">{summary.ritualsCompleted} of {summary.totalSessions}</div>
+                        </div>
+                    </div>
+
+                    <div className="chart-section">
+                        <h4>Session Duration (Past {daysLabel} Days)</h4>
+                        <canvas
+                            ref={barChartRef}
+                            width={600}
+                            height={250}
+                            aria-label={`Session duration chart showing ${Math.round(summary.totalMinutes)} total minutes over ${summary.totalSessions} sessions`}
+                        />
+                    </div>
+
+                    {lineChartData.length > 1 && (
+                        <div className="chart-section">
+                            <h4>Preset Effectiveness</h4>
+                            <canvas
+                                ref={lineChartRef}
+                                width={600}
+                                height={250}
+                                aria-label="Preset effectiveness chart showing completion rates"
+                            />
+                            <div className="chart-legend">
+                                {lineChartData.map(preset => (
+                                    <div key={preset.id} className="legend-item">
+                                        <span className="legend-color" style={{ background: preset.color }} />
+                                        <span>{preset.label}</span>
+                                        <span className="legend-count">({preset.count} sessions)</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {donutChartData.total > 0 && (
+                        <div className="chart-section">
+                            <h4>Mood Improvement</h4>
+                            <canvas
+                                ref={donutChartRef}
+                                width={300}
+                                height={300}
+                                style={{ maxWidth: '300px', margin: '0 auto', display: 'block' }}
+                                aria-label={`Mood improvement: ${Math.round(donutChartData.feltBetter / donutChartData.total * 100)}% felt better, ${Math.round(donutChartData.same / donutChartData.total * 100)}% same, ${Math.round(donutChartData.worse / donutChartData.total * 100)}% worse`}
+                            />
+                            <div className="chart-legend">
+                                <div className="legend-item">
+                                    <span className="legend-color" style={{ background: '#4ade80' }} />
+                                    <span>Felt better ({donutChartData.feltBetter})</span>
+                                </div>
+                                <div className="legend-item">
+                                    <span className="legend-color" style={{ background: '#6b7280' }} />
+                                    <span>Same ({donutChartData.same})</span>
+                                </div>
+                                <div className="legend-item">
+                                    <span className="legend-color" style={{ background: '#fb923c' }} />
+                                    <span>Felt worse ({donutChartData.worse})</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="export-section">
+                        <button
+                            type="button"
+                            className="primary-btn"
+                            onClick={() => handleExport('json')}
+                            disabled={isExporting}
+                        >
+                            {isExporting ? 'Exporting...' : 'Export as JSON'}
+                        </button>
+                        <button
+                            type="button"
+                            className="ghost-btn"
+                            onClick={() => handleExport('csv')}
+                            disabled={isExporting}
+                        >
+                            Export as CSV
+                        </button>
+                    </div>
+                </article>
+            );
+        };
+
+        // ============================================================
         // Story 3-3: Save Preset Dialog Component
         // ============================================================
-        
+
         const SavePresetDialog = ({ 
             currentParameters, 
             onSave, 
@@ -5014,7 +7679,52 @@ function App() {
             // Story 3-2: Advanced Controls UI state
             const [isAdvancedControlsExpanded, setIsAdvancedControlsExpanded] = useState(false);
             const [sensorLocked, setSensorLocked] = useState(false); // Epic 5 adaptive mode
-            
+
+            // Story 5-1: Sensor Bridge - Capability Detection & Consent UI
+            const [bluetoothSupported, setBluetoothSupported] = useState(false);
+            const [serialSupported, setSerialSupported] = useState(false);
+            const [sensorStatus, setSensorStatus] = useState('idle'); // "idle" | "scanning" | "connecting" | "connected" | "error"
+            const [connectedDevice, setConnectedDevice] = useState(null); // { id, name, type } | null
+            const [sensorError, setSensorError] = useState(null); // { code, message } | null
+            const [consentedDevices, setConsentedDevices] = useState([]); // Array of consent records
+            const [showSensorConsentModal, setShowSensorConsentModal] = useState(false);
+            const [pendingSensorType, setPendingSensorType] = useState(null); // 'bluetooth' | 'serial' | null
+            const [showForgetDeviceModal, setShowForgetDeviceModal] = useState(false);
+            const [deviceToForget, setDeviceToForget] = useState(null);
+            const [skipSensorConsent, setSkipSensorConsent] = useState(() => {
+                try {
+                    return localStorage.getItem('mpe_8d_skip_sensor_consent') === 'true';
+                } catch {
+                    return false;
+                }
+            });
+            const connectedDeviceRef = useRef(null); // For cleanup during disconnect
+            const bluetoothDeviceRef = useRef(null); // Web Bluetooth device reference
+            const serialPortRef = useRef(null); // Web Serial port reference
+
+            // Story 5-2: Heart Rate Subscription & Threshold Engine
+            const [currentHR, setCurrentHR] = useState(null); // Current heart rate in BPM
+            const [hrHistory, setHrHistory] = useState([]); // Rolling 60-second history buffer
+            const [hrThreshold, setHrThreshold] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('mp3_8d_hr_threshold');
+                    return saved ? parseInt(saved, 10) : 85;
+                } catch {
+                    return 85;
+                }
+            });
+            const [isSimulating, setIsSimulating] = useState(false); // Sensor simulator active
+            const [showSuggestionToast, setShowSuggestionToast] = useState(false);
+            const [suggestionToastData, setSuggestionToastData] = useState(null);
+            const hrCharacteristicRef = useRef(null); // BLE HR characteristic reference
+            const hrHistoryRef = useRef([]); // Ref for history buffer (for rule engine access)
+            const sensorRuleEngineRef = useRef(null); // Rule engine interval ID
+            const lastThresholdTriggerRef = useRef(0); // Cooldown tracking (timestamp)
+            const consecutiveExceededRef = useRef(0); // Consecutive threshold exceedances
+            const simulatorIntervalRef = useRef(null); // Simulator interval ID
+            const reconnectAttemptsRef = useRef(0); // Reconnection attempt counter
+            const isManualDisconnectRef = useRef(false); // Track if disconnect was manual
+
             // Story 3-3: Custom Preset Management
             const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
             const [editingPreset, setEditingPreset] = useState(null);
@@ -5065,7 +7775,16 @@ function App() {
             const [activeSessionId, setActiveSessionId] = useState(null);
             const [isClearingSessions, setIsClearingSessions] = useState(false);
             const [isTrimmingSessions, setIsTrimmingSessions] = useState(false);
-            
+
+            // Story 4-2: Check-in modal state
+            const [showCheckInModal, setShowCheckInModal] = useState(false);
+            const [checkInSessionId, setCheckInSessionId] = useState(null);
+            const previousFocusRef = useRef(null);
+
+            // Story 4-3: Insights dashboard state
+            const [insightsDateRange, setInsightsDateRange] = useState('7d');
+            const [insightsSessions, setInsightsSessions] = useState([]);
+
             const selectedMode = MODE_LIBRARY[modeIndex];
             const nowPlayingTrack = currentTrackIndex !== null ? playlist[currentTrackIndex] : null;
 
@@ -5359,6 +8078,73 @@ function App() {
                 console.log('[PresetManagement] Loaded', presets.length, 'presets');
             }, []);
 
+            // Story 5-1: Sensor capability detection on mount (AC1, AC2)
+            // Uses feature detection (not browser sniffing) per requirements
+            useEffect(() => {
+                const detectCapabilities = () => {
+                    const startTime = performance.now();
+
+                    // AC1: Web Bluetooth capability detection
+                    const btSupported = typeof navigator !== 'undefined' &&
+                        typeof navigator.bluetooth !== 'undefined' &&
+                        typeof navigator.bluetooth.requestDevice === 'function';
+                    setBluetoothSupported(btSupported);
+                    console.log(`[SensorBridge] Bluetooth: ${btSupported ? 'supported' : 'unsupported'}`);
+
+                    // AC2: Web Serial capability detection
+                    const serialSupport = typeof navigator !== 'undefined' &&
+                        typeof navigator.serial !== 'undefined' &&
+                        typeof navigator.serial.requestPort === 'function';
+                    setSerialSupported(serialSupport);
+                    console.log(`[SensorBridge] Serial: ${serialSupport ? 'supported' : 'unsupported'}`);
+
+                    const elapsed = performance.now() - startTime;
+                    console.log(`[SensorBridge] Capability detection completed in ${elapsed.toFixed(2)}ms`);
+
+                    // Log browser compatibility summary
+                    if (!btSupported && !serialSupport) {
+                        console.log('[SensorBridge] No sensor APIs available - Safari or unsupported browser');
+                    } else if (!btSupported && serialSupport) {
+                        console.log('[SensorBridge] Serial only (Firefox behavior)');
+                    } else {
+                        console.log('[SensorBridge] Full sensor support available');
+                    }
+                };
+
+                detectCapabilities();
+            }, []);
+
+            // Story 5-1: Initialize sensor consent database and load consented devices
+            useEffect(() => {
+                const consentApi = getSensorConsentApi();
+                if (!consentApi) {
+                    console.warn('[SensorBridge] IndexedDB unavailable — sensor consent storage disabled.');
+                    return;
+                }
+
+                let canceled = false;
+                const initSensorConsent = async () => {
+                    try {
+                        await consentApi.initDatabase();
+                        const devices = await consentApi.getConsentedDevices();
+                        if (!canceled) {
+                            setConsentedDevices(devices);
+                            console.log(`[SensorBridge] Loaded ${devices.length} consented devices`);
+                        }
+                    } catch (error) {
+                        if (!canceled) {
+                            console.error('[SensorBridge] Sensor consent initialization failed:', error);
+                        }
+                    }
+                };
+
+                initSensorConsent();
+
+                return () => {
+                    canceled = true;
+                };
+            }, []);
+
             // Cleanup URL validation on unmount
             useEffect(() => {
                 // Initialize controller ref
@@ -5402,6 +8188,44 @@ function App() {
                     delete window.SessionLogger;
                 };
             }, [clearProfileSessions, clearSessionsOlderThanDays, showToast]);
+
+            // Story 4-3: Load sessions for insights dashboard based on date range
+            useEffect(() => {
+                const loadInsightsSessions = async () => {
+                    const sessionApi = getSessionLoggingApi();
+                    if (!sessionApi) {
+                        setInsightsSessions([]);
+                        return;
+                    }
+
+                    const days = insightsDateRange === '7d' ? 7 : insightsDateRange === '14d' ? 14 : 30;
+                    const now = Date.now();
+                    const startDate = now - (days * 24 * 60 * 60 * 1000);
+
+                    if (performance?.mark) {
+                        performance.mark('insights-load-start');
+                    }
+
+                    try {
+                        const sessions = await sessionApi.getSessionsByDateRange(startDate, now);
+                        setInsightsSessions(sessions || []);
+
+                        if (performance?.mark) {
+                            performance.mark('insights-load-end');
+                            const measure = performance.measure('insights-load', 'insights-load-start', 'insights-load-end');
+                            performance.clearMarks('insights-load-start');
+                            performance.clearMarks('insights-load-end');
+                            performance.clearMeasures('insights-load');
+                            console.log(`[SessionLogger] Loaded ${sessions?.length || 0} sessions for insights in ${measure.duration.toFixed(2)}ms`);
+                        }
+                    } catch (err) {
+                        console.error('[SessionLogger] Failed to load insights sessions:', err);
+                        setInsightsSessions([]);
+                    }
+                };
+
+                loadInsightsSessions();
+            }, [insightsDateRange, activeSessionId]); // Reload when date range changes or when a session ends
 
             // Story 3-1: Persist active preset selection
             useEffect(() => {
@@ -6684,6 +9508,11 @@ function App() {
                         endedManually: manual
                     });
                     console.log(`[SessionLogger] Session ended: ${sessionId}, duration: ${durationSeconds}s`);
+
+                    // Story 4-2: Trigger check-in modal after session ends
+                    previousFocusRef.current = document.activeElement;
+                    setCheckInSessionId(sessionId);
+                    setShowCheckInModal(true);
                 } catch (error) {
                     await handleSessionError(error, 'end');
                 }
@@ -6734,6 +9563,47 @@ function App() {
                 }
             }, [handleSessionError, showToast]);
 
+            // Story 4-2: Check-in modal handlers
+            const handleCheckInSubmit = React.useCallback(async (data) => {
+                if (!checkInSessionId) return;
+
+                const sessionApi = getSessionLoggingApi();
+                if (!sessionApi) {
+                    showToast('Session logging not available', 'warning');
+                    return;
+                }
+
+                try {
+                    await sessionApi.updateSession(checkInSessionId, {
+                        moodAfter: data.moodAfter,
+                        notes: data.notes || ''
+                    });
+
+                    setShowCheckInModal(false);
+                    setCheckInSessionId(null);
+                    showToast('Session saved', 'success');
+
+                    // Restore focus to previous element
+                    if (previousFocusRef.current && previousFocusRef.current.focus) {
+                        previousFocusRef.current.focus();
+                    }
+                } catch (err) {
+                    console.error('[SessionLogger] Failed to save check-in:', err);
+                    showToast('Failed to save check-in', 'error');
+                }
+            }, [checkInSessionId, showToast]);
+
+            const handleCheckInSkip = React.useCallback(() => {
+                setShowCheckInModal(false);
+                setCheckInSessionId(null);
+                showToast('Check-in skipped', 'info');
+
+                // Restore focus to previous element
+                if (previousFocusRef.current && previousFocusRef.current.focus) {
+                    previousFocusRef.current.focus();
+                }
+            }, [showToast]);
+
             const handleClearSessions = async () => {
                 if (isClearingSessions) {
                     return;
@@ -6757,6 +9627,865 @@ function App() {
                     setIsTrimmingSessions(false);
                 }
             };
+
+            // ============================================================
+            // Story 5-1: Sensor Connection Handlers (AC5, AC6)
+            // ============================================================
+
+            // Error code constants
+            const SENSOR_ERRORS = {
+                BT_NOT_SUPPORTED: { code: 'BT_NOT_SUPPORTED', message: 'Bluetooth not supported in this browser.' },
+                SERIAL_NOT_SUPPORTED: { code: 'SERIAL_NOT_SUPPORTED', message: 'Serial not supported in this browser.' },
+                PERMISSION_DENIED: { code: 'PERMISSION_DENIED', message: 'Permission needed to connect your sensor. Please allow when prompted.' },
+                DEVICE_NOT_FOUND: { code: 'DEVICE_NOT_FOUND', message: "Couldn't find your device. Make sure it's powered on and nearby." },
+                CONNECTION_FAILED: { code: 'CONNECTION_FAILED', message: 'Connection failed. Try turning your device off and on.' },
+                TIMEOUT: { code: 'TIMEOUT', message: 'No devices found. Make sure your sensor is powered on.' },
+                USER_CANCELLED: { code: 'USER_CANCELLED', message: 'Connection cancelled.' }
+            };
+
+            const CONNECTION_TIMEOUT = 10000; // 10 seconds
+
+            // Refresh consented devices list from IndexedDB
+            const refreshConsentedDevices = React.useCallback(async () => {
+                const consentApi = getSensorConsentApi();
+                if (!consentApi) return;
+                try {
+                    const devices = await consentApi.getConsentedDevices();
+                    setConsentedDevices(devices);
+                } catch (err) {
+                    console.error('[SensorBridge] Failed to refresh consented devices:', err);
+                }
+            }, []);
+
+            // Handle initiating Bluetooth connection
+            const handleConnectBluetooth = React.useCallback(() => {
+                if (!bluetoothSupported) {
+                    showToast(SENSOR_ERRORS.BT_NOT_SUPPORTED.message, 'error');
+                    return;
+                }
+                // Check if we should skip consent modal
+                if (skipSensorConsent) {
+                    startBluetoothScan();
+                } else {
+                    setPendingSensorType('bluetooth');
+                    setShowSensorConsentModal(true);
+                }
+            }, [bluetoothSupported, skipSensorConsent, showToast]);
+
+            // Handle initiating Serial connection
+            const handleConnectSerial = React.useCallback(() => {
+                if (!serialSupported) {
+                    showToast(SENSOR_ERRORS.SERIAL_NOT_SUPPORTED.message, 'error');
+                    return;
+                }
+                // Check if we should skip consent modal
+                if (skipSensorConsent) {
+                    startSerialConnection();
+                } else {
+                    setPendingSensorType('serial');
+                    setShowSensorConsentModal(true);
+                }
+            }, [serialSupported, skipSensorConsent, showToast]);
+
+            // Start Bluetooth scanning with Heart Rate Service filter (AC5)
+            const startBluetoothScan = React.useCallback(async () => {
+                setShowSensorConsentModal(false);
+                setSensorStatus('scanning');
+                setSensorError(null);
+                isManualDisconnectRef.current = false; // Story 5-2: Reset manual disconnect flag
+
+                const timeoutId = setTimeout(() => {
+                    if (sensorStatus === 'scanning') {
+                        setSensorStatus('error');
+                        setSensorError(SENSOR_ERRORS.TIMEOUT);
+                        showToast(SENSOR_ERRORS.TIMEOUT.message, 'error');
+                    }
+                }, CONNECTION_TIMEOUT);
+
+                try {
+                    // Request device with Heart Rate Service filter (0x180D)
+                    const device = await navigator.bluetooth.requestDevice({
+                        filters: [{ services: ['heart_rate'] }],
+                        optionalServices: ['battery_service']
+                    });
+
+                    clearTimeout(timeoutId);
+                    setSensorStatus('connecting');
+
+                    // Store device reference for later disconnect
+                    bluetoothDeviceRef.current = device;
+
+                    // Connect to GATT server
+                    const server = await device.gatt.connect();
+                    console.log('[SensorBridge] Connected to GATT server:', device.name);
+
+                    // Story 5-2: Subscribe to Heart Rate Measurement characteristic (AC1)
+                    const hrService = await server.getPrimaryService('heart_rate');
+                    const hrCharacteristic = await hrService.getCharacteristic('heart_rate_measurement');
+                    hrCharacteristicRef.current = hrCharacteristic;
+
+                    // Set up HR notification handler
+                    hrCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+                        performance.mark('hr-notification-received');
+                        const dataView = event.target.value;
+
+                        // Parse HR Measurement per Bluetooth spec (flags byte + HR value)
+                        if (!dataView || dataView.byteLength < 2) return;
+                        const flags = dataView.getUint8(0);
+                        const is16Bit = (flags & 0x01) === 1;
+                        let heartRate = is16Bit ? dataView.getUint16(1, true) : dataView.getUint8(1);
+
+                        // Sanity check
+                        if (heartRate < 30 || heartRate > 250) return;
+
+                        console.log(`[SensorBridge] HR: ${heartRate} bpm`);
+                        setCurrentHR(heartRate);
+
+                        // Add to history buffer (rolling 60-second window)
+                        const now = Date.now();
+                        setHrHistory(prev => {
+                            const cutoff = now - 60000;
+                            const filtered = prev.filter(entry => entry.timestamp > cutoff);
+                            const updated = [...filtered, { hr: heartRate, timestamp: now }];
+                            hrHistoryRef.current = updated;
+                            return updated;
+                        });
+
+                        performance.mark('hr-state-updated');
+                        performance.measure('hr-update-latency', 'hr-notification-received', 'hr-state-updated');
+                    });
+
+                    await hrCharacteristic.startNotifications();
+                    console.log('[SensorBridge] HR notifications started');
+
+                    // Store consent record (AC6)
+                    const consentApi = getSensorConsentApi();
+                    if (consentApi) {
+                        const existingConsent = await consentApi.getConsent(device.id);
+                        if (existingConsent) {
+                            await consentApi.recordConnection(device.id);
+                        } else {
+                            await consentApi.addConsent({
+                                deviceId: device.id,
+                                deviceName: device.name || 'Unknown Bluetooth Device',
+                                type: 'bluetooth',
+                                scopes: ['heart_rate']
+                            });
+                        }
+                        await refreshConsentedDevices();
+                    }
+
+                    setConnectedDevice({
+                        id: device.id,
+                        name: device.name || 'Bluetooth Sensor',
+                        type: 'bluetooth'
+                    });
+                    connectedDeviceRef.current = { id: device.id, name: device.name, type: 'bluetooth' };
+                    setSensorStatus('connected');
+                    showToast(`Connected to ${device.name || 'Bluetooth Sensor'}`, 'success');
+                    setA11yAnnouncement(`Connected to ${device.name || 'Bluetooth Sensor'}`);
+
+                    // Story 5-2: Listen for disconnection with auto-reconnect (AC3)
+                    device.addEventListener('gattserverdisconnected', async () => {
+                        console.log('[SensorBridge] Device disconnected:', device.name);
+                        if (isManualDisconnectRef.current) {
+                            return; // User initiated, don't auto-reconnect
+                        }
+
+                        // Attempt auto-reconnect
+                        console.log('[SensorBridge] Unexpected disconnect, attempting reconnection...');
+                        setSensorStatus('reconnecting');
+                        hrCharacteristicRef.current = null;
+
+                        for (let i = 0; i < 6; i++) {
+                            if (isManualDisconnectRef.current) return;
+
+                            try {
+                                console.log(`[SensorBridge] Reconnect attempt ${i + 1}/6`);
+                                const newServer = await device.gatt.connect();
+
+                                // Re-subscribe to HR
+                                const newHrService = await newServer.getPrimaryService('heart_rate');
+                                const newHrChar = await newHrService.getCharacteristic('heart_rate_measurement');
+                                hrCharacteristicRef.current = newHrChar;
+                                await newHrChar.startNotifications();
+
+                                setSensorStatus('connected');
+                                showToast(`Reconnected to ${device.name || 'sensor'}`, 'success');
+                                console.log('[SensorBridge] Reconnected successfully');
+                                return;
+                            } catch (err) {
+                                console.warn('[SensorBridge] Reconnect attempt failed:', err);
+                            }
+
+                            if (i < 5) await new Promise(r => setTimeout(r, 500));
+                        }
+
+                        // All attempts failed
+                        setSensorStatus('disconnected');
+                        setCurrentHR(null);
+                        showToast("Couldn't reconnect. Please reconnect manually.", 'error');
+                    });
+
+                } catch (err) {
+                    clearTimeout(timeoutId);
+                    console.error('[SensorBridge] Bluetooth connection error:', err);
+
+                    // Map error to user-friendly message
+                    let errorInfo = SENSOR_ERRORS.CONNECTION_FAILED;
+                    if (err.name === 'NotFoundError' || err.message?.includes('cancelled')) {
+                        errorInfo = SENSOR_ERRORS.USER_CANCELLED;
+                    } else if (err.name === 'SecurityError' || err.message?.includes('permission')) {
+                        errorInfo = SENSOR_ERRORS.PERMISSION_DENIED;
+                    }
+
+                    setSensorStatus('error');
+                    setSensorError(errorInfo);
+                    if (errorInfo.code !== 'USER_CANCELLED') {
+                        showToast(errorInfo.message, 'error');
+                    } else {
+                        showToast(errorInfo.message, 'info');
+                    }
+                }
+            }, [sensorStatus, showToast, setA11yAnnouncement, refreshConsentedDevices]);
+
+            // Start Serial connection (placeholder - actual parsing in Story 5-2)
+            const startSerialConnection = React.useCallback(async () => {
+                setShowSensorConsentModal(false);
+                setSensorStatus('scanning');
+                setSensorError(null);
+
+                try {
+                    // Request any serial port
+                    const port = await navigator.serial.requestPort();
+                    setSensorStatus('connecting');
+
+                    // Store port reference
+                    serialPortRef.current = port;
+
+                    // Open the port with default baud rate for HR sensors
+                    await port.open({ baudRate: 115200 });
+                    console.log('[SensorBridge] Serial port opened');
+
+                    // Get port info for device identification
+                    const info = port.getInfo();
+                    const deviceId = `serial-${info.usbVendorId || 'unknown'}-${info.usbProductId || 'unknown'}`;
+                    const deviceName = `Serial Device (${info.usbVendorId || 'USB'})`;
+
+                    // Store consent record (AC6)
+                    const consentApi = getSensorConsentApi();
+                    if (consentApi) {
+                        const existingConsent = await consentApi.getConsent(deviceId);
+                        if (existingConsent) {
+                            await consentApi.recordConnection(deviceId);
+                        } else {
+                            await consentApi.addConsent({
+                                deviceId,
+                                deviceName,
+                                type: 'serial',
+                                scopes: ['heart_rate']
+                            });
+                        }
+                        await refreshConsentedDevices();
+                    }
+
+                    setConnectedDevice({
+                        id: deviceId,
+                        name: deviceName,
+                        type: 'serial'
+                    });
+                    connectedDeviceRef.current = { id: deviceId, name: deviceName, type: 'serial' };
+                    setSensorStatus('connected');
+                    showToast(`Connected to ${deviceName}`, 'success');
+                    setA11yAnnouncement(`Connected to ${deviceName}`);
+
+                } catch (err) {
+                    console.error('[SensorBridge] Serial connection error:', err);
+
+                    let errorInfo = SENSOR_ERRORS.CONNECTION_FAILED;
+                    if (err.name === 'NotFoundError' || err.message?.includes('cancelled')) {
+                        errorInfo = SENSOR_ERRORS.USER_CANCELLED;
+                    } else if (err.name === 'SecurityError') {
+                        errorInfo = SENSOR_ERRORS.PERMISSION_DENIED;
+                    }
+
+                    setSensorStatus('error');
+                    setSensorError(errorInfo);
+                    if (errorInfo.code !== 'USER_CANCELLED') {
+                        showToast(errorInfo.message, 'error');
+                    } else {
+                        showToast(errorInfo.message, 'info');
+                    }
+                }
+            }, [showToast, setA11yAnnouncement, refreshConsentedDevices]);
+
+            // Handle consent modal confirmation
+            const handleSensorConsentConfirm = React.useCallback(() => {
+                if (pendingSensorType === 'bluetooth') {
+                    startBluetoothScan();
+                } else if (pendingSensorType === 'serial') {
+                    startSerialConnection();
+                }
+                setPendingSensorType(null);
+            }, [pendingSensorType, startBluetoothScan, startSerialConnection]);
+
+            // Handle consent modal cancel
+            const handleSensorConsentCancel = React.useCallback(() => {
+                setShowSensorConsentModal(false);
+                setPendingSensorType(null);
+            }, []);
+
+            // Handle reconnection to a known device
+            const handleReconnectDevice = React.useCallback(async (device) => {
+                if (device.type === 'bluetooth') {
+                    handleConnectBluetooth();
+                } else {
+                    handleConnectSerial();
+                }
+            }, [handleConnectBluetooth, handleConnectSerial]);
+
+            // Handle sensor disconnection
+            const handleSensorDisconnect = React.useCallback(async () => {
+                // Mark as manual disconnect to prevent auto-reconnect
+                isManualDisconnectRef.current = true;
+
+                // Story 5-2: Stop rule engine and clean up HR state
+                if (sensorRuleEngineRef.current) {
+                    clearInterval(sensorRuleEngineRef.current);
+                    sensorRuleEngineRef.current = null;
+                }
+                if (simulatorIntervalRef.current) {
+                    clearInterval(simulatorIntervalRef.current);
+                    simulatorIntervalRef.current = null;
+                }
+                hrCharacteristicRef.current = null;
+                setCurrentHR(null);
+                setHrHistory([]);
+                hrHistoryRef.current = [];
+                consecutiveExceededRef.current = 0;
+                setIsSimulating(false);
+                setShowSuggestionToast(false);
+
+                // Disconnect Bluetooth if connected
+                if (bluetoothDeviceRef.current && bluetoothDeviceRef.current.gatt?.connected) {
+                    try {
+                        bluetoothDeviceRef.current.gatt.disconnect();
+                    } catch (err) {
+                        console.warn('[SensorBridge] Error disconnecting Bluetooth:', err);
+                    }
+                }
+                bluetoothDeviceRef.current = null;
+
+                // Close Serial port if open
+                if (serialPortRef.current) {
+                    try {
+                        await serialPortRef.current.close();
+                    } catch (err) {
+                        console.warn('[SensorBridge] Error closing serial port:', err);
+                    }
+                }
+                serialPortRef.current = null;
+
+                setConnectedDevice(null);
+                connectedDeviceRef.current = null;
+                setSensorStatus('idle');
+                setSensorError(null);
+                showToast('Sensor disconnected', 'info');
+                setA11yAnnouncement('Sensor disconnected');
+            }, [showToast, setA11yAnnouncement]);
+
+            // ============================================================
+            // Story 5-2: Heart Rate Subscription & Threshold Engine
+            // ============================================================
+
+            // Parse Heart Rate Measurement characteristic (0x2A37) per Bluetooth spec
+            // Bit 0 of flags byte: 0 = 8-bit HR, 1 = 16-bit HR
+            const parseHeartRateMeasurement = (dataView) => {
+                try {
+                    if (!dataView || dataView.byteLength < 2) {
+                        console.warn('[SensorBridge] Invalid HR data: insufficient bytes');
+                        return null;
+                    }
+                    const flags = dataView.getUint8(0);
+                    const is16Bit = (flags & 0x01) === 1;
+
+                    let heartRate;
+                    if (is16Bit) {
+                        if (dataView.byteLength < 3) {
+                            console.warn('[SensorBridge] Invalid HR data: expected 16-bit value');
+                            return null;
+                        }
+                        heartRate = dataView.getUint16(1, true); // Little-endian
+                    } else {
+                        heartRate = dataView.getUint8(1);
+                    }
+
+                    // Sanity check: HR should be between 30-250 BPM
+                    if (heartRate < 30 || heartRate > 250) {
+                        console.warn(`[SensorBridge] HR value out of range: ${heartRate}`);
+                        return null;
+                    }
+
+                    return heartRate;
+                } catch (err) {
+                    console.error('[SensorBridge] Error parsing HR data:', err);
+                    return null;
+                }
+            };
+
+            // Handle incoming HR notification
+            const handleHRNotification = React.useCallback((event) => {
+                performance.mark('hr-notification-received');
+
+                const dataView = event.target.value;
+                const hr = parseHeartRateMeasurement(dataView);
+
+                if (hr !== null) {
+                    console.log(`[SensorBridge] HR: ${hr} bpm`);
+
+                    // Update current HR state
+                    setCurrentHR(hr);
+
+                    // Add to history buffer (rolling 60-second window, ~60 samples at 1Hz)
+                    const now = Date.now();
+                    const newEntry = { hr, timestamp: now };
+
+                    setHrHistory(prev => {
+                        const cutoff = now - 60000; // 60 seconds ago
+                        const filtered = prev.filter(entry => entry.timestamp > cutoff);
+                        const updated = [...filtered, newEntry];
+                        hrHistoryRef.current = updated;
+                        return updated;
+                    });
+
+                    performance.mark('hr-state-updated');
+                    performance.measure('hr-update-latency', 'hr-notification-received', 'hr-state-updated');
+                }
+            }, []);
+
+            // Subscribe to Heart Rate Measurement characteristic
+            const subscribeToHeartRate = React.useCallback(async (server) => {
+                try {
+                    console.log('[SensorBridge] Getting Heart Rate Service...');
+                    const hrService = await server.getPrimaryService('heart_rate');
+
+                    console.log('[SensorBridge] Getting Heart Rate Measurement characteristic...');
+                    const hrCharacteristic = await hrService.getCharacteristic('heart_rate_measurement');
+                    hrCharacteristicRef.current = hrCharacteristic;
+
+                    // Set up notification handler
+                    hrCharacteristic.addEventListener('characteristicvaluechanged', handleHRNotification);
+
+                    // Start notifications
+                    await hrCharacteristic.startNotifications();
+                    console.log('[SensorBridge] HR notifications started');
+
+                    return true;
+                } catch (err) {
+                    console.error('[SensorBridge] Failed to subscribe to HR:', err);
+                    setSensorError({
+                        code: 'HR_SUBSCRIPTION_FAILED',
+                        message: 'Could not read heart rate data from device'
+                    });
+                    return false;
+                }
+            }, [handleHRNotification]);
+
+            // Attempt to reconnect to a disconnected BLE device
+            const attemptReconnect = React.useCallback(async () => {
+                const device = bluetoothDeviceRef.current;
+                if (!device || isManualDisconnectRef.current) {
+                    return false;
+                }
+
+                reconnectAttemptsRef.current++;
+                console.log(`[SensorBridge] Reconnect attempt ${reconnectAttemptsRef.current}/6`);
+
+                try {
+                    const server = await device.gatt.connect();
+                    console.log('[SensorBridge] Reconnected to GATT server');
+
+                    // Re-subscribe to HR
+                    const subscribed = await subscribeToHeartRate(server);
+                    if (subscribed) {
+                        reconnectAttemptsRef.current = 0;
+                        setSensorStatus('connected');
+                        showToast(`Reconnected to ${device.name || 'sensor'}`, 'success');
+                        return true;
+                    }
+                } catch (err) {
+                    console.warn('[SensorBridge] Reconnect attempt failed:', err);
+                }
+
+                return false;
+            }, [subscribeToHeartRate, showToast]);
+
+            // Handle unexpected disconnection with auto-reconnect (AC3)
+            const handleUnexpectedDisconnect = React.useCallback(async () => {
+                if (isManualDisconnectRef.current) {
+                    return; // User initiated disconnect, don't auto-reconnect
+                }
+
+                console.log('[SensorBridge] Unexpected disconnect, attempting reconnection...');
+                setSensorStatus('reconnecting');
+                reconnectAttemptsRef.current = 0;
+
+                // Clean up HR state temporarily
+                hrCharacteristicRef.current = null;
+
+                // Attempt reconnection every 500ms for up to 3 seconds (6 attempts)
+                const maxAttempts = 6;
+                const attemptInterval = 500;
+
+                for (let i = 0; i < maxAttempts; i++) {
+                    if (isManualDisconnectRef.current) {
+                        return; // User disconnected during reconnect attempt
+                    }
+
+                    const success = await attemptReconnect();
+                    if (success) {
+                        return;
+                    }
+
+                    if (i < maxAttempts - 1) {
+                        await new Promise(resolve => setTimeout(resolve, attemptInterval));
+                    }
+                }
+
+                // All attempts failed
+                console.log('[SensorBridge] Reconnection failed after 6 attempts');
+                setSensorStatus('disconnected');
+                setCurrentHR(null);
+                showToast("Couldn't reconnect. Please reconnect manually.", 'error');
+                setA11yAnnouncement("Couldn't reconnect to sensor. Please reconnect manually.");
+            }, [attemptReconnect, showToast, setA11yAnnouncement]);
+
+            // Handle forget device request (opens confirmation modal)
+            const handleForgetDeviceRequest = React.useCallback((device) => {
+                setDeviceToForget(device);
+                setShowForgetDeviceModal(true);
+            }, []);
+
+            // Handle forget device confirmation (AC7)
+            const handleForgetDeviceConfirm = React.useCallback(async (device) => {
+                setShowForgetDeviceModal(false);
+                setDeviceToForget(null);
+
+                // Disconnect if this is the currently connected device
+                if (connectedDeviceRef.current?.id === device.deviceId) {
+                    await handleSensorDisconnect();
+                }
+
+                // Revoke consent in IndexedDB
+                const consentApi = getSensorConsentApi();
+                if (consentApi) {
+                    try {
+                        await consentApi.revokeConsent(device.deviceId);
+                        await refreshConsentedDevices();
+                        showToast(`Forgot ${device.deviceName}`, 'success');
+                        console.log(`[SensorBridge] Device forgotten: ${device.deviceId}`);
+                    } catch (err) {
+                        console.error('[SensorBridge] Failed to forget device:', err);
+                        showToast('Failed to forget device', 'error');
+                    }
+                }
+            }, [handleSensorDisconnect, refreshConsentedDevices, showToast]);
+
+            // Handle forget device cancel
+            const handleForgetDeviceCancel = React.useCallback(() => {
+                setShowForgetDeviceModal(false);
+                setDeviceToForget(null);
+            }, []);
+
+            // ============================================================
+            // Story 5-2: Sensor Rule Engine & Session Event Logging (AC4, AC6)
+            // ============================================================
+
+            // Log sensor event to current session (AC6)
+            const logSensorEvent = React.useCallback((eventType, data = {}) => {
+                const event = {
+                    timestamp: Date.now(),
+                    type: eventType,
+                    data: {
+                        hr: currentHR,
+                        hrAvg: hrHistoryRef.current.length >= 10
+                            ? Math.round(hrHistoryRef.current.reduce((sum, e) => sum + e.hr, 0) / hrHistoryRef.current.length)
+                            : null,
+                        threshold: hrThreshold,
+                        ...data
+                    }
+                };
+                console.log(`[SensorRuleEngine] Event: ${eventType}`, event.data);
+
+                // Store in session if active (integrate with SessionLogger from Epic 4)
+                if (activeSessionIdRef.current) {
+                    // Session events will be collected and saved on session end
+                    // For now, we track them via console and state
+                }
+            }, [currentHR, hrThreshold]);
+
+            // Calculate rolling HR average
+            const calculateHRAverage = React.useCallback(() => {
+                const history = hrHistoryRef.current;
+                if (history.length < 10) return null;
+                const sum = history.reduce((acc, entry) => acc + entry.hr, 0);
+                return Math.round(sum / history.length);
+            }, []);
+
+            // Handle suggestion toast response
+            const handleSuggestionAccept = React.useCallback(() => {
+                logSensorEvent('SUGGESTION_ACCEPTED', { presetApplied: 'calm' });
+                setShowSuggestionToast(false);
+                setSuggestionToastData(null);
+
+                // Apply the calm preset
+                const calmPreset = MODE_LIBRARY.find(m => m.id === 'calm');
+                if (calmPreset) {
+                    applyPreset(calmPreset, 'calm');
+                    showToast('Switched to Calm preset', 'success');
+                }
+            }, [logSensorEvent, applyPreset, showToast]);
+
+            const handleSuggestionDismiss = React.useCallback(() => {
+                logSensorEvent('SUGGESTION_DISMISSED');
+                setShowSuggestionToast(false);
+                setSuggestionToastData(null);
+            }, [logSensorEvent]);
+
+            const handleSuggestionTimeout = React.useCallback(() => {
+                logSensorEvent('SUGGESTION_TIMEOUT');
+                setShowSuggestionToast(false);
+                setSuggestionToastData(null);
+            }, [logSensorEvent]);
+
+            // Start the sensor rule engine (AC4)
+            const startRuleEngine = React.useCallback(() => {
+                if (sensorRuleEngineRef.current) {
+                    clearInterval(sensorRuleEngineRef.current);
+                }
+
+                console.log('[SensorRuleEngine] Starting rule engine');
+                consecutiveExceededRef.current = 0;
+
+                // Evaluate every 10 seconds
+                sensorRuleEngineRef.current = setInterval(() => {
+                    const history = hrHistoryRef.current;
+                    if (history.length < 10) return; // Need enough samples
+
+                    const hrAvg = history.reduce((sum, e) => sum + e.hr, 0) / history.length;
+                    const threshold = hrThreshold;
+
+                    console.log(`[SensorRuleEngine] Evaluating: avg=${Math.round(hrAvg)} threshold=${threshold} consecutive=${consecutiveExceededRef.current}`);
+
+                    if (hrAvg > threshold) {
+                        consecutiveExceededRef.current++;
+
+                        // Trigger after 3 consecutive checks (30 seconds)
+                        if (consecutiveExceededRef.current >= 3) {
+                            const now = Date.now();
+                            const cooldownMs = 5 * 60 * 1000; // 5 minutes
+
+                            // Check cooldown
+                            if (now - lastThresholdTriggerRef.current < cooldownMs) {
+                                console.log('[SensorRuleEngine] In cooldown, skipping trigger');
+                                return;
+                            }
+
+                            // Trigger threshold exceeded
+                            console.log('[SensorRuleEngine] Threshold exceeded! Triggering suggestion');
+                            lastThresholdTriggerRef.current = now;
+                            consecutiveExceededRef.current = 0;
+
+                            logSensorEvent('THRESHOLD_EXCEEDED', { hr: Math.round(hrAvg), threshold });
+                            logSensorEvent('SUGGESTION_SHOWN');
+
+                            // Show suggestion toast
+                            setSuggestionToastData({
+                                hr: Math.round(hrAvg),
+                                threshold,
+                                timestamp: now
+                            });
+                            setShowSuggestionToast(true);
+                            setA11yAnnouncement(`Heart rate elevated at ${Math.round(hrAvg)} bpm. Suggestion: Switch to Calm preset.`);
+                        }
+                    } else {
+                        // Reset consecutive counter if below threshold
+                        consecutiveExceededRef.current = 0;
+                    }
+                }, 10000); // 10 seconds
+            }, [hrThreshold, logSensorEvent, setA11yAnnouncement]);
+
+            // Stop the rule engine
+            const stopRuleEngine = React.useCallback(() => {
+                if (sensorRuleEngineRef.current) {
+                    clearInterval(sensorRuleEngineRef.current);
+                    sensorRuleEngineRef.current = null;
+                    console.log('[SensorRuleEngine] Stopped');
+                }
+            }, []);
+
+            // Start rule engine when sensor connects, stop when disconnects
+            useEffect(() => {
+                if (sensorStatus === 'connected' && (currentHR !== null || isSimulating)) {
+                    startRuleEngine();
+                } else {
+                    stopRuleEngine();
+                }
+                return () => stopRuleEngine();
+            }, [sensorStatus, currentHR, isSimulating, startRuleEngine, stopRuleEngine]);
+
+            // Persist HR threshold to localStorage (AC7)
+            useEffect(() => {
+                try {
+                    localStorage.setItem('mp3_8d_hr_threshold', String(hrThreshold));
+                } catch (err) {
+                    console.warn('[SensorBridge] Failed to persist HR threshold:', err);
+                }
+            }, [hrThreshold]);
+
+            // ============================================================
+            // Story 5-2: Sensor Simulator (AC8)
+            // ============================================================
+
+            // Check for simulator mode on mount
+            const simulatorEnabled = React.useMemo(() => {
+                try {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    return urlParams.get('simulate_sensor') === 'true' ||
+                           localStorage.getItem('mp3_8d_simulate_sensor') === 'true';
+                } catch {
+                    return false;
+                }
+            }, []);
+
+            // Start sensor simulation
+            const startSensorSimulation = React.useCallback((config = {}) => {
+                const {
+                    baseHR = 70,
+                    stressHR = 95,
+                    stressInterval = 60000, // 60 seconds
+                    stressRampDuration = 20000 // 20 seconds to ramp up
+                } = config;
+
+                if (simulatorIntervalRef.current) {
+                    clearInterval(simulatorIntervalRef.current);
+                }
+
+                console.log('[SensorSimulator] Starting simulation', { baseHR, stressHR, stressInterval });
+
+                setIsSimulating(true);
+                setSensorStatus('connected');
+                setConnectedDevice({
+                    id: 'simulator',
+                    name: 'Simulated Sensor',
+                    type: 'simulator'
+                });
+                connectedDeviceRef.current = { id: 'simulator', name: 'Simulated Sensor', type: 'simulator' };
+
+                let simulationStart = Date.now();
+                let isInStressEvent = false;
+                let stressEventStart = 0;
+
+                // Generate HR every second
+                simulatorIntervalRef.current = setInterval(() => {
+                    const now = Date.now();
+                    const elapsed = now - simulationStart;
+
+                    // Check if we should start a stress event
+                    if (!isInStressEvent && elapsed % stressInterval < 1000) {
+                        isInStressEvent = true;
+                        stressEventStart = now;
+                        console.log('[SensorSimulator] Starting stress event');
+                    }
+
+                    let hr;
+                    if (isInStressEvent) {
+                        const stressElapsed = now - stressEventStart;
+                        if (stressElapsed < stressRampDuration) {
+                            // Ramping up
+                            const progress = stressElapsed / stressRampDuration;
+                            hr = Math.round(baseHR + (stressHR - baseHR) * progress);
+                        } else if (stressElapsed < stressRampDuration * 2) {
+                            // Hold at stress HR
+                            hr = stressHR + Math.round((Math.random() - 0.5) * 4);
+                        } else {
+                            // End stress event
+                            isInStressEvent = false;
+                            hr = baseHR + Math.round((Math.random() - 0.5) * 10);
+                        }
+                    } else {
+                        // Normal variation
+                        hr = baseHR + Math.round((Math.random() - 0.5) * 10);
+                    }
+
+                    // Clamp to valid range
+                    hr = Math.max(40, Math.min(200, hr));
+
+                    console.log(`[SensorBridge] HR: ${hr} bpm (simulated)`);
+                    setCurrentHR(hr);
+
+                    // Add to history buffer
+                    setHrHistory(prev => {
+                        const cutoff = now - 60000;
+                        const filtered = prev.filter(entry => entry.timestamp > cutoff);
+                        const updated = [...filtered, { hr, timestamp: now }];
+                        hrHistoryRef.current = updated;
+                        return updated;
+                    });
+                }, 1000);
+
+                showToast('Sensor simulation started', 'info');
+            }, [showToast]);
+
+            // Stop sensor simulation
+            const stopSensorSimulation = React.useCallback(() => {
+                if (simulatorIntervalRef.current) {
+                    clearInterval(simulatorIntervalRef.current);
+                    simulatorIntervalRef.current = null;
+                }
+                setIsSimulating(false);
+                setCurrentHR(null);
+                setHrHistory([]);
+                hrHistoryRef.current = [];
+                setSensorStatus('idle');
+                setConnectedDevice(null);
+                connectedDeviceRef.current = null;
+                console.log('[SensorSimulator] Stopped');
+                showToast('Sensor simulation stopped', 'info');
+            }, [showToast]);
+
+            // Manually set HR (for testing)
+            const setSensorHR = React.useCallback((value) => {
+                if (!isSimulating) {
+                    console.warn('[SensorSimulator] Not in simulation mode');
+                    return;
+                }
+                const hr = Math.max(30, Math.min(250, Math.round(value)));
+                console.log(`[SensorBridge] HR: ${hr} bpm (manual)`);
+                setCurrentHR(hr);
+
+                const now = Date.now();
+                setHrHistory(prev => {
+                    const cutoff = now - 60000;
+                    const filtered = prev.filter(entry => entry.timestamp > cutoff);
+                    const updated = [...filtered, { hr, timestamp: now }];
+                    hrHistoryRef.current = updated;
+                    return updated;
+                });
+            }, [isSimulating]);
+
+            // Expose simulator API on window for console access (AC8)
+            useEffect(() => {
+                window.startSensorSimulation = startSensorSimulation;
+                window.stopSensorSimulation = stopSensorSimulation;
+                window.setSensorHR = setSensorHR;
+
+                return () => {
+                    delete window.startSensorSimulation;
+                    delete window.stopSensorSimulation;
+                    delete window.setSensorHR;
+                };
+            }, [startSensorSimulation, stopSensorSimulation, setSensorHR]);
 
             const addLocalFiles = (files) => {
                 const fileArray = Array.from(files);
@@ -8251,6 +11980,31 @@ return (
                                 onReorder={handleReorderPresets}
                             />
 
+                            {/* Story 5-1: Sensor Settings Component */}
+                            {(bluetoothSupported || serialSupported || simulatorEnabled || (!bluetoothSupported && !serialSupported)) && (
+                                <SensorSettings
+                                    bluetoothSupported={bluetoothSupported}
+                                    serialSupported={serialSupported}
+                                    sensorStatus={sensorStatus}
+                                    connectedDevice={connectedDevice}
+                                    consentedDevices={consentedDevices}
+                                    onConnectBluetooth={handleConnectBluetooth}
+                                    onConnectSerial={handleConnectSerial}
+                                    onReconnect={handleReconnectDevice}
+                                    onForget={handleForgetDeviceRequest}
+                                    onDisconnect={handleSensorDisconnect}
+                                    reducedMotion={reducedMotion}
+                                    currentHR={currentHR}
+                                    hrHistory={hrHistory}
+                                    hrThreshold={hrThreshold}
+                                    onThresholdChange={setHrThreshold}
+                                    isSimulating={isSimulating}
+                                    simulatorEnabled={simulatorEnabled}
+                                    onStartSimulation={startSensorSimulation}
+                                    onStopSimulation={stopSensorSimulation}
+                                />
+                            )}
+
                             <article
                                 className="hero-card"
                                 id={`mode-panel-${selectedMode.id}`}
@@ -9113,6 +12867,17 @@ return (
                         </section>
 
                         <aside className="column-card insights-column">
+                            {/* Story 4-3: Insights Dashboard */}
+                            <InsightsPanel
+                                sessions={insightsSessions}
+                                dateRange={insightsDateRange}
+                                setDateRange={setInsightsDateRange}
+                                selectedMode={selectedMode}
+                                reducedMotion={reducedMotion}
+                                showToast={showToast}
+                                allPresets={allPresets}
+                            />
+
                             <div className="panel insight-card">
                                 <p className="eyebrow">Focus confidence</p>
                                 <div className="insight-value">{focusConfidence}%</div>
@@ -10234,6 +13999,48 @@ return (
                             existingPreset={editingPreset}
                         />
                     )}
+
+                    {/* Story 4-2: Check-In Modal */}
+                    <CheckInModal
+                        isOpen={showCheckInModal}
+                        onSubmit={handleCheckInSubmit}
+                        onSkip={handleCheckInSkip}
+                        sessionId={checkInSessionId}
+                        reducedMotion={reducedMotion}
+                        setA11yAnnouncement={setA11yAnnouncement}
+                    />
+
+                    {/* Story 5-1: Sensor Consent Modal */}
+                    <SensorConsentModal
+                        isOpen={showSensorConsentModal}
+                        sensorType={pendingSensorType}
+                        onConfirm={handleSensorConsentConfirm}
+                        onCancel={handleSensorConsentCancel}
+                        skipConsent={skipSensorConsent}
+                        setSkipConsent={setSkipSensorConsent}
+                        reducedMotion={reducedMotion}
+                        setA11yAnnouncement={setA11yAnnouncement}
+                    />
+
+                    {/* Story 5-1: Forget Device Confirmation Modal */}
+                    <ForgetDeviceModal
+                        isOpen={showForgetDeviceModal}
+                        device={deviceToForget}
+                        onConfirm={handleForgetDeviceConfirm}
+                        onCancel={handleForgetDeviceCancel}
+                        reducedMotion={reducedMotion}
+                        setA11yAnnouncement={setA11yAnnouncement}
+                    />
+
+                    {/* Story 5-2: Sensor Suggestion Toast */}
+                    <SensorSuggestionToast
+                        isVisible={showSuggestionToast}
+                        data={suggestionToastData}
+                        onAccept={handleSuggestionAccept}
+                        onDismiss={handleSuggestionDismiss}
+                        onTimeout={handleSuggestionTimeout}
+                        reducedMotion={reducedMotion}
+                    />
 
                     {/* Spatial Audio Tuner (Debug Tool) */}
                     <SpatialAudioTuner
