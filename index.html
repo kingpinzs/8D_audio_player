@@ -5993,6 +5993,9 @@
                                     <option value="pink">Pink - Balanced warmth</option>
                                     <option value="white">White - Crisp static</option>
                                     <option value="brown">Brown - Deep rumble</option>
+                                    <option value="rain">Rain - Gentle rainfall</option>
+                                    <option value="wind">Wind - Soft gusts</option>
+                                    <option value="fire">Fire - Crackling warmth</option>
                                 </select>
                             </div>
                             <span className="control-hint">Background noise texture</span>
@@ -9745,6 +9748,11 @@ function App() {
             const [checkInSessionId, setCheckInSessionId] = useState(null);
             const previousFocusRef = useRef(null);
 
+            // Smart mood prompt suppression
+            const [lastPromptedTrackIndex, setLastPromptedTrackIndex] = useState(null);
+            const [loopMode, setLoopMode] = useState('off'); // 'off' | 'track' | 'playlist'
+            const sleepTimerActiveRef = useRef(false); // Tracks if sleep timer is running (for suppression)
+
             // Story 4-3: Insights dashboard state
             const [insightsDateRange, setInsightsDateRange] = useState('7d');
             const [insightsSessions, setInsightsSessions] = useState([]);
@@ -9920,7 +9928,16 @@ function App() {
                 audioEndedHandlerRef.current = () => {
                     cleanupBlobUrl();
                     endSession(false);
-                    if (typeof playNextRef.current === 'function') {
+
+                    // Handle loop modes
+                    if (loopMode === 'track') {
+                        // Replay same track
+                        if (audioElementRef.current) {
+                            audioElementRef.current.currentTime = 0;
+                            audioElementRef.current.play().catch(() => {});
+                        }
+                    } else if (typeof playNextRef.current === 'function') {
+                        // Normal or playlist loop (playNextRef already wraps)
                         playNextRef.current({ shouldEndActiveSession: false });
                     }
                 };
@@ -11574,6 +11591,28 @@ function App() {
                     });
                     console.log(`[SessionLogger] Session ended: ${sessionId}, duration: ${durationSeconds}s`);
 
+                    // Smart mood prompt suppression - skip prompt in these contexts:
+                    // 1. Sleep timer is active (user is relaxing/sleeping)
+                    // 2. Track auto-ended on loop mode (same song repeating)
+                    // 3. Same track as last prompted (already asked for this song)
+                    const shouldSuppressPrompt = (
+                        sleepTimerActiveRef.current ||                              // During sleep timer
+                        (!manual && loopMode === 'track') ||                        // Auto-ended on single track loop
+                        (!manual && currentTrackIndex === lastPromptedTrackIndex)   // Same song, auto-ended
+                    );
+
+                    if (shouldSuppressPrompt) {
+                        console.log('[SessionLogger] Mood prompt suppressed:', {
+                            sleepTimer: sleepTimerActiveRef.current,
+                            loopMode,
+                            sameTrack: currentTrackIndex === lastPromptedTrackIndex
+                        });
+                        return;
+                    }
+
+                    // Track this song as prompted (so we don't ask again for same song)
+                    setLastPromptedTrackIndex(currentTrackIndex);
+
                     // Story 4-2: Trigger check-in modal after session ends
                     previousFocusRef.current = document.activeElement;
                     setCheckInSessionId(sessionId);
@@ -11581,7 +11620,7 @@ function App() {
                 } catch (error) {
                     await handleSessionError(error, 'end');
                 }
-            }, [handleSessionError]);
+            }, [handleSessionError, loopMode, currentTrackIndex, lastPromptedTrackIndex]);
 
             const clearProfileSessions = React.useCallback(async (profileId = SESSION_DEFAULT_PROFILE) => {
                 const sessionApi = getSessionLoggingApi();
@@ -13065,6 +13104,7 @@ function App() {
 
                 setSleepTimerSeconds(sleepTimerDuration);
                 setSleepTimerActive(true);
+                sleepTimerActiveRef.current = true; // Track for mood prompt suppression
                 showToast(`Sleep timer set for ${formatTimerDisplay(sleepTimerDuration)}`, 'info');
 
                 sleepTimerIntervalRef.current = setInterval(() => {
@@ -13074,6 +13114,7 @@ function App() {
                             clearInterval(sleepTimerIntervalRef.current);
                             sleepTimerIntervalRef.current = null;
                             setSleepTimerActive(false);
+                            sleepTimerActiveRef.current = false; // Clear for mood prompt suppression
 
                             // Fade out audio over 5 seconds
                             if (audioElementRef.current && gainNodeRef.current) {
@@ -13103,6 +13144,7 @@ function App() {
                     sleepTimerIntervalRef.current = null;
                 }
                 setSleepTimerActive(false);
+                sleepTimerActiveRef.current = false; // Clear for mood prompt suppression
                 setSleepTimerSeconds(0);
                 showToast('Sleep timer cancelled', 'info');
             };
@@ -13311,6 +13353,23 @@ function App() {
 
             // ==================== END PLAYLIST FUNCTIONS ====================
 
+            // Loop mode toggle: off -> track -> playlist -> off
+            const toggleLoopMode = () => {
+                setLoopMode(prev => {
+                    const next = prev === 'off' ? 'track' : prev === 'track' ? 'playlist' : 'off';
+                    const labels = { off: 'Loop off', track: 'Loop track', playlist: 'Loop playlist' };
+                    showToast(labels[next], 'info');
+                    return next;
+                });
+            };
+
+            // Get loop mode icon
+            const getLoopIcon = () => {
+                if (loopMode === 'track') return '🔂';
+                if (loopMode === 'playlist') return '🔁';
+                return '➡️'; // No loop
+            };
+
             const togglePlayPause = () => {
                 if (!audioElementRef.current) {
                     if (playlist.length > 0) {
@@ -13363,6 +13422,7 @@ function App() {
 
             const playNext = () => {
                 if (typeof playNextRef.current === 'function') {
+                    setLastPromptedTrackIndex(null); // Reset: user manually changing track
                     playNextRef.current();
                 }
             };
@@ -13371,6 +13431,7 @@ function App() {
                 if (currentTrackIndex === null || playlist.length === 0) {
                     return;
                 }
+                setLastPromptedTrackIndex(null); // Reset: user manually changing track
                 const prevIndex = currentTrackIndex === 0 ? playlist.length - 1 : currentTrackIndex - 1;
                 playTrack(prevIndex);
             };
@@ -14426,6 +14487,15 @@ return (
                                     >
                                         ⏭
                                     </button>
+                                    <button
+                                        type="button"
+                                        className={`transport-button ${loopMode !== 'off' ? 'active' : ''}`}
+                                        onClick={toggleLoopMode}
+                                        aria-label={`Loop mode: ${loopMode}`}
+                                        title={loopMode === 'off' ? 'No loop' : loopMode === 'track' ? 'Loop current track' : 'Loop playlist'}
+                                    >
+                                        {getLoopIcon()}
+                                    </button>
                                 </div>
                                 <div className="timeline">
                                     <label htmlFor="timeline" className="eyebrow">Timeline</label>
@@ -14877,11 +14947,13 @@ return (
                                                 aria-current={currentTrackIndex === index}
                                                 onClick={() => {
                                                     sessionRitualFlagRef.current = false;
+                                                    setLastPromptedTrackIndex(null); // Reset: user selecting different track
                                                     playTrack(index, { ritualUsed: false });
                                                 }}
                                                 onKeyDown={(event) => {
                                                     if (event.key === 'Enter') {
                                                         sessionRitualFlagRef.current = false;
+                                                        setLastPromptedTrackIndex(null); // Reset: user selecting different track
                                                         playTrack(index, { ritualUsed: false });
                                                     }
                                                 }}
@@ -15101,6 +15173,10 @@ return (
                                             <option value="none">None</option>
                                             <option value="white">White Noise</option>
                                             <option value="pink">Pink Noise</option>
+                                            <option value="brown">Brown Noise</option>
+                                            <option value="rain">Rain</option>
+                                            <option value="wind">Wind</option>
+                                            <option value="fire">Fire</option>
                                         </select>
                                         <label htmlFor="noise-volume" className="sr-only">Noise volume</label>
                                         <input
@@ -15259,6 +15335,15 @@ return (
                                     disabled={playlist.length === 0}
                                 >
                                     ⏭
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`transport-button ${loopMode !== 'off' ? 'active' : ''}`}
+                                    onClick={toggleLoopMode}
+                                    aria-label={`Loop mode: ${loopMode}`}
+                                    title={loopMode === 'off' ? 'No loop' : loopMode === 'track' ? 'Loop current track' : 'Loop playlist'}
+                                >
+                                    {getLoopIcon()}
                                 </button>
                             </div>
                             <div className="timeline">
@@ -15799,7 +15884,10 @@ return (
                                                     }}
                                                 >
                                                     <div
-                                                        onClick={() => playTrack(index, { ritualUsed: false })}
+                                                        onClick={() => {
+                                                            setLastPromptedTrackIndex(null); // Reset: user selecting different track
+                                                            playTrack(index, { ritualUsed: false });
+                                                        }}
                                                         style={{ flex: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                                                     >
                                                         <span className="playlist-track__name">
@@ -16029,6 +16117,10 @@ return (
                                             <option value="none">None</option>
                                             <option value="white">White Noise</option>
                                             <option value="pink">Pink Noise</option>
+                                            <option value="brown">Brown Noise</option>
+                                            <option value="rain">Rain</option>
+                                            <option value="wind">Wind</option>
+                                            <option value="fire">Fire</option>
                                         </select>
                                         {noiseType !== 'none' && (
                                             <>
