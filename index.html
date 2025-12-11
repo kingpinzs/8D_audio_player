@@ -11668,222 +11668,143 @@ function App() {
                             ctx.fill();
                         });
                     } else if (visType === 'fire') {
-                        // Ultra-realistic fire visualizer with multiple layers
+                        // Fire visualizer with strong beat reactivity
                         const time = Date.now() * 0.001;
 
-                        // Simplex-like noise function for organic movement
-                        const noise = (x, y, t) => {
-                            const n1 = Math.sin(x * 0.5 + t) * Math.cos(y * 0.3 + t * 0.7);
-                            const n2 = Math.sin(x * 0.3 - t * 0.5) * Math.sin(y * 0.5 + t * 0.3);
-                            const n3 = Math.cos(x * 0.7 + t * 0.3) * Math.sin(y * 0.2 - t * 0.5);
-                            return (n1 + n2 + n3) / 3;
-                        };
-
-                        // Get audio intensity for reactivity
+                        // Audio analysis - STRONG beat response
                         const bassSum = frequencyData.slice(0, 8).reduce((a, b) => a + b, 0);
-                        const bassIntensity = (bassSum / (8 * 255)) * visualGain;
+                        const bass = Math.pow(bassSum / (8 * 255), 0.7) * visualGain * 1.5;
                         const midSum = frequencyData.slice(8, 32).reduce((a, b) => a + b, 0);
-                        const midIntensity = (midSum / (24 * 255)) * visualGain;
-                        const avgIntensity = (bassIntensity + midIntensity) / 2;
+                        const mid = (midSum / (24 * 255)) * visualGain;
 
-                        // Draw multiple flame layers for depth (back to front)
-                        const layers = [
-                            { scale: 0.6, alpha: 0.3, speed: 0.7, yOffset: 10 },   // Back layer - darker, slower
-                            { scale: 0.8, alpha: 0.5, speed: 0.85, yOffset: 5 },   // Mid layer
-                            { scale: 1.0, alpha: 0.9, speed: 1.0, yOffset: 0 }     // Front layer - brightest
-                        ];
+                        // Heat glow background - pulses with beat
+                        const bgGlow = ctx.createLinearGradient(0, canvas.height, 0, 0);
+                        bgGlow.addColorStop(0, `rgba(255, 80, 0, ${0.5 + bass * 0.5})`);
+                        bgGlow.addColorStop(0.4, `rgba(180, 40, 0, ${0.2 + bass * 0.3})`);
+                        bgGlow.addColorStop(0.7, `rgba(60, 10, 0, ${0.1 + bass * 0.1})`);
+                        bgGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                        ctx.fillStyle = bgGlow;
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                        layers.forEach((layer, layerIndex) => {
-                            const flameCount = 60;
-                            const baseWidth = canvas.width / flameCount * 1.8;
+                        // Draw fire using canvas compositing for glow
+                        ctx.globalCompositeOperation = 'lighter';
+
+                        const flameCount = 35;
+                        for (let layer = 0; layer < 3; layer++) {
+                            const layerAlpha = [0.3, 0.5, 0.8][layer];
+                            const layerOffset = [12, 6, 0][layer];
 
                             for (let i = 0; i < flameCount; i++) {
-                                const xBase = (i / flameCount) * canvas.width;
-                                const freqIndex = Math.floor((i / flameCount) * 40);
-                                const freqValue = frequencyData[freqIndex] / 255;
+                                const x = (i + 0.5) * (canvas.width / flameCount);
 
-                                // Organic height variation using noise
-                                const noiseVal = noise(i * 0.2, layerIndex, time * layer.speed);
-                                const baseHeight = canvas.height * (0.25 + avgIntensity * 0.35) * layer.scale;
-                                const freqBoost = freqValue * canvas.height * 0.25 * visualGain;
-                                const noiseBoost = (noiseVal * 0.5 + 0.5) * canvas.height * 0.15;
-                                const flameHeight = baseHeight + freqBoost + noiseBoost;
+                                // Frequency-based height
+                                const fi = Math.floor((i / flameCount) * 24);
+                                const freq = frequencyData[fi] / 255;
 
-                                // Turbulent x-position shift
-                                const turbulence = noise(i * 0.3, time * 2, layerIndex) * 15;
-                                const xPos = xBase + turbulence;
+                                // Multiple wave layers for organic movement
+                                const t = time + layer * 0.3;
+                                const w1 = Math.sin(t * 3 + i * 0.5) * 0.2;
+                                const w2 = Math.sin(t * 5 + i * 0.3) * 0.15;
+                                const w3 = Math.cos(t * 2 + i * 0.7) * 0.1;
+                                const wobble = w1 + w2 + w3;
 
-                                // Dynamic flame width - narrower at top
-                                const flameWidth = baseWidth * (0.8 + freqValue * 0.4);
+                                // Height = base + beat boost + frequency + wobble
+                                const baseH = canvas.height * 0.2;
+                                const beatH = bass * canvas.height * 0.5;
+                                const freqH = freq * canvas.height * 0.3;
+                                const height = (baseH + beatH + freqH) * (1 + wobble);
 
-                                // Create flame path with bezier curves for smoothness
-                                ctx.beginPath();
-                                const segments = 16;
+                                // X wobble
+                                const xOff = Math.sin(t * 4 + i) * 15 + Math.cos(t * 6 + i * 0.5) * 10;
 
-                                // Bottom left
-                                ctx.moveTo(xPos - flameWidth / 2, canvas.height + layer.yOffset);
+                                // Flame width
+                                const w = (canvas.width / flameCount) * 2;
 
-                                // Build flame shape points
-                                const points = [];
-                                for (let j = 0; j <= segments; j++) {
-                                    const progress = j / segments;
-                                    const y = canvas.height + layer.yOffset - progress * flameHeight;
-
-                                    // Width tapers exponentially toward tip
-                                    const widthTaper = Math.pow(1 - progress, 0.6);
-
-                                    // Turbulent wave that increases toward tip
-                                    const waveAmp = progress * flameWidth * 0.4;
-                                    const wave = noise(i + j * 0.1, time * 3 * layer.speed, progress * 2) * waveAmp;
-
-                                    // Secondary faster flicker
-                                    const flicker = Math.sin(time * 15 + i * 0.5 + j * 0.3) * progress * 5;
-
-                                    const halfWidth = (flameWidth / 2) * widthTaper;
-                                    points.push({
-                                        y,
-                                        left: xPos - halfWidth + wave + flicker,
-                                        right: xPos + halfWidth + wave - flicker
-                                    });
-                                }
-
-                                // Draw left edge with curves
-                                for (let j = 0; j < points.length; j++) {
-                                    if (j === 0) {
-                                        ctx.lineTo(points[j].left, points[j].y);
-                                    } else {
-                                        const prev = points[j - 1];
-                                        const curr = points[j];
-                                        const cpY = (prev.y + curr.y) / 2;
-                                        ctx.quadraticCurveTo(prev.left, cpY, curr.left, curr.y);
-                                    }
-                                }
-
-                                // Draw right edge with curves (reverse)
-                                for (let j = points.length - 1; j >= 0; j--) {
-                                    if (j === points.length - 1) {
-                                        ctx.lineTo(points[j].right, points[j].y);
-                                    } else {
-                                        const prev = points[j + 1];
-                                        const curr = points[j];
-                                        const cpY = (prev.y + curr.y) / 2;
-                                        ctx.quadraticCurveTo(prev.right, cpY, curr.right, curr.y);
-                                    }
-                                }
-
-                                ctx.closePath();
-
-                                // Create realistic fire gradient
+                                // Draw organic flame shape
                                 const gradient = ctx.createLinearGradient(
-                                    xPos, canvas.height + layer.yOffset,
-                                    xPos, canvas.height + layer.yOffset - flameHeight
+                                    x, canvas.height + layerOffset,
+                                    x, canvas.height + layerOffset - height
                                 );
 
-                                const alpha = layer.alpha * (0.7 + bassIntensity * 0.3);
+                                const a = layerAlpha * (0.5 + bass * 0.5);
+                                gradient.addColorStop(0, `rgba(255, 255, 200, ${a})`);
+                                gradient.addColorStop(0.15, `rgba(255, 200, 50, ${a})`);
+                                gradient.addColorStop(0.35, `rgba(255, 120, 20, ${a * 0.85})`);
+                                gradient.addColorStop(0.55, `rgba(255, 60, 5, ${a * 0.65})`);
+                                gradient.addColorStop(0.75, `rgba(180, 20, 0, ${a * 0.4})`);
+                                gradient.addColorStop(1, 'rgba(80, 10, 0, 0)');
 
-                                // Realistic fire colors: white-blue core -> yellow -> orange -> red -> smoke
-                                gradient.addColorStop(0, `rgba(255, 255, 250, ${alpha})`);        // White-hot core
-                                gradient.addColorStop(0.05, `rgba(200, 220, 255, ${alpha})`);     // Blue-white (hottest)
-                                gradient.addColorStop(0.12, `rgba(255, 240, 150, ${alpha})`);     // Pale yellow
-                                gradient.addColorStop(0.25, `rgba(255, 200, 50, ${alpha * 0.95})`);  // Golden yellow
-                                gradient.addColorStop(0.4, `rgba(255, 130, 20, ${alpha * 0.85})`);   // Orange
-                                gradient.addColorStop(0.55, `rgba(255, 70, 10, ${alpha * 0.7})`);    // Orange-red
-                                gradient.addColorStop(0.7, `rgba(200, 30, 0, ${alpha * 0.5})`);      // Red
-                                gradient.addColorStop(0.85, `rgba(80, 20, 10, ${alpha * 0.25})`);    // Dark red/brown
-                                gradient.addColorStop(1, `rgba(30, 15, 10, 0)`);                     // Smoke fade
+                                ctx.beginPath();
+                                ctx.moveTo(x - w/2 + xOff, canvas.height + layerOffset);
 
+                                // Curved flame shape with bezier
+                                const midY = canvas.height + layerOffset - height * 0.5;
+                                const topY = canvas.height + layerOffset - height;
+
+                                // Left side up
+                                ctx.bezierCurveTo(
+                                    x - w/2 + xOff + Math.sin(t * 5 + i) * 8, midY + height * 0.2,
+                                    x - w/4 + xOff + Math.sin(t * 7 + i) * 12, midY - height * 0.1,
+                                    x + xOff + Math.sin(t * 3 + i) * 5, topY
+                                );
+
+                                // Right side down
+                                ctx.bezierCurveTo(
+                                    x + w/4 + xOff + Math.cos(t * 7 + i) * 12, midY - height * 0.1,
+                                    x + w/2 + xOff + Math.cos(t * 5 + i) * 8, midY + height * 0.2,
+                                    x + w/2 + xOff, canvas.height + layerOffset
+                                );
+
+                                ctx.closePath();
                                 ctx.fillStyle = gradient;
                                 ctx.fill();
                             }
-                        });
-
-                        // Inner glow/bloom effect at the base
-                        const glowGradient = ctx.createRadialGradient(
-                            canvas.width / 2, canvas.height + 20,
-                            0,
-                            canvas.width / 2, canvas.height + 20,
-                            canvas.width * 0.6
-                        );
-                        glowGradient.addColorStop(0, `rgba(255, 200, 100, ${0.3 + bassIntensity * 0.2})`);
-                        glowGradient.addColorStop(0.3, `rgba(255, 100, 30, ${0.15 + bassIntensity * 0.1})`);
-                        glowGradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
-                        ctx.fillStyle = glowGradient;
-                        ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height * 0.5);
-
-                        // Smoke wisps at the top
-                        const smokeParticleCount = 8;
-                        for (let i = 0; i < smokeParticleCount; i++) {
-                            const smokeX = (i / smokeParticleCount) * canvas.width + noise(i, time, 0) * 50;
-                            const smokeY = canvas.height * 0.15 + noise(i * 2, time * 0.5, 1) * 30;
-                            const smokeSize = 30 + noise(i, time * 0.3, 2) * 20;
-                            const smokeAlpha = 0.03 + avgIntensity * 0.02;
-
-                            const smokeGrad = ctx.createRadialGradient(smokeX, smokeY, 0, smokeX, smokeY, smokeSize);
-                            smokeGrad.addColorStop(0, `rgba(50, 40, 35, ${smokeAlpha})`);
-                            smokeGrad.addColorStop(1, 'rgba(30, 25, 20, 0)');
-                            ctx.fillStyle = smokeGrad;
-                            ctx.fillRect(smokeX - smokeSize, smokeY - smokeSize, smokeSize * 2, smokeSize * 2);
                         }
 
-                        // Embers that float up - spawn on beats
-                        if (bassIntensity > 0.35 && particles.length < maxParticles * 3) {
-                            const spawnCount = Math.floor(bassIntensity * 8);
-                            for (let i = 0; i < spawnCount; i++) {
+                        ctx.globalCompositeOperation = 'source-over';
+
+                        // Embers on beat
+                        if (bass > 0.25 && particles.length < maxParticles * 2) {
+                            const n = Math.floor(bass * 12) + 2;
+                            for (let i = 0; i < n; i++) {
                                 particles.push({
                                     x: Math.random() * canvas.width,
-                                    y: canvas.height - Math.random() * canvas.height * 0.4,
-                                    vx: (Math.random() - 0.5) * 1.5,
-                                    vy: -Math.random() * 2.5 - 0.5,
+                                    y: canvas.height - Math.random() * canvas.height * 0.35,
+                                    vx: (Math.random() - 0.5) * 4,
+                                    vy: -Math.random() * 5 - 2,
                                     life: 1,
-                                    maxLife: 0.7 + Math.random() * 0.3,
                                     hue: 20 + Math.random() * 40,
-                                    size: Math.random() * 4 + 1,
-                                    flicker: Math.random() * Math.PI * 2
+                                    size: Math.random() * 5 + 2,
+                                    phase: Math.random() * Math.PI * 2
                                 });
                             }
                         }
 
-                        // Update and draw embers with realistic behavior
+                        // Update embers
                         particles = particles.filter(p => p.life > 0);
+                        ctx.globalCompositeOperation = 'lighter';
                         particles.forEach(p => {
-                            // Turbulent rising motion
-                            const turbX = noise(p.x * 0.01, time * 2, p.y * 0.01) * 2;
-                            const turbY = noise(p.y * 0.01, time * 2, p.x * 0.01) * 0.5;
+                            p.phase += 0.15;
+                            p.x += p.vx + Math.sin(p.phase) * 2;
+                            p.y += p.vy;
+                            p.vy *= 0.97;
+                            p.life -= 0.018;
 
-                            p.x += p.vx + turbX;
-                            p.y += p.vy + turbY;
-                            p.vy -= 0.03; // Accelerate upward (hot air rises)
-                            p.vx *= 0.99; // Slight drag
-                            p.life -= 0.012;
-
-                            // Flickering brightness
-                            p.flicker += 0.3;
-                            const flickerBright = 0.7 + Math.sin(p.flicker) * 0.3;
-
-                            const lifeRatio = p.life / p.maxLife;
-                            const emberAlpha = lifeRatio * flickerBright;
-                            const emberSize = p.size * (0.5 + lifeRatio * 0.5);
-
-                            // Draw ember with glow
+                            const flicker = 0.6 + Math.sin(p.phase * 2) * 0.4;
                             ctx.beginPath();
-                            ctx.arc(p.x, p.y, emberSize, 0, Math.PI * 2);
-
-                            // Ember color shifts from yellow to red as it cools
-                            const hueShift = (1 - lifeRatio) * 20;
-                            ctx.fillStyle = `hsla(${p.hue - hueShift}, 100%, ${50 + flickerBright * 20}%, ${emberAlpha})`;
-                            ctx.shadowBlur = 8 * lifeRatio;
-                            ctx.shadowColor = `hsla(${p.hue}, 100%, 50%, ${emberAlpha * 0.8})`;
+                            ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                            ctx.fillStyle = `hsla(${p.hue}, 100%, ${55 + flicker * 25}%, ${p.life * flicker})`;
                             ctx.fill();
                         });
-                        ctx.shadowBlur = 0;
+                        ctx.globalCompositeOperation = 'source-over';
 
-                        // Bright core glow pulsing with beat
-                        const coreGlow = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - 30);
-                        coreGlow.addColorStop(0, `rgba(255, 220, 180, ${0.4 + bassIntensity * 0.3})`);
-                        coreGlow.addColorStop(0.5, `rgba(255, 150, 50, ${0.2 + bassIntensity * 0.15})`);
-                        coreGlow.addColorStop(1, 'rgba(255, 100, 20, 0)');
-                        ctx.fillStyle = coreGlow;
-                        ctx.fillRect(0, canvas.height - 30, canvas.width, 30);
+                        // Base glow pulsing with beat
+                        const baseGlow = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - 60);
+                        baseGlow.addColorStop(0, `rgba(255, 200, 100, ${0.6 + bass * 0.4})`);
+                        baseGlow.addColorStop(0.4, `rgba(255, 120, 30, ${0.3 + bass * 0.3})`);
+                        baseGlow.addColorStop(1, 'rgba(255, 60, 0, 0)');
+                        ctx.fillStyle = baseGlow;
+                        ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
                     }
                     return particles;
                 };
