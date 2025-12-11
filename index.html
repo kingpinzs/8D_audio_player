@@ -3768,7 +3768,7 @@
                     spatialDepth: 0.45,
                     movement: 'circle',
                     binaural: { enabled: true, freq: 14 },
-                    noise: { type: 'pink', volume: 0.08 },
+                    noise: { type: 'none', volume: 0 },
                     spatial: { itdAmount: 0.7, headShadow: 0.5, directionalDepth: 0.15, crossBleed: 0.05, panCurve: 2.0, backDepth: 0.55, hardPanThreshold: 0.1 },
                     dualTrack: { enabled: false, delay: 500, mode: 'synced', variableSpeed: true, track2Speed: 0.5 }
                 },
@@ -9875,6 +9875,7 @@ function App() {
             const dualTrackModeRef = useRef(dualTrackMode);
             const dualTrackVariableSpeedRef = useRef(dualTrackVariableSpeed);
             const track2SpeedRef = useRef(track2Speed);
+            const dualTrackMixNodeRef = useRef(null);
 
             const cleanupBlobUrl = () => {
                 if (currentBlobUrlRef.current) {
@@ -9901,7 +9902,7 @@ function App() {
                 const nodes = rotationNodesRef.current;
                 if (!nodes) return;
 
-                // Disconnect Track 2 nodes
+                // Disconnect Track 2 nodes (including ITD delays and filters)
                 try {
                     if (nodes.track2Delay) nodes.track2Delay.disconnect();
                     if (nodes.track2Splitter) nodes.track2Splitter.disconnect();
@@ -9910,11 +9911,15 @@ function App() {
                     if (nodes.track2LeftToRightGain) nodes.track2LeftToRightGain.disconnect();
                     if (nodes.track2RightToLeftGain) nodes.track2RightToLeftGain.disconnect();
                     if (nodes.track2RightToRightGain) nodes.track2RightToRightGain.disconnect();
+                    if (nodes.track2ItdDelayLeft) nodes.track2ItdDelayLeft.disconnect();
+                    if (nodes.track2ItdDelayRight) nodes.track2ItdDelayRight.disconnect();
+                    if (nodes.track2LpFilterLeft) nodes.track2LpFilterLeft.disconnect();
+                    if (nodes.track2LpFilterRight) nodes.track2LpFilterRight.disconnect();
                 } catch (e) {
                     console.warn('Error disconnecting dual track nodes:', e);
                 }
 
-                // Null out Track 2 nodes
+                // Null out all Track 2 nodes
                 nodes.track2Delay = null;
                 nodes.track2Splitter = null;
                 nodes.track2Merger = null;
@@ -9922,6 +9927,10 @@ function App() {
                 nodes.track2LeftToRightGain = null;
                 nodes.track2RightToLeftGain = null;
                 nodes.track2RightToRightGain = null;
+                nodes.track2ItdDelayLeft = null;
+                nodes.track2ItdDelayRight = null;
+                nodes.track2LpFilterLeft = null;
+                nodes.track2LpFilterRight = null;
             };
 
             const disposeAudioGraph = () => {
@@ -9959,13 +9968,13 @@ function App() {
                 }
             };
 
-            // Setup dual track nodes - creates delayed, inverted stereo path
-            // Called from setupAudioGraph when dualTrackEnabled is true
-            const setupDualTrackNodes = (context, source, eqInput, delayMs = 500) => {
+            // Setup dual track nodes - creates a PARALLEL processing chain for Track 2
+            // Each track has its own spatial processing, then they mix together
+            const setupDualTrackNodes = (context, source, mixNode, delayMs = 500) => {
                 const nodes = rotationNodesRef.current;
-                if (!nodes || !context || !source || !eqInput) return;
+                if (!nodes || !context || !source || !mixNode) return;
 
-                // Create delay for Track 2 (500ms default)
+                // Create delay for Track 2 (500ms default offset)
                 const track2Delay = context.createDelay(2.0); // max 2 seconds
                 track2Delay.delayTime.value = delayMs / 1000;
 
@@ -9973,19 +9982,35 @@ function App() {
                 const track2Splitter = context.createChannelSplitter(2);
                 const track2Merger = context.createChannelMerger(2);
 
-                // Create 4 gain nodes for Track 2 panning (inverted from Track 1)
+                // Create 4 gain nodes for Track 2 panning (will be inverted from Track 1)
                 const track2LeftToLeftGain = context.createGain();
                 const track2LeftToRightGain = context.createGain();
                 const track2RightToLeftGain = context.createGain();
                 const track2RightToRightGain = context.createGain();
 
-                // Initial gains (centered, will be updated by rotation)
-                track2LeftToLeftGain.gain.value = 0.25;
-                track2LeftToRightGain.gain.value = 0;
-                track2RightToLeftGain.gain.value = 0;
-                track2RightToRightGain.gain.value = 0.25;
+                // Initial gains - start opposite to Track 1 (right-heavy instead of left)
+                track2LeftToLeftGain.gain.value = 0.125;   // 0.25 * 0.5 for gain reduction
+                track2LeftToRightGain.gain.value = 0.125;
+                track2RightToLeftGain.gain.value = 0.125;
+                track2RightToRightGain.gain.value = 0.125;
 
-                // Store references in rotationNodesRef
+                // Track 2's own ITD (Inter-aural Time Difference) delays
+                const track2ItdDelayLeft = context.createDelay(0.2);
+                const track2ItdDelayRight = context.createDelay(0.2);
+                track2ItdDelayLeft.delayTime.value = 0;
+                track2ItdDelayRight.delayTime.value = 0;
+
+                // Track 2's own low-pass filters for "head shadow" effect
+                const track2LpFilterLeft = context.createBiquadFilter();
+                const track2LpFilterRight = context.createBiquadFilter();
+                track2LpFilterLeft.type = 'lowpass';
+                track2LpFilterRight.type = 'lowpass';
+                track2LpFilterLeft.frequency.value = 20000;
+                track2LpFilterRight.frequency.value = 20000;
+                track2LpFilterLeft.Q.value = 0.7;
+                track2LpFilterRight.Q.value = 0.7;
+
+                // Store all references in rotationNodesRef
                 nodes.track2Delay = track2Delay;
                 nodes.track2Splitter = track2Splitter;
                 nodes.track2Merger = track2Merger;
@@ -9993,27 +10018,38 @@ function App() {
                 nodes.track2LeftToRightGain = track2LeftToRightGain;
                 nodes.track2RightToLeftGain = track2RightToLeftGain;
                 nodes.track2RightToRightGain = track2RightToRightGain;
+                nodes.track2ItdDelayLeft = track2ItdDelayLeft;
+                nodes.track2ItdDelayRight = track2ItdDelayRight;
+                nodes.track2LpFilterLeft = track2LpFilterLeft;
+                nodes.track2LpFilterRight = track2LpFilterRight;
 
-                // Connect: source → delay → splitter → gains → merger → EQ input
+                // Connect: source → delay → splitter
                 source.connect(track2Delay);
                 track2Delay.connect(track2Splitter);
 
-                // Left input channel routing
+                // Left input channel routing to gain nodes
                 track2Splitter.connect(track2LeftToLeftGain, 0);
                 track2Splitter.connect(track2LeftToRightGain, 0);
 
-                // Right input channel routing
+                // Right input channel routing to gain nodes
                 track2Splitter.connect(track2RightToLeftGain, 1);
                 track2Splitter.connect(track2RightToRightGain, 1);
 
-                // Connect to merger (left output = channel 0, right output = channel 1)
-                track2LeftToLeftGain.connect(track2Merger, 0, 0);
-                track2RightToLeftGain.connect(track2Merger, 0, 0);
-                track2LeftToRightGain.connect(track2Merger, 0, 1);
-                track2RightToRightGain.connect(track2Merger, 0, 1);
+                // Route through ITD delays and filters → merger (parallel to Track 1's chain)
+                // Left channel output: gains → ITD delay → low-pass filter → merger
+                track2LeftToLeftGain.connect(track2ItdDelayLeft);
+                track2RightToLeftGain.connect(track2ItdDelayLeft);
+                track2ItdDelayLeft.connect(track2LpFilterLeft);
+                track2LpFilterLeft.connect(track2Merger, 0, 0);
 
-                // Connect Track 2 merger to same EQ input as Track 1
-                track2Merger.connect(eqInput);
+                // Right channel output: gains → ITD delay → low-pass filter → merger
+                track2RightToRightGain.connect(track2ItdDelayRight);
+                track2LeftToRightGain.connect(track2ItdDelayRight);
+                track2ItdDelayRight.connect(track2LpFilterRight);
+                track2LpFilterRight.connect(track2Merger, 0, 1);
+
+                // Connect Track 2's merger to the shared mix node (NOT directly to EQ)
+                track2Merger.connect(mixNode);
             };
 
             const teardownAudioElement = () => {
@@ -10943,7 +10979,11 @@ function App() {
                     track2LeftToLeftGain: null,
                     track2LeftToRightGain: null,
                     track2RightToLeftGain: null,
-                    track2RightToRightGain: null
+                    track2RightToRightGain: null,
+                    track2ItdDelayLeft: null,
+                    track2ItdDelayRight: null,
+                    track2LpFilterLeft: null,
+                    track2LpFilterRight: null
                 };
 
                 source.connect(splitter);
@@ -11017,15 +11057,22 @@ function App() {
                     clarityFilter
                 };
 
-                // Chain: merger → bass → mid → treble → clarity → gainChain
-                merger.connect(bassFilter);
+                // Create mix node - this is where Track 1 and Track 2 combine
+                // Both tracks connect to mixNode AFTER their spatial processing
+                const mixNode = context.createGain();
+                mixNode.gain.value = 1.0;
+                dualTrackMixNodeRef.current = mixNode;
+
+                // Chain: merger (Track 1) → mixNode → bass → mid → treble → clarity → gainChain
+                merger.connect(mixNode);
+                mixNode.connect(bassFilter);
                 bassFilter.connect(midFilter);
                 midFilter.connect(trebleFilter);
                 trebleFilter.connect(clarityFilter);
 
-                // Setup dual track if enabled (Track 2 connects to same bassFilter)
+                // Setup dual track if enabled (Track 2 connects to mixNode with its own spatial chain)
                 if (dualTrackEnabledRef.current) {
-                    setupDualTrackNodes(context, source, bassFilter, dualTrackDelayRef.current);
+                    setupDualTrackNodes(context, source, mixNode, dualTrackDelayRef.current);
                 }
 
                 const gainChain = AudioEngine.connectGainStaging(context, clarityFilter, {
@@ -11619,6 +11666,124 @@ function App() {
                             ctx.fillStyle = `hsla(${p.hue}, 80%, 60%, ${p.life})`;
                             ctx.fill();
                         });
+                    } else if (visType === 'fire') {
+                        // Realistic fire visualizer - flames react to bass/beat
+                        const flameColumns = 40; // Number of flame columns across the width
+                        const columnWidth = canvas.width / flameColumns;
+
+                        // Get bass frequencies for beat detection (indices 0-10 are bass)
+                        const bassSum = frequencyData.slice(0, 12).reduce((a, b) => a + b, 0);
+                        const bassIntensity = (bassSum / (12 * 255)) * visualGain;
+
+                        // Get mid frequencies for flame variation
+                        const midSum = frequencyData.slice(12, 40).reduce((a, b) => a + b, 0);
+                        const midIntensity = (midSum / (28 * 255)) * visualGain;
+
+                        // Draw flame columns from bottom
+                        for (let i = 0; i < flameColumns; i++) {
+                            const x = i * columnWidth;
+
+                            // Use frequency data to vary each column's height
+                            const freqIndex = Math.floor((i / flameColumns) * 60); // Use lower frequencies
+                            const freqValue = frequencyData[freqIndex] / 255;
+
+                            // Base flame height with beat-reactive boost
+                            const baseHeight = canvas.height * 0.3;
+                            const beatBoost = bassIntensity * canvas.height * 0.5;
+                            const freqBoost = freqValue * canvas.height * 0.3 * visualGain;
+
+                            // Add organic randomness for realistic flickering
+                            const flicker = Math.sin(Date.now() * 0.01 + i * 0.5) * 0.15;
+                            const randomFlicker = (Math.random() - 0.5) * 0.1;
+
+                            const flameHeight = (baseHeight + beatBoost + freqBoost) * (1 + flicker + randomFlicker);
+
+                            // Create gradient for each flame column
+                            const gradient = ctx.createLinearGradient(x, canvas.height, x, canvas.height - flameHeight);
+
+                            // Fire colors: white/yellow core -> orange -> red -> dark red/transparent
+                            const intensity = 0.7 + bassIntensity * 0.3;
+                            gradient.addColorStop(0, `rgba(255, 250, 220, ${intensity})`);      // Bright white-yellow at base
+                            gradient.addColorStop(0.1, `rgba(255, 200, 50, ${intensity})`);     // Yellow
+                            gradient.addColorStop(0.3, `rgba(255, 120, 20, ${intensity * 0.9})`); // Orange
+                            gradient.addColorStop(0.5, `rgba(255, 60, 10, ${intensity * 0.7})`);  // Orange-red
+                            gradient.addColorStop(0.7, `rgba(200, 30, 5, ${intensity * 0.5})`);   // Red
+                            gradient.addColorStop(0.85, `rgba(100, 10, 0, ${intensity * 0.3})`);  // Dark red
+                            gradient.addColorStop(1, 'rgba(50, 5, 0, 0)');                        // Transparent tip
+
+                            // Draw flame shape (tapered, wavy)
+                            ctx.beginPath();
+                            const segments = 12;
+                            const segmentHeight = flameHeight / segments;
+
+                            // Start at bottom left
+                            ctx.moveTo(x, canvas.height);
+
+                            // Draw left side of flame (going up)
+                            for (let j = 0; j <= segments; j++) {
+                                const y = canvas.height - j * segmentHeight;
+                                const progress = j / segments;
+                                // Taper width as we go up, with waviness
+                                const wave = Math.sin(Date.now() * 0.008 + i * 0.3 + j * 0.5) * (columnWidth * 0.3 * progress);
+                                const taper = 1 - Math.pow(progress, 0.7); // Gradual taper
+                                const xOffset = -(columnWidth * 0.5 * taper) + wave;
+                                ctx.lineTo(x + columnWidth / 2 + xOffset, y);
+                            }
+
+                            // Draw right side of flame (going down)
+                            for (let j = segments; j >= 0; j--) {
+                                const y = canvas.height - j * segmentHeight;
+                                const progress = j / segments;
+                                const wave = Math.sin(Date.now() * 0.008 + i * 0.3 + j * 0.5 + Math.PI) * (columnWidth * 0.3 * progress);
+                                const taper = 1 - Math.pow(progress, 0.7);
+                                const xOffset = (columnWidth * 0.5 * taper) + wave;
+                                ctx.lineTo(x + columnWidth / 2 + xOffset, y);
+                            }
+
+                            ctx.closePath();
+                            ctx.fillStyle = gradient;
+                            ctx.fill();
+                        }
+
+                        // Add glowing embers/sparks that float up on strong beats
+                        if (bassIntensity > 0.4 && particles.length < maxParticles * 2) {
+                            for (let i = 0; i < Math.floor(bassIntensity * 5); i++) {
+                                particles.push({
+                                    x: Math.random() * canvas.width,
+                                    y: canvas.height - Math.random() * canvas.height * 0.3,
+                                    vx: (Math.random() - 0.5) * 2,
+                                    vy: -Math.random() * 3 - 1,
+                                    life: 1,
+                                    hue: 30 + Math.random() * 30, // Orange-yellow
+                                    size: Math.random() * 3 + 1
+                                });
+                            }
+                        }
+
+                        // Update and draw embers
+                        particles = particles.filter(p => p.life > 0);
+                        particles.forEach(p => {
+                            p.x += p.vx + Math.sin(Date.now() * 0.01 + p.x) * 0.5; // Swaying motion
+                            p.y += p.vy;
+                            p.vy -= 0.02; // Float upward (negative = up)
+                            p.life -= 0.02;
+
+                            // Draw ember with glow
+                            ctx.beginPath();
+                            ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                            ctx.fillStyle = `hsla(${p.hue}, 100%, 60%, ${p.life})`;
+                            ctx.shadowBlur = 10;
+                            ctx.shadowColor = `hsla(${p.hue}, 100%, 50%, ${p.life})`;
+                            ctx.fill();
+                            ctx.shadowBlur = 0;
+                        });
+
+                        // Add heat distortion glow at bottom
+                        const heatGlow = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - 50);
+                        heatGlow.addColorStop(0, `rgba(255, 100, 0, ${0.3 + bassIntensity * 0.2})`);
+                        heatGlow.addColorStop(1, 'rgba(255, 50, 0, 0)');
+                        ctx.fillStyle = heatGlow;
+                        ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
                     }
                     return particles;
                 };
@@ -13192,15 +13357,47 @@ function App() {
                     sessionRitualFlagRef.current = ritualUsed;
                 }
 
-                if (activeSessionIdRef.current && shouldEndActiveSession) {
-                    await endSession(true);
+                // OPTIMIZATION: Prepare audio element and start loading IMMEDIATELY
+                // Do other work (endSession, preset restore) while audio loads
+                const audio = prepareAudioElement();
+
+                // Start loading audio right away (network request begins)
+                const assignSourceEarly = () => {
+                    if (track.source === 'local' && track.file) {
+                        try {
+                            const blobUrl = URL.createObjectURL(track.file);
+                            currentBlobUrlRef.current = blobUrl;
+                            audio.src = blobUrl;
+                            return true;
+                        } catch (err) {
+                            console.error('Error creating blob URL:', err);
+                            return false;
+                        }
+                    } else if (track.source === 'youtube') {
+                        return false;
+                    } else if (track.url) {
+                        audio.src = track.url;
+                        return true;
+                    }
+                    return false;
+                };
+
+                const sourceAssigned = assignSourceEarly();
+                if (sourceAssigned) {
+                    audio.load(); // Start network request immediately
                 }
-                
+
+                // Now do other work while audio loads in background
+                if (activeSessionIdRef.current && shouldEndActiveSession) {
+                    // Don't await - let it run in background
+                    endSession(true);
+                }
+
                 // Story 3-3: Auto-restore last-used preset for this track
                 if (track.lastPresetId) {
                     const presets = getAllPresets();
                     const savedPreset = presets.find(p => p.id === track.lastPresetId);
-                    
+
                     if (savedPreset) {
                         // Restore the preset if it's different from current
                         if (activePresetId !== track.lastPresetId) {
@@ -13216,13 +13413,22 @@ function App() {
                     }
                 } else {
                     // First time playing this track - save current preset
-                    setPlaylist(prev => prev.map((t, i) => 
+                    setPlaylist(prev => prev.map((t, i) =>
                         i === index ? { ...t, lastPresetId: activePresetId } : t
                     ));
                     console.log(`[AutoRestore] Saved preset ${activePresetId} for track ${track.name}`);
                 }
-                
-                const audio = prepareAudioElement();
+
+                // Handle source assignment failure
+                if (!sourceAssigned) {
+                    if (track.source === 'youtube') {
+                        alert('YouTube playback requires a backend server or YouTube API. Please use direct MP3 URLs or local files.');
+                    } else {
+                        alert('Invalid track source');
+                    }
+                    teardownAudioElement();
+                    return;
+                }
                 
                 const handleLoadedMetadata = () => {
                     setupAudioGraph(audio);
@@ -13237,44 +13443,9 @@ function App() {
                         alert('Playback error. If you opened this from file://, please run a local web server.\n\nQuick fix: Run "python3 -m http.server 8000" in this folder');
                     });
                 };
-                
+
                 audio.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
-                
-                const assignSource = () => {
-                    if (track.source === 'local' && track.file) {
-                        try {
-                            const blobUrl = URL.createObjectURL(track.file);
-                            currentBlobUrlRef.current = blobUrl;
-                            audio.src = blobUrl;
-                        } catch (err) {
-                            console.error('Error creating blob URL:', err);
-                            audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-                            alert('Error loading file. Please serve this HTML from a web server (see console for instructions).\n\nQuick fix: Run "python3 -m http.server 8000" in this folder, then open http://localhost:8000/8d-player-live.html');
-                            return false;
-                        }
-                    } else if (track.source === 'youtube') {
-                        audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-                        alert('YouTube playback requires a backend server or YouTube API. Please use direct MP3 URLs or local files.');
-                        teardownAudioElement();
-                        return false;
-                    } else if (track.url) {
-                        audio.src = track.url;
-                    } else {
-                        audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-                        alert('Invalid track source');
-                        teardownAudioElement();
-                        return false;
-                    }
-                    return true;
-                };
-                
-                const assigned = assignSource();
-                if (!assigned) {
-                    return;
-                }
-                
-                audio.load();
-                
+
                 currentTrackIndexRef.current = index;
                 setCurrentTrackIndex(index);
                 setRitualStatus('active');
@@ -13574,9 +13745,13 @@ function App() {
             // Load demo playlist from tracks folder
             const loadDemoPlaylist = async (autoPlay = true) => {
                 try {
-                    showToast('Loading demo playlist...', 'info');
+                    // Pre-warm AudioContext immediately on user interaction (before async ops)
+                    const context = audioContextRef.current;
+                    if (context && context.state === 'suspended') {
+                        context.resume();
+                    }
 
-                    // Fetch the tracks manifest
+                    // Fetch the tracks manifest (parallel with context resume)
                     const response = await fetch('tracks/tracks.json');
                     if (!response.ok) {
                         throw new Error(`Failed to load tracks manifest: ${response.status}`);
@@ -13601,10 +13776,10 @@ function App() {
 
                     // Auto-play first track if requested
                     if (autoPlay && demoTracks.length > 0) {
-                        // Small delay to ensure state is updated
-                        setTimeout(() => {
+                        // Use queueMicrotask for immediate execution after state update
+                        queueMicrotask(() => {
                             playTrackRef.current(0);
-                        }, 100);
+                        });
                     }
 
                     return true;
@@ -14831,7 +15006,8 @@ return (
                                                 { id: 'waveform', icon: '〰️', label: 'Wave' },
                                                 { id: 'circular', icon: '🔘', label: 'Circular' },
                                                 { id: 'mirrored', icon: '🪞', label: 'Mirror' },
-                                                { id: 'particles', icon: '✨', label: 'Particles' }
+                                                { id: 'particles', icon: '✨', label: 'Particles' },
+                                                { id: 'fire', icon: '🔥', label: 'Fire' }
                                             ].map(vis => (
                                                 <button
                                                     key={vis.id}
@@ -15928,7 +16104,8 @@ return (
                                                     { id: 'waveform', icon: '〰️', label: 'Wave' },
                                                     { id: 'circular', icon: '◎', label: 'Circle' },
                                                     { id: 'mirrored', icon: '⫼', label: 'Mirror' },
-                                                    { id: 'particles', icon: '✨', label: 'Particles' }
+                                                    { id: 'particles', icon: '✨', label: 'Particles' },
+                                                    { id: 'fire', icon: '🔥', label: 'Fire' }
                                                 ].map(type => (
                                                     <button
                                                         key={type.id}
