@@ -3769,7 +3769,8 @@
                     movement: 'circle',
                     binaural: { enabled: true, freq: 14 },
                     noise: { type: 'pink', volume: 0.08 },
-                    spatial: { itdAmount: 0.7, headShadow: 0.5, directionalDepth: 0.15, crossBleed: 0.05, panCurve: 2.0, backDepth: 0.55, hardPanThreshold: 0.1 }
+                    spatial: { itdAmount: 0.7, headShadow: 0.5, directionalDepth: 0.15, crossBleed: 0.05, panCurve: 2.0, backDepth: 0.55, hardPanThreshold: 0.1 },
+                    dualTrack: { enabled: false, delay: 500, mode: 'synced', variableSpeed: true, track2Speed: 0.5 }
                 },
                 highlights: ['Beta 14 Hz pulses', 'Low drift orbit', 'Pink noise cushion']
             },
@@ -3787,7 +3788,8 @@
                     movement: 'figure8',
                     binaural: { enabled: true, freq: 8 },
                     noise: { type: 'white', volume: 0.05 },
-                    spatial: { itdAmount: 0.5, headShadow: 0.4, directionalDepth: 0.1, crossBleed: 0.1, panCurve: 1.5, backDepth: 0.65, hardPanThreshold: 0.15 }
+                    spatial: { itdAmount: 0.5, headShadow: 0.4, directionalDepth: 0.1, crossBleed: 0.1, panCurve: 1.5, backDepth: 0.65, hardPanThreshold: 0.15 },
+                    dualTrack: { enabled: false, delay: 500, mode: 'synced', variableSpeed: true, track2Speed: 0.5 }
                 },
                 highlights: ['Theta 8 Hz support', 'Figure-eight drift', 'Gentle white noise']
             },
@@ -3805,7 +3807,8 @@
                     movement: 'random',
                     binaural: { enabled: true, freq: 30 },
                     noise: { type: 'pink', volume: 0.12 },
-                    spatial: { itdAmount: 1.0, headShadow: 0.7, directionalDepth: 0.25, crossBleed: 0, panCurve: 3.0, backDepth: 0.4, hardPanThreshold: 0.05 }
+                    spatial: { itdAmount: 1.0, headShadow: 0.7, directionalDepth: 0.25, crossBleed: 0, panCurve: 3.0, backDepth: 0.4, hardPanThreshold: 0.05 },
+                    dualTrack: { enabled: false, delay: 500, mode: 'synced', variableSpeed: true, track2Speed: 0.5 }
                 },
                 highlights: ['Gamma 30 Hz spark', 'Randomized orbit', 'Louder pink noise']
             },
@@ -3823,7 +3826,8 @@
                     movement: 'quadrant',
                     binaural: { enabled: false, freq: 0 },
                     noise: { type: 'pink', volume: 0.06 },
-                    spatial: { itdAmount: 0, headShadow: 1.0, directionalDepth: 0.35, crossBleed: 0, panCurve: 4.0, backDepth: 0.35, hardPanThreshold: 0.05 }
+                    spatial: { itdAmount: 0, headShadow: 1.0, directionalDepth: 0.35, crossBleed: 0, panCurve: 4.0, backDepth: 0.35, hardPanThreshold: 0.05 },
+                    dualTrack: { enabled: false, delay: 500, mode: 'synced', variableSpeed: true, track2Speed: 0.5 }
                 },
                 highlights: ['No timing cues (ITD off)', 'Max muffling contrast', 'Clear L/R separation']
             }
@@ -3940,6 +3944,13 @@
                             panCurve: presetData.panCurve ?? 2.0,
                             backDepth: presetData.backDepth ?? 0.55,
                             hardPanThreshold: presetData.hardPanThreshold ?? 0.1
+                        },
+                        dualTrack: {
+                            enabled: presetData.dualTrackEnabled ?? false,
+                            delay: presetData.dualTrackDelay ?? 500,
+                            mode: presetData.dualTrackMode ?? 'synced',
+                            variableSpeed: presetData.dualTrackVariableSpeed ?? true,
+                            track2Speed: presetData.track2Speed ?? 0.5
                         }
                     },
                     color: presetData.color || '#6366f1',
@@ -9513,6 +9524,13 @@ function App() {
             const [noiseVolume, setNoiseVolume] = useState(defaultMode.preset.noise.volume);
             const [visualWaveGain, setVisualWaveGain] = useState(defaultMode.preset.noise.volume);
 
+            // Dual Track Stereo Effect
+            const [dualTrackEnabled, setDualTrackEnabled] = useState(false);
+            const [dualTrackDelay, setDualTrackDelay] = useState(500); // ms
+            const [dualTrackMode, setDualTrackMode] = useState('synced'); // 'synced' | 'independent'
+            const [dualTrackVariableSpeed, setDualTrackVariableSpeed] = useState(true);
+            const [track2Speed, setTrack2Speed] = useState(0.5);
+
             // EQ Settings (dB values, -12 to +12) - Load from saved calibration
             const [eqBass, setEqBass] = useState(() => {
                 try {
@@ -9851,6 +9869,13 @@ function App() {
             const spatialDepthRef = useRef(spatialDepth);
             const movementPatternRef = useRef(movementPattern);
 
+            // Dual Track refs
+            const dualTrackEnabledRef = useRef(dualTrackEnabled);
+            const dualTrackDelayRef = useRef(dualTrackDelay);
+            const dualTrackModeRef = useRef(dualTrackMode);
+            const dualTrackVariableSpeedRef = useRef(dualTrackVariableSpeed);
+            const track2SpeedRef = useRef(track2Speed);
+
             const cleanupBlobUrl = () => {
                 if (currentBlobUrlRef.current) {
                     URL.revokeObjectURL(currentBlobUrlRef.current);
@@ -9872,11 +9897,41 @@ function App() {
                 }
             };
 
+            const teardownDualTrackNodes = () => {
+                const nodes = rotationNodesRef.current;
+                if (!nodes) return;
+
+                // Disconnect Track 2 nodes
+                try {
+                    if (nodes.track2Delay) nodes.track2Delay.disconnect();
+                    if (nodes.track2Splitter) nodes.track2Splitter.disconnect();
+                    if (nodes.track2Merger) nodes.track2Merger.disconnect();
+                    if (nodes.track2LeftToLeftGain) nodes.track2LeftToLeftGain.disconnect();
+                    if (nodes.track2LeftToRightGain) nodes.track2LeftToRightGain.disconnect();
+                    if (nodes.track2RightToLeftGain) nodes.track2RightToLeftGain.disconnect();
+                    if (nodes.track2RightToRightGain) nodes.track2RightToRightGain.disconnect();
+                } catch (e) {
+                    console.warn('Error disconnecting dual track nodes:', e);
+                }
+
+                // Null out Track 2 nodes
+                nodes.track2Delay = null;
+                nodes.track2Splitter = null;
+                nodes.track2Merger = null;
+                nodes.track2LeftToLeftGain = null;
+                nodes.track2LeftToRightGain = null;
+                nodes.track2RightToLeftGain = null;
+                nodes.track2RightToRightGain = null;
+            };
+
             const disposeAudioGraph = () => {
                 if (rotationIntervalRef.current) {
                     clearInterval(rotationIntervalRef.current);
                     rotationIntervalRef.current = null;
                 }
+
+                // Teardown dual track nodes before nulling rotationNodesRef
+                teardownDualTrackNodes();
                 rotationNodesRef.current = null;
 
                 tearDownBinauralNodes();
@@ -9902,6 +9957,63 @@ function App() {
                     }
                     sourceNodeRef.current = null;
                 }
+            };
+
+            // Setup dual track nodes - creates delayed, inverted stereo path
+            // Called from setupAudioGraph when dualTrackEnabled is true
+            const setupDualTrackNodes = (context, source, eqInput, delayMs = 500) => {
+                const nodes = rotationNodesRef.current;
+                if (!nodes || !context || !source || !eqInput) return;
+
+                // Create delay for Track 2 (500ms default)
+                const track2Delay = context.createDelay(2.0); // max 2 seconds
+                track2Delay.delayTime.value = delayMs / 1000;
+
+                // Create splitter and merger for Track 2
+                const track2Splitter = context.createChannelSplitter(2);
+                const track2Merger = context.createChannelMerger(2);
+
+                // Create 4 gain nodes for Track 2 panning (inverted from Track 1)
+                const track2LeftToLeftGain = context.createGain();
+                const track2LeftToRightGain = context.createGain();
+                const track2RightToLeftGain = context.createGain();
+                const track2RightToRightGain = context.createGain();
+
+                // Initial gains (centered, will be updated by rotation)
+                track2LeftToLeftGain.gain.value = 0.25;
+                track2LeftToRightGain.gain.value = 0;
+                track2RightToLeftGain.gain.value = 0;
+                track2RightToRightGain.gain.value = 0.25;
+
+                // Store references in rotationNodesRef
+                nodes.track2Delay = track2Delay;
+                nodes.track2Splitter = track2Splitter;
+                nodes.track2Merger = track2Merger;
+                nodes.track2LeftToLeftGain = track2LeftToLeftGain;
+                nodes.track2LeftToRightGain = track2LeftToRightGain;
+                nodes.track2RightToLeftGain = track2RightToLeftGain;
+                nodes.track2RightToRightGain = track2RightToRightGain;
+
+                // Connect: source → delay → splitter → gains → merger → EQ input
+                source.connect(track2Delay);
+                track2Delay.connect(track2Splitter);
+
+                // Left input channel routing
+                track2Splitter.connect(track2LeftToLeftGain, 0);
+                track2Splitter.connect(track2LeftToRightGain, 0);
+
+                // Right input channel routing
+                track2Splitter.connect(track2RightToLeftGain, 1);
+                track2Splitter.connect(track2RightToRightGain, 1);
+
+                // Connect to merger (left output = channel 0, right output = channel 1)
+                track2LeftToLeftGain.connect(track2Merger, 0, 0);
+                track2RightToLeftGain.connect(track2Merger, 0, 0);
+                track2LeftToRightGain.connect(track2Merger, 0, 1);
+                track2RightToRightGain.connect(track2Merger, 0, 1);
+
+                // Connect Track 2 merger to same EQ input as Track 1
+                track2Merger.connect(eqInput);
             };
 
             const teardownAudioElement = () => {
@@ -10330,6 +10442,20 @@ function App() {
             useEffect(() => { spatialDepthRef.current = spatialDepth; }, [spatialDepth]);
             useEffect(() => { movementPatternRef.current = movementPattern; }, [movementPattern]);
             useEffect(() => { spatialTunerActiveRef.current = showSpatialTuner; }, [showSpatialTuner]);
+
+            // Dual Track ref syncs
+            useEffect(() => { dualTrackEnabledRef.current = dualTrackEnabled; }, [dualTrackEnabled]);
+            useEffect(() => { dualTrackDelayRef.current = dualTrackDelay; }, [dualTrackDelay]);
+            useEffect(() => { dualTrackModeRef.current = dualTrackMode; }, [dualTrackMode]);
+            useEffect(() => { dualTrackVariableSpeedRef.current = dualTrackVariableSpeed; }, [dualTrackVariableSpeed]);
+            useEffect(() => { track2SpeedRef.current = track2Speed; }, [track2Speed]);
+
+            // Auto-enable dual track when 'dualtrack' movement pattern is selected
+            useEffect(() => {
+                if (movementPattern === 'dualtrack' && !dualTrackEnabled) {
+                    setDualTrackEnabled(true);
+                }
+            }, [movementPattern, dualTrackEnabled]);
 
             // Show first-run calibration prompt (only once, unless dismissed)
             useEffect(() => {
@@ -10809,7 +10935,15 @@ function App() {
                     itdDelayLeft,
                     itdDelayRight,
                     lpFilterLeft,
-                    lpFilterRight
+                    lpFilterRight,
+                    // Track 2 nodes (populated by setupDualTrackNodes when enabled)
+                    track2Delay: null,
+                    track2Splitter: null,
+                    track2Merger: null,
+                    track2LeftToLeftGain: null,
+                    track2LeftToRightGain: null,
+                    track2RightToLeftGain: null,
+                    track2RightToRightGain: null
                 };
 
                 source.connect(splitter);
@@ -10888,6 +11022,11 @@ function App() {
                 bassFilter.connect(midFilter);
                 midFilter.connect(trebleFilter);
                 trebleFilter.connect(clarityFilter);
+
+                // Setup dual track if enabled (Track 2 connects to same bassFilter)
+                if (dualTrackEnabledRef.current) {
+                    setupDualTrackNodes(context, source, bassFilter, dualTrackDelayRef.current);
+                }
 
                 const gainChain = AudioEngine.connectGainStaging(context, clarityFilter, {
                     volume,
@@ -11049,6 +11188,18 @@ function App() {
                 }
             }, []);
 
+            // Variable speed calculation for dual track mode
+            // Creates cyclical speed variation: fast → slow → fast → normal → repeat
+            const calculateVariableSpeed = (time, baseSpeed) => {
+                // Primary cycle: ~8 seconds
+                const primaryCycle = Math.sin(time * 0.125 * 2 * Math.PI);
+                // Secondary modulation: ~20 seconds
+                const secondaryCycle = Math.sin(time * 0.05 * 2 * Math.PI);
+                // Speed ranges from 0.5x to 1.5x base speed
+                const speedMultiplier = 1.0 + 0.3 * primaryCycle + 0.2 * secondaryCycle;
+                return baseSpeed * speedMultiplier;
+            };
+
             const startRotation = () => {
                 if (rotationIntervalRef.current) {
                     clearInterval(rotationIntervalRef.current);
@@ -11085,7 +11236,12 @@ function App() {
                     const currentIntensity = intensityRef.current;
                     const currentSpatialDepth = spatialDepthRef.current;
 
-                    const angle = 2 * Math.PI * currentSpeed * time;
+                    // Apply variable speed if dual track with variable speed is enabled
+                    const effectiveSpeed = (dualTrackEnabledRef.current && dualTrackVariableSpeedRef.current)
+                        ? calculateVariableSpeed(time, currentSpeed)
+                        : currentSpeed;
+
+                    const angle = 2 * Math.PI * effectiveSpeed * time;
                     let panPosition = 0;
 
                     // Calculate pan position based on movement pattern
@@ -11150,6 +11306,11 @@ function App() {
                             // Store depth multiplier for gain calculation (accessed below)
                             // Using a variable name that won't conflict
                             window._quadrantDepthMultiplier = depthA + (depthB - depthA) * smoothPhase;
+                            break;
+                        case 'dualtrack':
+                            // Dual track pattern: uses circle-like movement
+                            // The actual dual track effect is controlled by the toggle
+                            panPosition = Math.sin(angle);
                             break;
                         default:
                             panPosition = Math.sin(angle);
@@ -11250,7 +11411,66 @@ function App() {
                         nodes.crossGainRight.gain.setValueAtTime(clamp(nodes.crossGainRight.gain.value), now);
                         nodes.crossGainRight.gain.exponentialRampToValueAtTime(clamp(targetCrossDelayRight), rampTime);
                     }
-                    
+
+                    // Dual Track: Apply inverted gains to Track 2 if enabled
+                    if (dualTrackEnabledRef.current && nodes.track2LeftToLeftGain) {
+                        // Track 2 uses inverted pan position (opposite ear)
+                        let track2PanPosition;
+
+                        if (dualTrackModeRef.current === 'independent') {
+                            // Independent mode: Track 2 has its own speed
+                            const track2Speed = track2SpeedRef.current;
+                            const track2EffectiveSpeed = dualTrackVariableSpeedRef.current
+                                ? calculateVariableSpeed(time, track2Speed)
+                                : track2Speed;
+                            const track2Angle = 2 * Math.PI * track2EffectiveSpeed * time;
+                            // Calculate Track 2's own pan position, then invert
+                            track2PanPosition = -Math.sin(track2Angle) * currentIntensity;
+                        } else {
+                            // Synced mode: Same movement, just inverted
+                            track2PanPosition = -panPosition;
+                        }
+
+                        // Calculate Track 2 gains (inverted from Track 1)
+                        // Apply 0.5x gain reduction to prevent clipping (two tracks playing)
+                        const dualTrackGainReduction = 0.5;
+                        let t2LeftGain, t2RightGain;
+
+                        if (isHardPan) {
+                            if (track2PanPosition > 0.1) {
+                                t2LeftGain = Math.max(0, 1 - track2PanPosition * 2);
+                                t2RightGain = 1;
+                            } else if (track2PanPosition < -0.1) {
+                                t2LeftGain = 1;
+                                t2RightGain = Math.max(0, 1 + track2PanPosition * 2);
+                            } else {
+                                t2LeftGain = 0.5;
+                                t2RightGain = 0.5;
+                            }
+                        } else {
+                            t2LeftGain = (1 - track2PanPosition) * 0.5;
+                            t2RightGain = (1 + track2PanPosition) * 0.5;
+                        }
+
+                        // Apply normalization and dual track gain reduction
+                        const t2TargetLeft = clamp(t2LeftGain * normalizationFactor * dualTrackGainReduction * depthGainMultiplier);
+                        const t2TargetRight = clamp(t2RightGain * normalizationFactor * dualTrackGainReduction * depthGainMultiplier);
+                        const t2CrossGain = clamp(crossChannelMix * normalizationFactor * dualTrackGainReduction);
+
+                        // Apply gains to Track 2 nodes
+                        nodes.track2LeftToLeftGain.gain.setValueAtTime(clamp(nodes.track2LeftToLeftGain.gain.value), now);
+                        nodes.track2LeftToLeftGain.gain.exponentialRampToValueAtTime(t2TargetLeft, rampTime);
+
+                        nodes.track2RightToRightGain.gain.setValueAtTime(clamp(nodes.track2RightToRightGain.gain.value), now);
+                        nodes.track2RightToRightGain.gain.exponentialRampToValueAtTime(t2TargetRight, rampTime);
+
+                        nodes.track2LeftToRightGain.gain.setValueAtTime(clamp(nodes.track2LeftToRightGain.gain.value), now);
+                        nodes.track2LeftToRightGain.gain.exponentialRampToValueAtTime(t2CrossGain, rampTime);
+
+                        nodes.track2RightToLeftGain.gain.setValueAtTime(clamp(nodes.track2RightToLeftGain.gain.value), now);
+                        nodes.track2RightToLeftGain.gain.exponentialRampToValueAtTime(t2CrossGain, rampTime);
+                    }
+
                     // Increment time according to interval (seconds)
                     time += ROTATION_INTERVAL_MS / 1000;
                 }, ROTATION_INTERVAL_MS);
@@ -13351,6 +13571,50 @@ function App() {
                 showToast('Playlist deleted', 'info');
             };
 
+            // Load demo playlist from tracks folder
+            const loadDemoPlaylist = async (autoPlay = true) => {
+                try {
+                    showToast('Loading demo playlist...', 'info');
+
+                    // Fetch the tracks manifest
+                    const response = await fetch('tracks/tracks.json');
+                    if (!response.ok) {
+                        throw new Error(`Failed to load tracks manifest: ${response.status}`);
+                    }
+
+                    const manifest = await response.json();
+
+                    // Create track objects from manifest
+                    const demoTracks = manifest.tracks.map((track, index) => ({
+                        id: Date.now() + index,
+                        name: track.name,
+                        source: 'demo',
+                        url: `tracks/${encodeURIComponent(track.file)}`,
+                        file: null
+                    }));
+
+                    // Set the playlist
+                    setPlaylist(demoTracks);
+                    setCurrentTrackIndex(null);
+
+                    showToast(`Loaded "${manifest.name}" with ${demoTracks.length} tracks`, 'success');
+
+                    // Auto-play first track if requested
+                    if (autoPlay && demoTracks.length > 0) {
+                        // Small delay to ensure state is updated
+                        setTimeout(() => {
+                            playTrackRef.current(0);
+                        }, 100);
+                    }
+
+                    return true;
+                } catch (error) {
+                    console.error('Failed to load demo playlist:', error);
+                    showToast('Failed to load demo playlist. Make sure tracks folder exists.', 'error');
+                    return false;
+                }
+            };
+
             // ==================== END PLAYLIST FUNCTIONS ====================
 
             // Loop mode toggle: off -> track -> playlist -> off
@@ -13726,6 +13990,18 @@ function App() {
                     setHardPanThreshold(preset.spatial.hardPanThreshold ?? 0.1);
                 }
 
+                // Apply dual track settings if present
+                if (preset.dualTrack) {
+                    setDualTrackEnabled(preset.dualTrack.enabled ?? false);
+                    setDualTrackDelay(preset.dualTrack.delay ?? 500);
+                    setDualTrackMode(preset.dualTrack.mode ?? 'synced');
+                    setDualTrackVariableSpeed(preset.dualTrack.variableSpeed ?? true);
+                    setTrack2Speed(preset.dualTrack.track2Speed ?? 0.5);
+                } else {
+                    // Reset to defaults for presets without dualTrack
+                    setDualTrackEnabled(false);
+                }
+
                 // Update active preset tracking
                 setActivePresetId(presetId);
                 
@@ -13869,13 +14145,14 @@ return (
                             padding: '20px'
                         }}>
                             <div style={{
-                                background: 'var(--card)',
+                                background: '#1a1a2e',
                                 borderRadius: '16px',
                                 padding: '24px',
                                 maxWidth: '450px',
                                 width: '100%',
                                 border: '2px solid var(--accent)',
-                                boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
+                                boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
+                                backdropFilter: 'blur(20px)'
                             }}>
                                 <h2 style={{ margin: '0 0 16px 0', color: 'var(--accent)' }}>
                                     Welcome to 8D Ritual Shell!
@@ -14423,6 +14700,26 @@ return (
                                     <div>
                                         <p className="eyebrow">Now Playing</p>
                                     </div>
+                                    <button
+                                        className="demo-playlist-btn"
+                                        onClick={() => loadDemoPlaylist(true)}
+                                        title="Load demo tracks"
+                                        style={{
+                                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                            border: 'none',
+                                            borderRadius: '20px',
+                                            padding: '6px 14px',
+                                            color: 'white',
+                                            fontSize: '0.75rem',
+                                            fontWeight: '600',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                        }}
+                                    >
+                                        🎵 Demo
+                                    </button>
                                     <span className="status-pill" style={{ borderColor: selectedMode.accent }}>
                                         {selectedMode.label}
                                     </span>
@@ -15134,7 +15431,73 @@ return (
                                             <option value="frontback">↕️ Front-Back</option>
                                             <option value="quadrant">Quadrant (Discrete Circle)</option>
                                             <option value="random">🎲 Random</option>
+                                            <option value="dualtrack">🎧 Dual Track</option>
                                         </select>
+                                    </div>
+                                    <div className="control-group">
+                                        <label>Dual Track Stereo</label>
+                                        <div className="checkbox-wrapper">
+                                            <input
+                                                id="dual-track-toggle"
+                                                type="checkbox"
+                                                checked={dualTrackEnabled}
+                                                onChange={(e) => setDualTrackEnabled(e.target.checked)}
+                                            />
+                                            <label htmlFor="dual-track-toggle">Enable (500ms delayed stereo)</label>
+                                        </div>
+                                        {dualTrackEnabled && (
+                                            <>
+                                                <label htmlFor="dual-track-delay" style={{ marginTop: '10px', fontSize: '12px' }}>Track Offset</label>
+                                                <input
+                                                    id="dual-track-delay"
+                                                    type="range"
+                                                    min="100"
+                                                    max="1000"
+                                                    step="50"
+                                                    value={dualTrackDelay}
+                                                    onChange={(e) => setDualTrackDelay(parseInt(e.target.value, 10))}
+                                                    aria-label="Track offset delay"
+                                                />
+                                                <div className="value-display">{dualTrackDelay}ms</div>
+
+                                                <label htmlFor="dual-track-mode" style={{ marginTop: '10px', fontSize: '12px' }}>Panning Mode</label>
+                                                <select
+                                                    id="dual-track-mode"
+                                                    value={dualTrackMode}
+                                                    onChange={(e) => setDualTrackMode(e.target.value)}
+                                                >
+                                                    <option value="synced">Synced (same speed)</option>
+                                                    <option value="independent">Independent speeds</option>
+                                                </select>
+
+                                                <div className="checkbox-wrapper" style={{ marginTop: '10px' }}>
+                                                    <input
+                                                        id="dual-track-variable-speed"
+                                                        type="checkbox"
+                                                        checked={dualTrackVariableSpeed}
+                                                        onChange={(e) => setDualTrackVariableSpeed(e.target.checked)}
+                                                    />
+                                                    <label htmlFor="dual-track-variable-speed">Variable Speed</label>
+                                                </div>
+
+                                                {dualTrackMode === 'independent' && (
+                                                    <>
+                                                        <label htmlFor="track2-speed" style={{ marginTop: '10px', fontSize: '12px' }}>Track 2 Speed</label>
+                                                        <input
+                                                            id="track2-speed"
+                                                            type="range"
+                                                            min="0.1"
+                                                            max="1"
+                                                            step="0.05"
+                                                            value={track2Speed}
+                                                            onChange={(e) => setTrack2Speed(parseFloat(e.target.value))}
+                                                            aria-label="Track 2 speed"
+                                                        />
+                                                        <div className="value-display">{track2Speed.toFixed(2)}</div>
+                                                    </>
+                                                )}
+                                            </>
+                                        )}
                                     </div>
                                     <div className="control-group">
                                         <label>Binaural Beats {binauralEnabled && (
@@ -15272,6 +15635,26 @@ return (
                                 <div>
                                     <p className="eyebrow">Now Playing</p>
                                 </div>
+                                <button
+                                    className="demo-playlist-btn"
+                                    onClick={() => loadDemoPlaylist(true)}
+                                    title="Load demo tracks"
+                                    style={{
+                                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                        border: 'none',
+                                        borderRadius: '20px',
+                                        padding: '6px 14px',
+                                        color: 'white',
+                                        fontSize: '0.75rem',
+                                        fontWeight: '600',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                    }}
+                                >
+                                    🎵 Demo
+                                </button>
                                 <span className="status-pill" style={{ borderColor: selectedMode.accent }}>
                                     {selectedMode.label}
                                 </span>
@@ -16075,7 +16458,31 @@ return (
                                             <option value="frontback">↕️ Front-Back</option>
                                             <option value="quadrant">◻️ Quadrant</option>
                                             <option value="random">🎲 Random</option>
+                                            <option value="dualtrack">🎧 Dual Track</option>
                                         </select>
+                                    </div>
+                                    <div className="control-group">
+                                        <label>Dual Track Stereo</label>
+                                        <div className="checkbox-wrapper">
+                                            <input
+                                                id="mobile-dual-track-toggle"
+                                                type="checkbox"
+                                                checked={dualTrackEnabled}
+                                                onChange={(e) => setDualTrackEnabled(e.target.checked)}
+                                            />
+                                            <label htmlFor="mobile-dual-track-toggle">Enable ({dualTrackDelay}ms offset)</label>
+                                        </div>
+                                        {dualTrackEnabled && (
+                                            <div className="checkbox-wrapper" style={{ marginTop: '8px' }}>
+                                                <input
+                                                    id="mobile-dual-track-variable"
+                                                    type="checkbox"
+                                                    checked={dualTrackVariableSpeed}
+                                                    onChange={(e) => setDualTrackVariableSpeed(e.target.checked)}
+                                                />
+                                                <label htmlFor="mobile-dual-track-variable">Variable Speed</label>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="control-group">
                                         <label>Binaural Beats {binauralEnabled && (
@@ -16365,7 +16772,12 @@ return (
                                 crossBleed,
                                 panCurve,
                                 backDepth,
-                                hardPanThreshold
+                                hardPanThreshold,
+                                dualTrackEnabled,
+                                dualTrackDelay,
+                                dualTrackMode,
+                                dualTrackVariableSpeed,
+                                track2Speed
                             }}
                             onSave={handleSavePreset}
                             onCancel={closeSavePresetDialog}

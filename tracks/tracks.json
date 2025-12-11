@@ -1,0 +1,24 @@
+{
+  "name": "Demo Playlist",
+  "description": "Sample tracks included with 8D Audio Player",
+  "tracks": [
+    { "name": "On Lincoln and Main (Remastered)", "file": "On Lincoln and Main (Remastered).mp3" },
+    { "name": "Binary to Python", "file": "Binary to Python.mp3" },
+    { "name": "Code Breaker", "file": "Code Breaker.mp3" },
+    { "name": "Code in My Veins", "file": "Code in My Veins.mp3" },
+    { "name": "Code Maestro", "file": "Code Maestro.mp3" },
+    { "name": "Code Queen", "file": "Code Queen.mp3" },
+    { "name": "Code Whisperer", "file": "Code Whisperer.mp3" },
+    { "name": "Code Whisperer (Remastered)", "file": "Code Whisperer (Remastered).mp3" },
+    { "name": "Digital Dreams", "file": "Digital Dreams.mp3" },
+    { "name": "Digital Pulse", "file": "Digital Pulse.mp3" },
+    { "name": "Fading Code", "file": "Fading Code.mp3" },
+    { "name": "Fading Glow", "file": "Fading Glow.mp3" },
+    { "name": "Hack the Code", "file": "Hack the Code.mp3" },
+    { "name": "Last Coder's Lament", "file": "Last Coder's Lament.mp3" },
+    { "name": "Last of My Kind", "file": "Last of My Kind.mp3" },
+    { "name": "Ethereal Dreams", "file": "StockmusicGPT-ethereal-dreams-starlight-journey-silent-whisper-80681abd.mp3" },
+    { "name": "Ethereal Echoes", "file": "StockmusicGPT-ethereal-echoes-3beccd84.mp3" },
+    { "name": "Moonlit Abyss", "file": "StockmusicGPT-moonlit-abyss-c8849723.mp3" }
+  ]
+}
