@@ -187,6 +187,9 @@ console.log('\n\ud83d\udd17 Index.html Manifest Link Tests (AC1)');
 
 const indexPath = path.join(__dirname, '..', 'index.html');
 const indexHtml = fs.readFileSync(indexPath, 'utf8');
+// Styles were extracted from index.html to css/styles.css during modularization
+const cssPath = path.join(__dirname, '..', 'css', 'styles.css');
+const cssContent = fs.readFileSync(cssPath, 'utf8');
 
 test('index.html has manifest link', () => {
     assert(indexHtml.includes('rel="manifest"'), 'should have manifest link');
@@ -365,23 +368,23 @@ test('Safari instructions have "Got it" button', () => {
 console.log('\n\ud83c\udfa8 CSS Styles Tests (AC3)');
 
 test('Install prompt CSS styles exist', () => {
-    assert(indexHtml.includes('.install-prompt {'), 'should have install-prompt styles');
+    assert(cssContent.includes('.install-prompt {'), 'should have install-prompt styles');
 });
 
 test('Install prompt has focus outline', () => {
-    assert(indexHtml.includes('.install-prompt:focus'), 'should have focus styles');
+    assert(cssContent.includes('.install-prompt:focus'), 'should have focus styles');
 });
 
 test('Install button styles exist', () => {
-    assert(indexHtml.includes('.install-btn {'), 'should have install-btn styles');
+    assert(cssContent.includes('.install-btn {'), 'should have install-btn styles');
 });
 
 test('Safari instructions CSS styles exist', () => {
-    assert(indexHtml.includes('.safari-instructions {'), 'should have safari-instructions styles');
+    assert(cssContent.includes('.safari-instructions {'), 'should have safari-instructions styles');
 });
 
 test('Reduced motion support for install prompt', () => {
-    assert(indexHtml.includes('.install-prompt.no-motion'), 'should support reduced motion');
+    assert(cssContent.includes('.install-prompt.no-motion'), 'should support reduced motion');
 });
 
 // ===========================================

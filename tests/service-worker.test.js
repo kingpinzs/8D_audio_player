@@ -280,7 +280,7 @@ assert(Array.isArray(workboxConfig.globPatterns), 'globPatterns is an array');
 assert(Array.isArray(workboxConfig.runtimeCaching), 'runtimeCaching is an array');
 
 // Test 19: Verify critical shell assets in globPatterns
-const shellAssets = ['index.html', 'audio-engine.js', 'session-logging.js', 'sensor-consent.js'];
+const shellAssets = ['index.html', 'css/**/*.css', 'js/**/*.js', 'vendor/**/*.js', 'session-logging.js', 'sensor-consent.js', 'manifest.json', 'icons/**/*.png'];
 shellAssets.forEach(asset => {
     assert(
         workboxConfig.globPatterns.includes(asset),

@@ -1,7 +1,7 @@
 {
   "name": "mpe_8d",
   "version": "1.0.0",
-  "main": "audio-engine.js",
+  "main": "js/audio-engine.js",
   "directories": {
     "doc": "docs",
     "test": "tests"

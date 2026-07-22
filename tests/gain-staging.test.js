@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const AudioEngine = require(path.join('..', 'audio-engine.js'));
+const AudioEngine = require(path.join('..', 'js', 'audio-engine.js'));
 
 const assert = (condition, message) => {
     if (!condition) {

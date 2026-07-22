@@ -524,21 +524,23 @@ test('index.html exists', () => {
 
 if (fs.existsSync(indexHtmlPath)) {
     indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
+    // Theme/accessibility styles were extracted to css/styles.css during modularization
+    const cssContent = fs.readFileSync(path.join(__dirname, '..', 'css', 'styles.css'), 'utf8');
 
     test('CSS has dark-mode class styles', () => {
-        assert(indexHtml.includes('body.dark-mode'), 'Should have body.dark-mode styles');
+        assert(cssContent.includes('body.dark-mode'), 'Should have body.dark-mode styles');
     });
 
     test('CSS has high-contrast class styles', () => {
-        assert(indexHtml.includes('body.high-contrast'), 'Should have body.high-contrast styles');
+        assert(cssContent.includes('body.high-contrast'), 'Should have body.high-contrast styles');
     });
 
     test('CSS has large-text class styles (Story 6-3)', () => {
-        assert(indexHtml.includes('body.large-text'), 'Should have body.large-text styles');
+        assert(cssContent.includes('body.large-text'), 'Should have body.large-text styles');
     });
 
     test('CSS has high-contrast dark-mode combination', () => {
-        assert(indexHtml.includes('body.dark-mode.high-contrast'),
+        assert(cssContent.includes('body.dark-mode.high-contrast'),
             'Should have combined dark-mode high-contrast styles');
     });
 

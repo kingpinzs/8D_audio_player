@@ -3,7 +3,7 @@
 ## Core Context
 - mp3_to_8D is a browser-only 8D ritual player; skim `docs/project-overview.md` for vision and `docs/architecture.md` for runtime topology before large changes.
 - `index.html` is the active shell combining v2 audio stability with v3 UI; legacy HTML files (`8d-audio-live-v2.html`, `8d-audio-live-v3.html`, `8d-audio-converter-pro.html`) are frozen references.
-- `audio-engine.js` exports `connectGainStaging`, `createBinauralNodes`, `createNoiseNode`; tests in `tests/gain-staging.test.js` assume this surface—extend via new helpers rather than altering signatures.
+- `js/audio-engine.js` exports `connectGainStaging`, `createBinauralNodes`, `createNoiseNode`; tests in `tests/gain-staging.test.js` assume this surface—extend via new helpers rather than altering signatures.
 
 ## Authoring UI Logic
 - React 18 UMD, ReactDOM, and Babel Standalone load from CDN; JSX lives in `<script type="text/babel">` blocks inside each HTML file (no bundler/modules).
