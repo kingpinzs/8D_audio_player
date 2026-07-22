@@ -7304,18 +7304,6 @@ function App() {
                 }
             }, []);
 
-            // Variable speed calculation for dual track mode
-            // Creates cyclical speed variation: fast → slow → fast → normal → repeat
-            const calculateVariableSpeed = (time, baseSpeed) => {
-                // Primary cycle: ~8 seconds
-                const primaryCycle = Math.sin(time * 0.125 * 2 * Math.PI);
-                // Secondary modulation: ~20 seconds
-                const secondaryCycle = Math.sin(time * 0.05 * 2 * Math.PI);
-                // Speed ranges from 0.5x to 1.5x base speed
-                const speedMultiplier = 1.0 + 0.3 * primaryCycle + 0.2 * secondaryCycle;
-                return baseSpeed * speedMultiplier;
-            };
-
             const startRotation = () => {
                 if (rotationIntervalRef.current) {
                     clearInterval(rotationIntervalRef.current);
@@ -7352,239 +7340,41 @@ function App() {
                     const currentIntensity = intensityRef.current;
                     const currentSpatialDepth = spatialDepthRef.current;
 
-                    // Apply variable speed if dual track with variable speed is enabled
-                    const effectiveSpeed = (dualTrackEnabledRef.current && dualTrackVariableSpeedRef.current)
-                        ? calculateVariableSpeed(time, currentSpeed)
-                        : currentSpeed;
-
-                    const angle = 2 * Math.PI * effectiveSpeed * time;
-                    let panPosition = 0;
-
-                    // Calculate pan position based on movement pattern
-                    switch(currentMovement) {
-                        case 'circle':
-                            panPosition = Math.sin(angle);
-                            break;
-                        case 'figure8':
-                            // True figure-8: Loop on right side, then loop on left side
-                            // Creates the sensation of sound tracing an "8" around your head
-                            const f8Cycle = ((angle / (2 * Math.PI)) % 1 + 1) % 1; // 0 to 1, normalized
-                            if (f8Cycle < 0.5) {
-                                // Right side loop: center → full right → center
-                                const rightPhase = f8Cycle * 2; // 0 to 1
-                                panPosition = Math.sin(rightPhase * Math.PI); // 0 → 1 → 0
-                            } else {
-                                // Left side loop: center → full left → center
-                                const leftPhase = (f8Cycle - 0.5) * 2; // 0 to 1
-                                panPosition = -Math.sin(leftPhase * Math.PI); // 0 → -1 → 0
-                            }
-                            // Add subtle depth variation (quieter at the "crossing point" of the 8)
-                            const f8DepthPhase = Math.abs(Math.sin(f8Cycle * 2 * Math.PI));
-                            window._quadrantDepthMultiplier = 0.7 + 0.3 * f8DepthPhase; // 0.7 to 1.0
-                            break;
-                        case 'leftright':
-                            panPosition = Math.sin(angle);
-                            break;
-                        case 'frontback':
-                            panPosition = Math.cos(angle) * 0.5;
-                            break;
-                        case 'random':
-                            if (Math.random() > 0.9) {
-                                panPosition = (Math.random() * 2 - 1);
-                            }
-                            break;
-                        case 'quadrant':
-                            // 360-degree circular sound: Right -> Back(quiet) -> Left -> Front -> repeat
-                            // Creates immersive feeling of sound orbiting around your head
-                            const fullCycle = (angle / (2 * Math.PI)); // cycles (may be >1)
-                            const cyclePos = fullCycle - Math.floor(fullCycle); // 0..1 within cycle
-                            const segment = Math.floor(cyclePos * 4); // 0=right, 1=back, 2=left, 3=front
-                            const segmentPhase = (cyclePos * 4) - segment; // 0..1 within segment
-
-                            // Pan positions: Right(1) -> Center(0) -> Left(-1) -> Center(0)
-                            const panAnchors = [1, 0, -1, 0];
-                            const panA = panAnchors[segment];
-                            const panB = panAnchors[(segment + 1) % panAnchors.length];
-
-                            // Depth/volume multipliers: Right(1.0) -> Back(0.55) -> Left(1.0) -> Front(1.0)
-                            // Back position is quieter to simulate sound being behind your head
-                            const depthAnchors = [1.0, 0.55, 1.0, 1.0];
-                            const depthA = depthAnchors[segment];
-                            const depthB = depthAnchors[(segment + 1) % depthAnchors.length];
-
-                            // Smooth easing for more natural circular motion (ease-in-out)
-                            const easeInOut = (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-                            const smoothPhase = easeInOut(segmentPhase);
-
-                            // Interpolate pan position with easing
-                            panPosition = panA + (panB - panA) * smoothPhase;
-
-                            // Store depth multiplier for gain calculation (accessed below)
-                            // Using a variable name that won't conflict
-                            window._quadrantDepthMultiplier = depthA + (depthB - depthA) * smoothPhase;
-                            break;
-                        case 'dualtrack':
-                            // Dual track pattern: uses circle-like movement
-                            // The actual dual track effect is controlled by the toggle
-                            panPosition = Math.sin(angle);
-                            break;
-                        default:
-                            panPosition = Math.sin(angle);
-                    }
+                    // All spatial math (variable speed, pan position, channel/delay/track2 gains)
+                    // delegates to SpatialProcessor (js/spatial-processor.js)
+                    const rotationState = SpatialProcessor.calculateRotationState({
+                        time,
+                        speed: currentSpeed,
+                        movement: currentMovement,
+                        intensity: currentIntensity,
+                        spatialDepth: currentSpatialDepth,
+                        dualTrackEnabled: dualTrackEnabledRef.current,
+                        dualTrackMode: dualTrackModeRef.current,
+                        track2Speed: track2SpeedRef.current,
+                        variableSpeed: dualTrackEnabledRef.current && dualTrackVariableSpeedRef.current
+                    });
                     
-                    // Apply intensity to pan position
-                    panPosition *= currentIntensity;
-                    
-                    // CRITICAL FIX: Normalized gain distribution to prevent clipping
-                    // Total energy must equal 1.0 to prevent gain accumulation
-                    const normalizationFactor = 0.5; // Base gain per channel before panning
+                    const { applyGainRamp } = SpatialProcessor;
+                    const RAMP_MS = 100; // 100ms exponential ramp: perceptible movement, no clicks
 
-                    // Quadrant uses HARD panning (no cross-channel) for clear L/R separation
-                    const isHardPan = currentMovement === 'quadrant';
-                    const crossChannelMix = isHardPan ? 0 : 0.15; // Zero bleeding for quadrant
+                    // Main channel gains (hard pan for quadrant, soft pan otherwise — see module)
+                    applyGainRamp(nodes.leftToLeftGain, rotationState.track1.leftToLeft, ctx, RAMP_MS);
+                    applyGainRamp(nodes.rightToRightGain, rotationState.track1.rightToRight, ctx, RAMP_MS);
+                    applyGainRamp(nodes.leftToRightGain, rotationState.track1.leftToRight, ctx, RAMP_MS);
+                    applyGainRamp(nodes.rightToLeftGain, rotationState.track1.rightToLeft, ctx, RAMP_MS);
 
-                    // For 'quadrant' and 'figure8' patterns, apply depth simulation
-                    // Creates immersive 3D sound by varying volume based on perceived position
-                    const use3DDepth = currentMovement === 'quadrant' || currentMovement === 'figure8';
-                    const depthGainMultiplier = use3DDepth
-                        ? (window._quadrantDepthMultiplier || 1.0)
-                        : 1.0;
+                    // Delay/cross-delay gains enhance spatial cues
+                    applyGainRamp(nodes.delayGainLeft, rotationState.delay.delayLeft, ctx, RAMP_MS);
+                    applyGainRamp(nodes.delayGainRight, rotationState.delay.delayRight, ctx, RAMP_MS);
+                    applyGainRamp(nodes.crossGainLeft, rotationState.delay.crossDelayLeft, ctx, RAMP_MS);
+                    applyGainRamp(nodes.crossGainRight, rotationState.delay.crossDelayRight, ctx, RAMP_MS);
 
-                    // Main channel gains - Quadrant uses hard panning for maximum separation
-                    let leftChannelGain, rightChannelGain;
-                    if (isHardPan) {
-                        // HARD PAN: When right, left is silent. When left, right is silent.
-                        // panPosition: -1 = full left, 0 = center, +1 = full right
-                        if (panPosition > 0.1) {
-                            // Panning right: left ear gets less/none
-                            leftChannelGain = Math.max(0, 1 - panPosition * 2); // Drops to 0 at pan=0.5+
-                            rightChannelGain = 1;
-                        } else if (panPosition < -0.1) {
-                            // Panning left: right ear gets less/none
-                            leftChannelGain = 1;
-                            rightChannelGain = Math.max(0, 1 + panPosition * 2); // Drops to 0 at pan=-0.5+
-                        } else {
-                            // Center (back/front): both ears equal
-                            leftChannelGain = 0.5;
-                            rightChannelGain = 0.5;
-                        }
-                    } else {
-                        // Standard soft panning for other patterns
-                        leftChannelGain = (1 - panPosition) * 0.5; // 0.0 to 1.0
-                        rightChannelGain = (1 + panPosition) * 0.5; // 0.0 to 1.0
-                    }
-
-                    // Apply depth multiplier for 3D spatial patterns
-                    const targetLeftGain = Math.max(0.001, leftChannelGain * normalizationFactor * depthGainMultiplier);
-                    const targetRightGain = Math.max(0.001, rightChannelGain * normalizationFactor * depthGainMultiplier);
-
-                    // Cross-channel gains - ZERO for quadrant (hard pan), small for others
-                    const targetLeftToRight = isHardPan ? 0.001 : Math.max(0.001, rightChannelGain * crossChannelMix * normalizationFactor);
-                    const targetRightToLeft = isHardPan ? 0.001 : Math.max(0.001, leftChannelGain * crossChannelMix * normalizationFactor);
-
-                    // Delay/cross-delay gains - minimal for quadrant to keep separation clean
-                    const delayBase = isHardPan ? 0.02 : 0.05 * currentSpatialDepth;
-                    const crossDelayBase = isHardPan ? 0 : 0.03 * currentSpatialDepth;
-                    const targetDelayLeft = Math.max(0.0001, delayBase * Math.abs(panPosition));
-                    const targetDelayRight = Math.max(0.0001, delayBase * Math.abs(panPosition));
-                    const targetCrossDelayLeft = Math.max(0.0001, crossDelayBase * Math.abs(panPosition));
-                    const targetCrossDelayRight = Math.max(0.0001, crossDelayBase * Math.abs(panPosition));
-                    
-                    // Use exponentialRampToValueAtTime for smoother transitions (prevents clicks better than linear)
-                    const now = ctx.currentTime;
-                    const rampSec = 0.1; // 100ms ramp for perceptible movement
-                    const rampTime = now + rampSec;
-                    
-                    // Clamp to prevent automation errors
-                    const clamp = (val) => Math.max(0.0001, Math.min(1, val));
-                    
-                    nodes.leftToLeftGain.gain.setValueAtTime(clamp(nodes.leftToLeftGain.gain.value), now);
-                    nodes.leftToLeftGain.gain.exponentialRampToValueAtTime(clamp(targetLeftGain), rampTime);
-                    
-                    nodes.rightToRightGain.gain.setValueAtTime(clamp(nodes.rightToRightGain.gain.value), now);
-                    nodes.rightToRightGain.gain.exponentialRampToValueAtTime(clamp(targetRightGain), rampTime);
-                    
-                    nodes.leftToRightGain.gain.setValueAtTime(clamp(nodes.leftToRightGain.gain.value), now);
-                    nodes.leftToRightGain.gain.exponentialRampToValueAtTime(clamp(targetLeftToRight), rampTime);
-                    
-                    nodes.rightToLeftGain.gain.setValueAtTime(clamp(nodes.rightToLeftGain.gain.value), now);
-                    nodes.rightToLeftGain.gain.exponentialRampToValueAtTime(clamp(targetRightToLeft), rampTime);
-
-                    // Ramp delay/cross-delay gains as well to enhance spatial cues
-                    if (nodes.delayGainLeft) {
-                        nodes.delayGainLeft.gain.setValueAtTime(clamp(nodes.delayGainLeft.gain.value), now);
-                        nodes.delayGainLeft.gain.exponentialRampToValueAtTime(clamp(targetDelayLeft), rampTime);
-                    }
-                    if (nodes.delayGainRight) {
-                        nodes.delayGainRight.gain.setValueAtTime(clamp(nodes.delayGainRight.gain.value), now);
-                        nodes.delayGainRight.gain.exponentialRampToValueAtTime(clamp(targetDelayRight), rampTime);
-                    }
-                    if (nodes.crossGainLeft) {
-                        nodes.crossGainLeft.gain.setValueAtTime(clamp(nodes.crossGainLeft.gain.value), now);
-                        nodes.crossGainLeft.gain.exponentialRampToValueAtTime(clamp(targetCrossDelayLeft), rampTime);
-                    }
-                    if (nodes.crossGainRight) {
-                        nodes.crossGainRight.gain.setValueAtTime(clamp(nodes.crossGainRight.gain.value), now);
-                        nodes.crossGainRight.gain.exponentialRampToValueAtTime(clamp(targetCrossDelayRight), rampTime);
-                    }
-
-                    // Dual Track: Apply inverted gains to Track 2 if enabled
-                    if (dualTrackEnabledRef.current && nodes.track2LeftToLeftGain) {
-                        // Track 2 uses inverted pan position (opposite ear)
-                        let track2PanPosition;
-
-                        if (dualTrackModeRef.current === 'independent') {
-                            // Independent mode: Track 2 has its own speed
-                            const track2Speed = track2SpeedRef.current;
-                            const track2EffectiveSpeed = dualTrackVariableSpeedRef.current
-                                ? calculateVariableSpeed(time, track2Speed)
-                                : track2Speed;
-                            const track2Angle = 2 * Math.PI * track2EffectiveSpeed * time;
-                            // Calculate Track 2's own pan position, then invert
-                            track2PanPosition = -Math.sin(track2Angle) * currentIntensity;
-                        } else {
-                            // Synced mode: Same movement, just inverted
-                            track2PanPosition = -panPosition;
-                        }
-
-                        // Calculate Track 2 gains (inverted from Track 1)
-                        // Apply 0.5x gain reduction to prevent clipping (two tracks playing)
-                        const dualTrackGainReduction = 0.5;
-                        let t2LeftGain, t2RightGain;
-
-                        if (isHardPan) {
-                            if (track2PanPosition > 0.1) {
-                                t2LeftGain = Math.max(0, 1 - track2PanPosition * 2);
-                                t2RightGain = 1;
-                            } else if (track2PanPosition < -0.1) {
-                                t2LeftGain = 1;
-                                t2RightGain = Math.max(0, 1 + track2PanPosition * 2);
-                            } else {
-                                t2LeftGain = 0.5;
-                                t2RightGain = 0.5;
-                            }
-                        } else {
-                            t2LeftGain = (1 - track2PanPosition) * 0.5;
-                            t2RightGain = (1 + track2PanPosition) * 0.5;
-                        }
-
-                        // Apply normalization and dual track gain reduction
-                        const t2TargetLeft = clamp(t2LeftGain * normalizationFactor * dualTrackGainReduction * depthGainMultiplier);
-                        const t2TargetRight = clamp(t2RightGain * normalizationFactor * dualTrackGainReduction * depthGainMultiplier);
-                        const t2CrossGain = clamp(crossChannelMix * normalizationFactor * dualTrackGainReduction);
-
-                        // Apply gains to Track 2 nodes
-                        nodes.track2LeftToLeftGain.gain.setValueAtTime(clamp(nodes.track2LeftToLeftGain.gain.value), now);
-                        nodes.track2LeftToLeftGain.gain.exponentialRampToValueAtTime(t2TargetLeft, rampTime);
-
-                        nodes.track2RightToRightGain.gain.setValueAtTime(clamp(nodes.track2RightToRightGain.gain.value), now);
-                        nodes.track2RightToRightGain.gain.exponentialRampToValueAtTime(t2TargetRight, rampTime);
-
-                        nodes.track2LeftToRightGain.gain.setValueAtTime(clamp(nodes.track2LeftToRightGain.gain.value), now);
-                        nodes.track2LeftToRightGain.gain.exponentialRampToValueAtTime(t2CrossGain, rampTime);
-
-                        nodes.track2RightToLeftGain.gain.setValueAtTime(clamp(nodes.track2RightToLeftGain.gain.value), now);
-                        nodes.track2RightToLeftGain.gain.exponentialRampToValueAtTime(t2CrossGain, rampTime);
+                    // Dual Track: inverted gains on Track 2 (0.5x reduction to prevent clipping)
+                    if (rotationState.track2 && nodes.track2LeftToLeftGain) {
+                        applyGainRamp(nodes.track2LeftToLeftGain, rotationState.track2.leftToLeft, ctx, RAMP_MS);
+                        applyGainRamp(nodes.track2RightToRightGain, rotationState.track2.rightToRight, ctx, RAMP_MS);
+                        applyGainRamp(nodes.track2LeftToRightGain, rotationState.track2.leftToRight, ctx, RAMP_MS);
+                        applyGainRamp(nodes.track2RightToLeftGain, rotationState.track2.rightToLeft, ctx, RAMP_MS);
                     }
 
                     // Increment time according to interval (seconds)
@@ -9758,6 +9548,7 @@ function App() {
                     const demoTracks = PlaylistManager.createDemoTracks(manifest);
 
                     setPlaylist(demoTracks);
+                    playlistRef.current = demoTracks; // Sync eagerly so autoPlay sees the new list before re-render
                     setCurrentTrackIndex(null);
 
                     showToast(`Loaded "${manifest.name}" with ${demoTracks.length} tracks`, 'success');
@@ -9766,7 +9557,7 @@ function App() {
                     if (autoPlay && demoTracks.length > 0) {
                         // Use queueMicrotask for immediate execution after state update
                         queueMicrotask(() => {
-                            playTrackRef.current(0);
+                            playTrack(0);
                         });
                     }
 

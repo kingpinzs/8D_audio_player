@@ -28,15 +28,19 @@
     };
 
     /**
-     * Calculate variable speed (creates organic tempo drift)
+     * Calculate variable speed for dual track mode
+     * Creates cyclical speed variation: fast -> slow -> fast -> normal -> repeat
      * @param {number} time - Current time in seconds
      * @param {number} baseSpeed - Base speed value (0-1)
-     * @returns {number} Variable speed
+     * @returns {number} Variable speed (0.5x to 1.5x base speed)
      */
     const calculateVariableSpeed = (time, baseSpeed) => {
-        // Create subtle variation using sine waves
-        const variation = Math.sin(time * 0.3) * 0.1 + Math.sin(time * 0.7) * 0.05;
-        return Math.max(0.1, Math.min(1, baseSpeed + variation));
+        // Primary cycle: ~8 seconds
+        const primaryCycle = Math.sin(time * 0.125 * 2 * Math.PI);
+        // Secondary modulation: ~20 seconds
+        const secondaryCycle = Math.sin(time * 0.05 * 2 * Math.PI);
+        const speedMultiplier = 1.0 + 0.3 * primaryCycle + 0.2 * secondaryCycle;
+        return baseSpeed * speedMultiplier;
     };
 
     /**
