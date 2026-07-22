@@ -5675,12 +5675,7 @@ function App() {
             const [playlistSearch, setPlaylistSearch] = useState('');
 
             // Saved playlists
-            const [savedPlaylists, setSavedPlaylists] = useState(() => {
-                try {
-                    const saved = localStorage.getItem('mpe_8d_saved_playlists');
-                    return saved ? JSON.parse(saved) : [];
-                } catch { return []; }
-            });
+            const [savedPlaylists, setSavedPlaylists] = useState(() => PlaylistManager.getSavedPlaylists());
             const [showPlaylistModal, setShowPlaylistModal] = useState(false);
             const [newPlaylistName, setNewPlaylistName] = useState('');
 
@@ -9712,55 +9707,20 @@ function App() {
             // ==================== END TIMER FUNCTIONS ====================
 
             // ==================== PLAYLIST SAVE/LOAD FUNCTIONS ====================
+            // Storage/restore/demo-manifest logic lives in PlaylistManager (js/playlist-manager.js)
 
             const savePlaylist = (name) => {
-                if (!name.trim() || playlist.length === 0) return;
+                const saved = PlaylistManager.savePlaylist(name, playlist);
+                if (!saved) return;
 
-                // For local files, we can only save metadata (not the file itself)
-                // For streams, we save the URL
-                const playlistData = playlist.map(track => ({
-                    name: track.name,
-                    source: track.source,
-                    url: track.url || null,
-                    // Can't persist File objects, so local files won't restore
-                    isLocal: track.source === 'local'
-                }));
-
-                const newPlaylist = {
-                    id: Date.now(),
-                    name: name.trim(),
-                    tracks: playlistData,
-                    trackCount: playlist.length,
-                    createdAt: new Date().toISOString()
-                };
-
-                setSavedPlaylists(prev => {
-                    const updated = [...prev, newPlaylist];
-                    try {
-                        localStorage.setItem('mpe_8d_saved_playlists', JSON.stringify(updated));
-                    } catch (e) {
-                        console.warn('Failed to save playlist:', e);
-                    }
-                    return updated;
-                });
-
+                setSavedPlaylists(PlaylistManager.getSavedPlaylists());
                 setNewPlaylistName('');
                 showToast(`Playlist "${name}" saved!`, 'success');
             };
 
             const loadPlaylist = (savedPlaylist) => {
-                // Filter out local files (can't be restored) and load streams
-                const restoredTracks = savedPlaylist.tracks
-                    .filter(track => !track.isLocal && track.url)
-                    .map((track, index) => ({
-                        id: Date.now() + index,
-                        name: track.name,
-                        source: track.source,
-                        url: track.url,
-                        file: null
-                    }));
-
-                const localCount = savedPlaylist.tracks.filter(t => t.isLocal).length;
+                // Local files can't be restored (File objects don't persist); streams reload by URL
+                const { tracks: restoredTracks, localCount, name } = PlaylistManager.restorePlaylist(savedPlaylist);
 
                 if (restoredTracks.length === 0 && localCount > 0) {
                     showToast(`This playlist only had local files which can't be restored. Add them again.`, 'warning');
@@ -9775,20 +9735,13 @@ function App() {
                 if (localCount > 0) {
                     showToast(`Loaded ${restoredTracks.length} tracks. ${localCount} local files need to be re-added.`, 'info');
                 } else {
-                    showToast(`Loaded "${savedPlaylist.name}" with ${restoredTracks.length} tracks`, 'success');
+                    showToast(`Loaded "${name}" with ${restoredTracks.length} tracks`, 'success');
                 }
             };
 
             const deletePlaylist = (playlistId) => {
-                setSavedPlaylists(prev => {
-                    const updated = prev.filter(p => p.id !== playlistId);
-                    try {
-                        localStorage.setItem('mpe_8d_saved_playlists', JSON.stringify(updated));
-                    } catch (e) {
-                        console.warn('Failed to update saved playlists:', e);
-                    }
-                    return updated;
-                });
+                PlaylistManager.deletePlaylist(playlistId);
+                setSavedPlaylists(PlaylistManager.getSavedPlaylists());
                 showToast('Playlist deleted', 'info');
             };
 
@@ -9801,24 +9754,9 @@ function App() {
                         context.resume();
                     }
 
-                    // Fetch the tracks manifest (parallel with context resume)
-                    const response = await fetch('tracks/tracks.json');
-                    if (!response.ok) {
-                        throw new Error(`Failed to load tracks manifest: ${response.status}`);
-                    }
+                    const manifest = await PlaylistManager.loadDemoManifest();
+                    const demoTracks = PlaylistManager.createDemoTracks(manifest);
 
-                    const manifest = await response.json();
-
-                    // Create track objects from manifest
-                    const demoTracks = manifest.tracks.map((track, index) => ({
-                        id: Date.now() + index,
-                        name: track.name,
-                        source: 'demo',
-                        url: `tracks/${encodeURIComponent(track.file)}`,
-                        file: null
-                    }));
-
-                    // Set the playlist
                     setPlaylist(demoTracks);
                     setCurrentTrackIndex(null);
 
@@ -12600,7 +12538,7 @@ return (
                                                         <button
                                                             type="button"
                                                             title="Remove"
-                                                            onClick={() => removeTrack(index)}
+                                                            onClick={() => removeFromPlaylist(track.id)}
                                                             style={{
                                                                 padding: '4px 6px',
                                                                 background: 'rgba(239,68,68,0.2)',
