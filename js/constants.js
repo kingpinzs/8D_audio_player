@@ -12,6 +12,39 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
+    // One-time migration of legacy storage keys to the unified mp3_8d_ prefix.
+    // Runs at load (constants.js is the first module loaded) so every later
+    // reader sees data under the new keys. Existing values win over defaults;
+    // an already-populated new key is never overwritten.
+    (function migrateLegacyStorageKeys() {
+        const RENAMES = {
+            'mpe_8d_custom_presets': 'mp3_8d_custom_presets',
+            'mpe_8d_preset_order': 'mp3_8d_preset_order',
+            'mpe_8d_saved_playlists': 'mp3_8d_saved_playlists',
+            'mpe_8d_track_ratings': 'mp3_8d_track_ratings',
+            'mpe_8d_calibration': 'mp3_8d_calibration',
+            'mpe_8d_calibration_dismissed': 'mp3_8d_calibration_dismissed',
+            'mpe_8d_skip_sensor_consent': 'mp3_8d_skip_sensor_consent',
+            'activePresetId': 'mp3_8d_active_preset_id',
+            'playlist': 'mp3_8d_playlist',
+            'skipBreathingRitual': 'mp3_8d_skip_breathing_ritual'
+        };
+        try {
+            Object.keys(RENAMES).forEach((oldKey) => {
+                const newKey = RENAMES[oldKey];
+                const value = localStorage.getItem(oldKey);
+                if (value !== null) {
+                    if (localStorage.getItem(newKey) === null) {
+                        localStorage.setItem(newKey, value);
+                    }
+                    localStorage.removeItem(oldKey);
+                }
+            });
+        } catch (e) {
+            // Storage unavailable (private mode etc.) — app falls back to defaults
+        }
+    })();
+
     const MODE_LIBRARY = [
         {
             id: 'focus',
@@ -116,8 +149,8 @@
         }
     };
 
-    const CUSTOM_PRESETS_KEY = 'mpe_8d_custom_presets';
-    const PRESET_ORDER_KEY = 'mpe_8d_preset_order';
+    const CUSTOM_PRESETS_KEY = 'mp3_8d_custom_presets';
+    const PRESET_ORDER_KEY = 'mp3_8d_preset_order';
 
     const SUPPORTED_MIME_TYPES = [
         'audio/mpeg',      // .mp3

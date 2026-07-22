@@ -13,8 +13,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    const PRESETS_KEY = 'mpe_8d_custom_presets';
-    const ORDER_KEY = 'mpe_8d_preset_order';
+    const PRESETS_KEY = 'mp3_8d_custom_presets';
+    const ORDER_KEY = 'mp3_8d_preset_order';
 
     /**
      * Load custom presets from localStorage

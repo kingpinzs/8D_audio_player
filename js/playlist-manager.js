@@ -13,7 +13,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    const STORAGE_KEY = 'mpe_8d_saved_playlists';
+    const STORAGE_KEY = 'mp3_8d_saved_playlists';
     const DEMO_MANIFEST_PATH = 'tracks/tracks.json';
 
     /**

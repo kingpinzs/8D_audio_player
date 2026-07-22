@@ -241,7 +241,7 @@
             // Load saved calibration settings on mount
             React.useEffect(() => {
                 try {
-                    const saved = localStorage.getItem('mpe_8d_calibration');
+                    const saved = localStorage.getItem('mp3_8d_calibration');
                     if (saved) {
                         const data = JSON.parse(saved);
                         console.log('[Calibration] Loading saved settings:', data);
@@ -1235,7 +1235,7 @@
                                                         savedAt: Date.now()
                                                     };
                                                     try {
-                                                        localStorage.setItem('mpe_8d_calibration', JSON.stringify(calibrationData));
+                                                        localStorage.setItem('mp3_8d_calibration', JSON.stringify(calibrationData));
                                                         console.log('[Calibration] Saved to localStorage:', calibrationData);
                                                         // Notify parent that calibration is complete
                                                         if (onCalibrationComplete) {
@@ -2297,9 +2297,9 @@
                 setSkipConsent(checked);
                 try {
                     if (checked) {
-                        localStorage.setItem('mpe_8d_skip_sensor_consent', 'true');
+                        localStorage.setItem('mp3_8d_skip_sensor_consent', 'true');
                     } else {
-                        localStorage.removeItem('mpe_8d_skip_sensor_consent');
+                        localStorage.removeItem('mp3_8d_skip_sensor_consent');
                     }
                 } catch (err) {
                     console.warn('[SensorBridge] Failed to persist consent preference:', err);
@@ -5574,7 +5574,7 @@ function App() {
             // Persisted to localStorage, keyed by track name since URLs can change
             const [trackRatings, setTrackRatings] = useState(() => {
                 try {
-                    const saved = localStorage.getItem('mpe_8d_track_ratings');
+                    const saved = localStorage.getItem('mp3_8d_track_ratings');
                     return saved ? JSON.parse(saved) : {};
                 } catch { return {}; }
             });
@@ -5607,7 +5607,7 @@ function App() {
             // EQ Settings (dB values, -12 to +12) - Load from saved calibration
             const [eqBass, setEqBass] = useState(() => {
                 try {
-                    const saved = localStorage.getItem('mpe_8d_calibration');
+                    const saved = localStorage.getItem('mp3_8d_calibration');
                     if (saved) {
                         const data = JSON.parse(saved);
                         return data.eq?.bass ?? 0;
@@ -5617,7 +5617,7 @@ function App() {
             });
             const [eqMid, setEqMid] = useState(() => {
                 try {
-                    const saved = localStorage.getItem('mpe_8d_calibration');
+                    const saved = localStorage.getItem('mp3_8d_calibration');
                     if (saved) {
                         const data = JSON.parse(saved);
                         return data.eq?.mid ?? 0;
@@ -5627,7 +5627,7 @@ function App() {
             });
             const [eqTreble, setEqTreble] = useState(() => {
                 try {
-                    const saved = localStorage.getItem('mpe_8d_calibration');
+                    const saved = localStorage.getItem('mp3_8d_calibration');
                     if (saved) {
                         const data = JSON.parse(saved);
                         return data.eq?.treble ?? 0;
@@ -5637,7 +5637,7 @@ function App() {
             });
             const [eqClarity, setEqClarity] = useState(() => {
                 try {
-                    const saved = localStorage.getItem('mpe_8d_calibration');
+                    const saved = localStorage.getItem('mp3_8d_calibration');
                     if (saved) {
                         const data = JSON.parse(saved);
                         return data.eq?.clarity ?? 0;
@@ -5719,7 +5719,7 @@ function App() {
             const [deviceToForget, setDeviceToForget] = useState(null);
             const [skipSensorConsent, setSkipSensorConsent] = useState(() => {
                 try {
-                    return localStorage.getItem('mpe_8d_skip_sensor_consent') === 'true';
+                    return localStorage.getItem('mp3_8d_skip_sensor_consent') === 'true';
                 } catch {
                     return false;
                 }
@@ -5786,14 +5786,14 @@ function App() {
             const [showFirstRunPrompt, setShowFirstRunPrompt] = useState(false);
             const [hasRunCalibration, setHasRunCalibration] = useState(() => {
                 try {
-                    return localStorage.getItem('mpe_8d_calibration') !== null;
+                    return localStorage.getItem('mp3_8d_calibration') !== null;
                 } catch {
                     return false;
                 }
             });
             const [calibrationDismissed, setCalibrationDismissed] = useState(() => {
                 try {
-                    return localStorage.getItem('mpe_8d_calibration_dismissed') === 'true';
+                    return localStorage.getItem('mp3_8d_calibration_dismissed') === 'true';
                 } catch {
                     return false;
                 }
@@ -6199,13 +6199,13 @@ function App() {
                 // CSS classes applied via separate sync effect below
 
                 // Story 3-1: Load saved active preset with validation
-                const savedActivePreset = localStorage.getItem('activePresetId');
+                const savedActivePreset = localStorage.getItem('mp3_8d_active_preset_id');
                 if (savedActivePreset) {
                     const presetExists = MODE_LIBRARY.some(m => m.id === savedActivePreset);
                     setActivePresetId(presetExists ? savedActivePreset : 'focus');
                 }
 
-                const savedPlaylist = localStorage.getItem('playlist');
+                const savedPlaylist = localStorage.getItem('mp3_8d_playlist');
                 if (savedPlaylist) {
                     try {
                         const parsed = JSON.parse(savedPlaylist);
@@ -6446,7 +6446,7 @@ function App() {
             // Story 3-1: Persist active preset selection
             useEffect(() => {
                 try {
-                    localStorage.setItem('activePresetId', activePresetId);
+                    localStorage.setItem('mp3_8d_active_preset_id', activePresetId);
                 } catch (err) {
                     console.error('Failed to persist activePresetId:', err);
                 }
@@ -6479,9 +6479,9 @@ function App() {
                         originalUrl: track.originalUrl || null
                     }));
                 if (serialized.length > 0) {
-                    localStorage.setItem('playlist', JSON.stringify(serialized));
+                    localStorage.setItem('mp3_8d_playlist', JSON.stringify(serialized));
                 } else {
-                    localStorage.removeItem('playlist');
+                    localStorage.removeItem('mp3_8d_playlist');
                 }
             }, [playlist]);
 
@@ -9649,7 +9649,7 @@ function App() {
                     };
                     // Persist to localStorage
                     try {
-                        localStorage.setItem('mpe_8d_track_ratings', JSON.stringify(updated));
+                        localStorage.setItem('mp3_8d_track_ratings', JSON.stringify(updated));
                     } catch (e) {
                         console.warn('Failed to save track ratings:', e);
                     }
@@ -10061,7 +10061,7 @@ return (
                                             setShowFirstRunPrompt(false);
                                             setCalibrationDismissed(true);
                                             try {
-                                                localStorage.setItem('mpe_8d_calibration_dismissed', 'true');
+                                                localStorage.setItem('mp3_8d_calibration_dismissed', 'true');
                                             } catch (e) {}
                                         }}
                                         style={{

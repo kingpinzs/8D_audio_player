@@ -67,8 +67,8 @@ const MODE_LIBRARY = [
 ];
 
 // Helper functions (copied from implementation)
-const CUSTOM_PRESETS_KEY = 'mpe_8d_custom_presets';
-const PRESET_ORDER_KEY = 'mpe_8d_preset_order';
+const CUSTOM_PRESETS_KEY = 'mp3_8d_custom_presets';
+const PRESET_ORDER_KEY = 'mp3_8d_preset_order';
 
 const loadCustomPresets = (storage) => {
     try {

@@ -14,7 +14,7 @@
     'use strict';
 
     const DEFAULT_DURATION = 20; // seconds
-    const SKIP_PREF_KEY = 'skipBreathingRitual';
+    const SKIP_PREF_KEY = 'mp3_8d_skip_breathing_ritual';
 
     // Breathing phases
     const PHASES = {
