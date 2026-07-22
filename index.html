@@ -5933,8 +5933,8 @@ function App() {
             const toastTimeoutRef = useRef(null);
             const activeSessionIdRef = useRef(null);
             const sessionRitualFlagRef = useRef(false);
-            const sleepTimerIntervalRef = useRef(null);
-            const pomodoroIntervalRef = useRef(null);
+            const sleepTimerControllerRef = useRef(TimerManager.createSleepTimer());
+            const pomodoroControllerRef = useRef(TimerManager.createPomodoroTimer());
             const previousModeRef = useRef(null); // For restoring mode after pomodoro break
 
             // Audio parameter refs - allows rotation interval to read current values
@@ -9572,66 +9572,42 @@ function App() {
             };
 
             // ==================== TIMER FUNCTIONS ====================
+            // Countdown/phase machinery lives in TimerManager (js/timer-manager.js);
+            // React state, toasts, and audio actions are applied via callbacks.
 
-            // Format seconds to MM:SS or HH:MM:SS
-            const formatTimerDisplay = (totalSeconds) => {
-                const hours = Math.floor(totalSeconds / 3600);
-                const minutes = Math.floor((totalSeconds % 3600) / 60);
-                const seconds = totalSeconds % 60;
-
-                if (hours > 0) {
-                    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                }
-                return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            };
+            const formatTimerDisplay = TimerManager.formatTimerDisplay;
 
             // Sleep Timer Functions
             const startSleepTimer = () => {
-                if (sleepTimerIntervalRef.current) {
-                    clearInterval(sleepTimerIntervalRef.current);
-                }
+                sleepTimerControllerRef.current.start(sleepTimerDuration, {
+                    onStart: (duration) => {
+                        setSleepTimerSeconds(duration);
+                        setSleepTimerActive(true);
+                        sleepTimerActiveRef.current = true; // Track for mood prompt suppression
+                        showToast(`Sleep timer set for ${formatTimerDisplay(duration)}`, 'info');
+                    },
+                    onTick: (seconds) => setSleepTimerSeconds(seconds),
+                    onComplete: () => {
+                        setSleepTimerActive(false);
+                        sleepTimerActiveRef.current = false; // Clear for mood prompt suppression
+                        setSleepTimerSeconds(0);
 
-                setSleepTimerSeconds(sleepTimerDuration);
-                setSleepTimerActive(true);
-                sleepTimerActiveRef.current = true; // Track for mood prompt suppression
-                showToast(`Sleep timer set for ${formatTimerDisplay(sleepTimerDuration)}`, 'info');
-
-                sleepTimerIntervalRef.current = setInterval(() => {
-                    setSleepTimerSeconds(prev => {
-                        if (prev <= 1) {
-                            // Timer finished - fade out and stop
-                            clearInterval(sleepTimerIntervalRef.current);
-                            sleepTimerIntervalRef.current = null;
-                            setSleepTimerActive(false);
-                            sleepTimerActiveRef.current = false; // Clear for mood prompt suppression
-
-                            // Fade out audio over 5 seconds
-                            if (audioElementRef.current && gainNodeRef.current) {
-                                const fadeInterval = setInterval(() => {
-                                    if (gainNodeRef.current && gainNodeRef.current.gain.value > 0.05) {
-                                        gainNodeRef.current.gain.value *= 0.9;
-                                    } else {
-                                        clearInterval(fadeInterval);
-                                        if (audioElementRef.current) {
-                                            audioElementRef.current.pause();
-                                            setIsPlaying(false);
-                                        }
-                                        showToast('Sleep timer ended. Sweet dreams!', 'success');
-                                    }
-                                }, 200);
-                            }
-                            return 0;
+                        // Fade out audio over 5 seconds, then pause
+                        if (audioElementRef.current && gainNodeRef.current) {
+                            TimerManager.fadeOutAudio(gainNodeRef.current, 5000, () => {
+                                if (audioElementRef.current) {
+                                    audioElementRef.current.pause();
+                                    setIsPlaying(false);
+                                }
+                                showToast('Sleep timer ended. Sweet dreams!', 'success');
+                            });
                         }
-                        return prev - 1;
-                    });
-                }, 1000);
+                    }
+                });
             };
 
             const stopSleepTimer = () => {
-                if (sleepTimerIntervalRef.current) {
-                    clearInterval(sleepTimerIntervalRef.current);
-                    sleepTimerIntervalRef.current = null;
-                }
+                sleepTimerControllerRef.current.stop();
                 setSleepTimerActive(false);
                 sleepTimerActiveRef.current = false; // Clear for mood prompt suppression
                 setSleepTimerSeconds(0);
@@ -9640,104 +9616,84 @@ function App() {
 
             // Pomodoro Timer Functions
             const startPomodoro = () => {
-                if (pomodoroIntervalRef.current) {
-                    clearInterval(pomodoroIntervalRef.current);
-                }
-
                 // Store current mode to restore after break
                 previousModeRef.current = activePresetId;
 
-                setPomodoroPhase('work');
-                setPomodoroSeconds(pomodoroWorkDuration * 60);
-                setPomodoroActive(true);
-                setPomodoroCycles(0);
-                showToast(`Pomodoro started: ${pomodoroWorkDuration} min work`, 'info');
+                pomodoroControllerRef.current.start(
+                    { workMinutes: pomodoroWorkDuration, breakMinutes: pomodoroBreakDuration },
+                    {
+                        onStart: ({ seconds }) => {
+                            setPomodoroPhase('work');
+                            setPomodoroSeconds(seconds);
+                            setPomodoroActive(true);
+                            setPomodoroCycles(0);
+                            showToast(`Pomodoro started: ${pomodoroWorkDuration} min work`, 'info');
 
-                // Start playing if not already
-                if (!isPlaying && playlist.length > 0) {
-                    togglePlayPause();
-                }
+                            // Start playing if not already
+                            if (!isPlaying && playlist.length > 0) {
+                                togglePlayPause();
+                            }
+                        },
+                        onTick: ({ seconds }) => setPomodoroSeconds(seconds),
+                        onWorkEnd: ({ cycles }) => {
+                            setPomodoroCycles(cycles);
+                            showToast('Work phase complete! Take a break.', 'success');
 
-                pomodoroIntervalRef.current = setInterval(() => {
-                    setPomodoroSeconds(prev => {
-                        if (prev <= 1) {
-                            // Phase ended
-                            setPomodoroPhase(currentPhase => {
-                                if (currentPhase === 'work') {
-                                    // Work phase ended, start break
-                                    setPomodoroCycles(c => c + 1);
-                                    showToast('Work phase complete! Take a break.', 'success');
-
-                                    // Handle break action
-                                    if (pomodoroBreakAction === 'pause') {
-                                        if (audioElementRef.current) {
-                                            audioElementRef.current.pause();
-                                            setIsPlaying(false);
-                                        }
-                                    } else if (pomodoroBreakAction === 'energize') {
-                                        // Switch to energize mode for break
-                                        const energizeIndex = MODE_LIBRARY.findIndex(m => m.id === 'energize');
-                                        if (energizeIndex >= 0) {
-                                            setModeIndex(energizeIndex);
-                                            setActivePresetId('energize');
-                                        }
-                                    } else if (pomodoroBreakAction === 'calm') {
-                                        // Switch to calm mode for break
-                                        const calmIndex = MODE_LIBRARY.findIndex(m => m.id === 'calm');
-                                        if (calmIndex >= 0) {
-                                            setModeIndex(calmIndex);
-                                            setActivePresetId('calm');
-                                        }
-                                    }
-
-                                    return 'break';
-                                } else {
-                                    // Break ended, start work
-                                    showToast('Break over! Time to focus.', 'info');
-
-                                    // Restore previous mode
-                                    if (previousModeRef.current) {
-                                        const prevIndex = MODE_LIBRARY.findIndex(m => m.id === previousModeRef.current);
-                                        if (prevIndex >= 0) {
-                                            setModeIndex(prevIndex);
-                                            setActivePresetId(previousModeRef.current);
-                                        }
-                                    }
-
-                                    // Resume playing if paused during break
-                                    if (!isPlaying && playlist.length > 0 && audioElementRef.current) {
-                                        audioElementRef.current.play();
-                                        setIsPlaying(true);
-                                    }
-
-                                    return 'work';
+                            // Handle break action
+                            if (pomodoroBreakAction === 'pause') {
+                                if (audioElementRef.current) {
+                                    audioElementRef.current.pause();
+                                    setIsPlaying(false);
                                 }
-                            });
+                            } else if (pomodoroBreakAction === 'energize') {
+                                // Switch to energize mode for break
+                                const energizeIndex = MODE_LIBRARY.findIndex(m => m.id === 'energize');
+                                if (energizeIndex >= 0) {
+                                    setModeIndex(energizeIndex);
+                                    setActivePresetId('energize');
+                                }
+                            } else if (pomodoroBreakAction === 'calm') {
+                                // Switch to calm mode for break
+                                const calmIndex = MODE_LIBRARY.findIndex(m => m.id === 'calm');
+                                if (calmIndex >= 0) {
+                                    setModeIndex(calmIndex);
+                                    setActivePresetId('calm');
+                                }
+                            }
+                        },
+                        onBreakEnd: () => {
+                            showToast('Break over! Time to focus.', 'info');
 
-                            // Return the new duration
-                            return pomodoroPhase === 'work'
-                                ? pomodoroBreakDuration * 60
-                                : pomodoroWorkDuration * 60;
-                        }
-                        return prev - 1;
-                    });
-                }, 1000);
+                            // Restore previous mode
+                            if (previousModeRef.current) {
+                                const prevIndex = MODE_LIBRARY.findIndex(m => m.id === previousModeRef.current);
+                                if (prevIndex >= 0) {
+                                    setModeIndex(prevIndex);
+                                    setActivePresetId(previousModeRef.current);
+                                }
+                            }
+
+                            // Resume playing if paused during break
+                            if (!isPlaying && playlist.length > 0 && audioElementRef.current) {
+                                audioElementRef.current.play();
+                                setIsPlaying(true);
+                            }
+                        },
+                        onPhaseChange: ({ phase }) => setPomodoroPhase(phase)
+                    }
+                );
             };
 
             const stopPomodoro = () => {
-                if (pomodoroIntervalRef.current) {
-                    clearInterval(pomodoroIntervalRef.current);
-                    pomodoroIntervalRef.current = null;
-                }
-
                 // Restore previous mode if we were on break
-                if (pomodoroPhase === 'break' && previousModeRef.current) {
+                if (pomodoroControllerRef.current.getPhase() === 'break' && previousModeRef.current) {
                     const prevIndex = MODE_LIBRARY.findIndex(m => m.id === previousModeRef.current);
                     if (prevIndex >= 0) {
                         setModeIndex(prevIndex);
                         setActivePresetId(previousModeRef.current);
                     }
                 }
+                pomodoroControllerRef.current.stop();
 
                 setPomodoroActive(false);
                 setPomodoroPhase('work');
@@ -9748,12 +9704,8 @@ function App() {
             // Cleanup timers on unmount
             useEffect(() => {
                 return () => {
-                    if (sleepTimerIntervalRef.current) {
-                        clearInterval(sleepTimerIntervalRef.current);
-                    }
-                    if (pomodoroIntervalRef.current) {
-                        clearInterval(pomodoroIntervalRef.current);
-                    }
+                    sleepTimerControllerRef.current.stop();
+                    pomodoroControllerRef.current.stop();
                 };
             }, []);
 

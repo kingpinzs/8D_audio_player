@@ -259,7 +259,9 @@
         }
 
         const steps = Math.floor(duration / 200);
-        const factor = Math.pow(0.05 / gainNode.gain.value, 1 / steps);
+        // Guard: gain at/below the 0.05 floor would make the factor Infinity/NaN
+        const startGain = Math.max(gainNode.gain.value, 0.06);
+        const factor = Math.pow(0.05 / startGain, 1 / steps);
         let step = 0;
 
         const intervalId = setInterval(() => {
