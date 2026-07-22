@@ -5936,6 +5936,10 @@ function App() {
             const intensityRef = useRef(intensity);
             const spatialDepthRef = useRef(spatialDepth);
             const movementPatternRef = useRef(movementPattern);
+            // Per-preset spatial profile (itdAmount/headShadow/backDepth/hardPanThreshold);
+            // set by applyPreset, consumed by the rotation loop
+            const spatialParamsRef = useRef(null);
+            const reverbRef = useRef(null);
 
             // Dual Track refs
             const dualTrackEnabledRef = useRef(dualTrackEnabled);
@@ -6013,6 +6017,11 @@ function App() {
 
                 tearDownBinauralNodes();
                 tearDownNoiseNodes();
+
+                if (reverbRef.current) {
+                    reverbRef.current.dispose();
+                    reverbRef.current = null;
+                }
 
                 if (animationFrameRef.current) {
                     cancelAnimationFrame(animationFrameRef.current);
@@ -6969,6 +6978,14 @@ function App() {
                 const source = context.createMediaElementSource(audioElement);
                 sourceNodeRef.current = source;
 
+                // Force stereo before the splitter: ChannelSplitter uses discrete
+                // interpretation, so a mono file would leave the R-input path silent
+                // (one ear near-dead in hard-pan patterns). 'speakers' up-mixes mono to L=R.
+                const stereoEnsure = context.createGain();
+                stereoEnsure.channelCount = 2;
+                stereoEnsure.channelCountMode = 'explicit';
+                stereoEnsure.channelInterpretation = 'speakers';
+
                 const splitter = context.createChannelSplitter(2);
                 const merger = context.createChannelMerger(2);
 
@@ -6977,10 +6994,12 @@ function App() {
                 const rightToLeftGain = context.createGain();
                 const rightToRightGain = context.createGain();
 
+                // Early-reflection style delays. The old 50ms/30ms sat above the
+                // echo-fusion threshold and read as slapback, not space.
                 const delayLeft = context.createDelay();
                 const delayRight = context.createDelay();
-                delayLeft.delayTime.value = 0.05;
-                delayRight.delayTime.value = 0.05;
+                delayLeft.delayTime.value = 0.012;
+                delayRight.delayTime.value = 0.012;
 
                 const delayGainLeft = context.createGain();
                 const delayGainRight = context.createGain();
@@ -6989,8 +7008,8 @@ function App() {
 
                 const crossDelayLeft = context.createDelay();
                 const crossDelayRight = context.createDelay();
-                crossDelayLeft.delayTime.value = 0.03;
-                crossDelayRight.delayTime.value = 0.03;
+                crossDelayLeft.delayTime.value = 0.018;
+                crossDelayRight.delayTime.value = 0.018;
 
                 const crossGainLeft = context.createGain();
                 const crossGainRight = context.createGain();
@@ -7043,7 +7062,8 @@ function App() {
                     track2LpFilterRight: null
                 };
 
-                source.connect(splitter);
+                source.connect(stereoEnsure);
+                stereoEnsure.connect(splitter);
 
                 splitter.connect(leftToLeftGain, 0);
                 splitter.connect(leftToRightGain, 0);
@@ -7140,6 +7160,29 @@ function App() {
                 gainChainRef.current = gainChain;
                 gainNodeRef.current = gainChain.mainGain;
                 analyserRef.current = gainChain.analyser;
+
+                // Room/externalization: post-spatial mix feeds a reverb send whose
+                // level the rotation loop modulates (more room when "behind")
+                const reverb = AudioEngine.createReverbNode(context, gainChain.mainGain);
+                reverbRef.current = reverb;
+                mixNode.connect(reverb.sendGain);
+                rotationNodesRef.current.reverbSendGain = reverb.sendGain;
+
+                // Debug snapshot for verifying the spatial cues are actually moving
+                // (console: __spatialDebug())
+                window.__spatialDebug = () => {
+                    const n = rotationNodesRef.current;
+                    if (!n) return null;
+                    return {
+                        itdLeftMs: +(n.itdDelayLeft.delayTime.value * 1000).toFixed(3),
+                        itdRightMs: +(n.itdDelayRight.delayTime.value * 1000).toFixed(3),
+                        lpLeftHz: Math.round(n.lpFilterLeft.frequency.value),
+                        lpRightHz: Math.round(n.lpFilterRight.frequency.value),
+                        gainLL: +n.leftToLeftGain.gain.value.toFixed(4),
+                        gainRR: +n.rightToRightGain.gain.value.toFixed(4),
+                        reverbSend: n.reverbSendGain ? +n.reverbSendGain.gain.value.toFixed(3) : null
+                    };
+                };
 
                 syncBinauralChain();
                 syncNoiseLayer();
@@ -7339,10 +7382,11 @@ function App() {
                         dualTrackEnabled: dualTrackEnabledRef.current,
                         dualTrackMode: dualTrackModeRef.current,
                         track2Speed: track2SpeedRef.current,
-                        variableSpeed: dualTrackEnabledRef.current && dualTrackVariableSpeedRef.current
+                        variableSpeed: dualTrackEnabledRef.current && dualTrackVariableSpeedRef.current,
+                        spatial: spatialParamsRef.current
                     });
                     
-                    const { applyGainRamp } = SpatialProcessor;
+                    const { applyGainRamp, applyDelayRamp, applyFilterRamp } = SpatialProcessor;
                     const RAMP_MS = 100; // 100ms exponential ramp: perceptible movement, no clicks
 
                     // Main channel gains (hard pan for quadrant, soft pan otherwise — see module)
@@ -7356,6 +7400,22 @@ function App() {
                     applyGainRamp(nodes.delayGainRight, rotationState.delay.delayRight, ctx, RAMP_MS);
                     applyGainRamp(nodes.crossGainLeft, rotationState.delay.crossDelayLeft, ctx, RAMP_MS);
                     applyGainRamp(nodes.crossGainRight, rotationState.delay.crossDelayRight, ctx, RAMP_MS);
+
+                    // ITD: the far ear's sound arrives up to ~0.7ms late — the strongest
+                    // human azimuth cue. These nodes previously sat frozen at 0ms.
+                    applyDelayRamp(nodes.itdDelayLeft, rotationState.itd.left, ctx, RAMP_MS);
+                    applyDelayRamp(nodes.itdDelayRight, rotationState.itd.right, ctx, RAMP_MS);
+
+                    // Head shadow: the far ear (and everything behind the head) darkens.
+                    // These filters previously sat frozen at 20kHz.
+                    applyFilterRamp(nodes.lpFilterLeft, rotationState.filters.left, ctx, RAMP_MS);
+                    applyFilterRamp(nodes.lpFilterRight, rotationState.filters.right, ctx, RAMP_MS);
+
+                    // Room send: base level from spatialDepth, boosted when "behind"
+                    if (nodes.reverbSendGain) {
+                        const baseSend = 0.15 + 0.45 * currentSpatialDepth;
+                        applyGainRamp(nodes.reverbSendGain, baseSend * rotationState.reverbSendMultiplier, ctx, RAMP_MS);
+                    }
 
                     // Dual Track: inverted gains on Track 2 (0.5x reduction to prevent clipping)
                     if (rotationState.track2 && nodes.track2LeftToLeftGain) {
@@ -9850,11 +9910,11 @@ function App() {
                 setNoiseVolume(preset.noise.volume);
                 setVisualWaveGain(preset.noise.volume);
 
-                // NOTE: preset.spatial (itdAmount/headShadow/panCurve/...) is NOT applied here.
-                // Those states live inside the SpatialAudioTuner component; referencing their
-                // setters from App scope threw a ReferenceError that aborted applyPreset midway
-                // (dual-track, activePresetId, and preset logging never ran). Wiring presets
-                // into the tuner requires lifting that state — tracked as future work.
+                // Apply the preset's spatial profile to the rotation loop
+                // (itdAmount/headShadow/backDepth/hardPanThreshold — consumed by
+                // SpatialProcessor.calculateRotationState each tick). The
+                // SpatialAudioTuner keeps its own independent state for manual tuning.
+                spatialParamsRef.current = preset.spatial || null;
 
                 // Apply dual track settings if present
                 if (preset.dualTrack) {

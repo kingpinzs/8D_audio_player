@@ -33,10 +33,13 @@
         const mainGain = context.createGain();
         mainGain.gain.value = volume * headroom;
 
+        // Gentle glue compression only. The previous -24dB/20:1 setting acted as a
+        // second limiter that counter-compensated the spatial gain movement,
+        // flattening the front/back depth cue to near nothing.
         const compressor = context.createDynamicsCompressor();
-        compressor.threshold.value = -24;
-        compressor.knee.value = 20;
-        compressor.ratio.value = 20;
+        compressor.threshold.value = -18;
+        compressor.knee.value = 12;
+        compressor.ratio.value = 3;
         compressor.attack.value = 0.003;
         compressor.release.value = 0.25;
 
@@ -102,7 +105,9 @@
         ensureNode(destination, 'destination');
 
         const baseFreq = typeof options.baseFreq === 'number' ? options.baseFreq : 200;
-        const gainValue = typeof options.gain === 'number' ? options.gain : 0.008;
+        // 0.008 sat ~36dB under the music — fully masked. 0.04 is subtly audible
+        // under program material while staying below the noise-layer levels.
+        const gainValue = typeof options.gain === 'number' ? options.gain : 0.04;
 
         const leftOsc = context.createOscillator();
         const rightOsc = context.createOscillator();
@@ -260,6 +265,76 @@
         }
     }
 
+    /**
+     * Create a stereo reverb (room) node from a procedurally generated impulse
+     * response — exponentially decaying noise, slightly decorrelated per channel.
+     * Externalization ("sound outside the head") needs a room cue; without any
+     * reverb the spatial pan reads as an in-head balance change.
+     * @param {AudioContext} context
+     * @param {AudioNode} destination - Where the wet signal goes (e.g. mainGain)
+     * @param {Object} options - { seconds: IR length, decay: exponent, wetGain }
+     * @returns {Object} { convolver, sendGain, wetGain, dispose() } — connect
+     *          dry sources into sendGain
+     */
+    function createReverbNode(context, destination, options = {}) {
+        ensureContext(context);
+        ensureNode(destination, 'destination');
+
+        const seconds = typeof options.seconds === 'number' ? options.seconds : 1.6;
+        const decay = typeof options.decay === 'number' ? options.decay : 2.5;
+        const wet = typeof options.wetGain === 'number' ? options.wetGain : 0.25;
+
+        const rate = context.sampleRate;
+        const length = Math.max(1, Math.floor(rate * seconds));
+        const impulse = context.createBuffer(2, length, rate);
+        for (let channel = 0; channel < 2; channel++) {
+            const data = impulse.getChannelData(channel);
+            // ~12ms pre-delay keeps the direct sound distinct from the room
+            const preDelaySamples = Math.floor(rate * 0.012);
+            for (let i = preDelaySamples; i < length; i++) {
+                const t = (i - preDelaySamples) / (length - preDelaySamples);
+                data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay);
+            }
+        }
+
+        const convolver = context.createConvolver();
+        convolver.buffer = impulse;
+
+        // sendGain: rotation loop modulates this (more room when "behind")
+        const sendGain = context.createGain();
+        sendGain.gain.value = 1.0;
+
+        const wetGain = context.createGain();
+        wetGain.gain.value = wet;
+
+        sendGain.connect(convolver);
+        convolver.connect(wetGain);
+        wetGain.connect(destination);
+
+        return {
+            convolver,
+            sendGain,
+            wetGain,
+            dispose() {
+                try {
+                    sendGain.disconnect();
+                } catch (error) {
+                    identity(error);
+                }
+                try {
+                    convolver.disconnect();
+                } catch (error) {
+                    identity(error);
+                }
+                try {
+                    wetGain.disconnect();
+                } catch (error) {
+                    identity(error);
+                }
+            }
+        };
+    }
+
     function createNoiseNode(context, destination, type = 'white', volume = 0.05) {
         ensureContext(context);
         ensureNode(destination, 'destination');
@@ -325,6 +400,7 @@
         MASTER_HEADROOM,
         connectGainStaging,
         createBinauralNodes,
-        createNoiseNode
+        createNoiseNode,
+        createReverbNode
     };
 });
