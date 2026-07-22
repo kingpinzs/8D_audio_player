@@ -48,17 +48,30 @@
     };
 
     /**
+     * Read the explicitly saved order, or null when none has been saved
+     * @returns {Array|null} Saved order array or null
+     */
+    const readSavedOrder = () => {
+        try {
+            const saved = localStorage.getItem(ORDER_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) return parsed;
+            }
+        } catch (err) {
+            console.error('[PresetManager] Failed to load preset order:', err);
+        }
+        return null;
+    };
+
+    /**
      * Get preset display order
      * @param {Array} defaultModes - Default mode library array
      * @returns {Array} Ordered array of preset IDs
      */
     const getPresetOrder = (defaultModes = []) => {
-        try {
-            const saved = localStorage.getItem(ORDER_KEY);
-            if (saved) return JSON.parse(saved);
-        } catch (err) {
-            console.error('[PresetManager] Failed to load preset order:', err);
-        }
+        const saved = readSavedOrder();
+        if (saved) return saved;
 
         // Default order: defaults first, then custom by creation date
         const defaults = defaultModes.map(m => m.id);
@@ -136,10 +149,14 @@
                 return null;
             }
 
-            // Add to preset order
-            const order = getPresetOrder();
-            order.push(id);
-            savePresetOrder(order);
+            // Only extend an explicitly saved order. Persisting the no-order
+            // fallback here would bake in an order missing the default modes
+            // (unknown to this module), demoting them below custom presets.
+            const savedOrder = readSavedOrder();
+            if (savedOrder && !savedOrder.includes(id)) {
+                savedOrder.push(id);
+                savePresetOrder(savedOrder);
+            }
 
             console.log(`[PresetManager] Saved custom preset: ${id} - ${presetData.name}`);
             return id;
@@ -201,9 +218,11 @@
                 return null;
             }
 
-            // Remove from order
-            const order = getPresetOrder().filter(pid => pid !== id);
-            savePresetOrder(order);
+            // Remove from an explicitly saved order only (see saveCustomPreset)
+            const savedOrder = readSavedOrder();
+            if (savedOrder && savedOrder.includes(id)) {
+                savePresetOrder(savedOrder.filter(pid => pid !== id));
+            }
 
             console.log(`[PresetManager] Deleted custom preset: ${id}`);
             return { id, name: presetName };
