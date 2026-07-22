@@ -5691,6 +5691,13 @@ function App() {
             const [ritualCountdown, setRitualCountdown] = useState(HERO_BREATH_DURATION);
             const [breathingPhase, setBreathingPhase] = useState(''); // 'inhale', 'hold-in', 'exhale', 'hold-out'
             const [skipRitualPref, setSkipRitualPref] = useState(() => RitualEngine.getSkipPreference());
+            const [safetyNoticeAck, setSafetyNoticeAck] = useState(() => {
+                try { return localStorage.getItem('mp3_8d_safety_notice_ack') === 'true'; } catch { return true; }
+            });
+            const acknowledgeSafetyNotice = () => {
+                setSafetyNoticeAck(true);
+                try { localStorage.setItem('mp3_8d_safety_notice_ack', 'true'); } catch (e) { /* storage unavailable */ }
+            };
             const [heroMessage, setHeroMessage] = useState('Select a ritual to begin');
             const [a11yAnnouncement, setA11yAnnouncement] = useState('');
             const [needsAudio, setNeedsAudio] = useState(false);
@@ -10193,6 +10200,40 @@ return (
                             </button>
                         </div>
                     </div>
+
+                    {/* First-run safety notice (photosensitivity + non-medical disclaimer) */}
+                    {!safetyNoticeAck && (
+                        <div
+                            role="note"
+                            aria-label="Safety notice"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                margin: '8px 0',
+                                padding: '10px 14px',
+                                borderRadius: '10px',
+                                background: 'var(--surface)',
+                                border: '1px solid var(--card-border)',
+                                fontSize: '0.85rem',
+                                color: 'var(--text-secondary)'
+                            }}
+                        >
+                            <span>
+                                ⚠️ Some visualizers use flashing or fast-moving patterns that may affect
+                                photosensitive users. Audio features (including binaural beats) support focus
+                                and relaxation only — they are not medical advice or a treatment.
+                            </span>
+                            <button
+                                type="button"
+                                className="primary-btn"
+                                style={{ flexShrink: 0 }}
+                                onClick={acknowledgeSafetyNotice}
+                            >
+                                Got it
+                            </button>
+                        </div>
+                    )}
 
                     {/* Desktop Header - Single row */}
                     <header className="app-header">
