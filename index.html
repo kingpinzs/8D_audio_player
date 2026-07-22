@@ -149,181 +149,29 @@
         End of deprecated MODE_LIBRARY block */
 
         // ============================================================
-        // Story 3-3: Custom Preset CRUD Storage Helpers
+        // Story 3-3: Custom Preset CRUD — delegates to PresetManager (js/preset-manager.js)
         // ============================================================
-        
-        const loadCustomPresets = () => {
-            try {
-                const saved = localStorage.getItem(CUSTOM_PRESETS_KEY);
-                return saved ? JSON.parse(saved) : {};
-            } catch (err) {
-                console.error('[PresetStorage] Failed to load custom presets:', err);
-                return {};
+
+        // Maps PresetManager errors to the user-facing toasts the app has always shown
+        const presetErrorToast = (showToastFn, action) => (err) => {
+            if (!showToastFn) return;
+            if (err?.name === 'QuotaExceededError') {
+                showToastFn('Storage full. Please delete old presets.', 'error');
+            } else {
+                showToastFn(`Error ${action} preset.`, 'error');
             }
         };
 
-        const saveCustomPreset = (presetData, showToastFn) => {
-            try {
-                const customPresets = loadCustomPresets();
-                const id = `custom-preset-${Date.now()}`;
-                
-                customPresets[id] = {
-                    id,
-                    name: presetData.name,
-                    description: presetData.description || '',
-                    createdAt: Date.now(),
-                    lastUsedAt: Date.now(),
-                    preset: {
-                        speed: presetData.speed,
-                        intensity: presetData.intensity,
-                        spatialDepth: presetData.spatialDepth,
-                        movement: presetData.movement,
-                        binaural: { 
-                            enabled: presetData.binauralEnabled, 
-                            freq: presetData.binauralFreq 
-                        },
-                        noise: {
-                            type: presetData.noiseType,
-                            volume: presetData.noiseVolume
-                        },
-                        spatial: {
-                            itdAmount: presetData.itdAmount ?? 0.7,
-                            headShadow: presetData.headShadow ?? 0.5,
-                            directionalDepth: presetData.directionalDepth ?? 0.15,
-                            crossBleed: presetData.crossBleed ?? 0,
-                            panCurve: presetData.panCurve ?? 2.0,
-                            backDepth: presetData.backDepth ?? 0.55,
-                            hardPanThreshold: presetData.hardPanThreshold ?? 0.1
-                        },
-                        dualTrack: {
-                            enabled: presetData.dualTrackEnabled ?? false,
-                            delay: presetData.dualTrackDelay ?? 500,
-                            mode: presetData.dualTrackMode ?? 'synced',
-                            variableSpeed: presetData.dualTrackVariableSpeed ?? true,
-                            track2Speed: presetData.track2Speed ?? 0.5
-                        }
-                    },
-                    color: presetData.color || '#6366f1',
-                    tags: presetData.tags || []
-                };
-                
-                localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(customPresets));
-                
-                // Add to preset order
-                const order = getPresetOrder();
-                order.push(id);
-                savePresetOrder(order);
-                
-                console.log(`[PresetStorage] Saved custom preset: ${id} - ${presetData.name}`);
-                return id;
-            } catch (err) {
-                if (err.name === 'QuotaExceededError') {
-                    if (showToastFn) showToastFn('Storage full. Please delete old presets.', 'error');
-                } else {
-                    console.error('[PresetStorage] Failed to save preset:', err);
-                    if (showToastFn) showToastFn('Error saving preset.', 'error');
-                }
-                return null;
-            }
-        };
-
-        const updateCustomPreset = (id, updates, showToastFn) => {
-            try {
-                const customPresets = loadCustomPresets();
-                if (customPresets[id]) {
-                    customPresets[id] = { 
-                        ...customPresets[id], 
-                        ...updates,
-                        lastUsedAt: Date.now()
-                    };
-                    localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(customPresets));
-                    console.log(`[PresetStorage] Updated custom preset: ${id}`);
-                    return true;
-                }
-                console.warn(`[PresetStorage] Preset not found: ${id}`);
-                return false;
-            } catch (err) {
-                console.error('[PresetStorage] Failed to update preset:', err);
-                if (showToastFn) showToastFn('Error updating preset.', 'error');
-                return false;
-            }
-        };
-
-        const deleteCustomPreset = (id, showToastFn) => {
-            try {
-                const customPresets = loadCustomPresets();
-                const presetName = customPresets[id]?.name || id;
-                
-                delete customPresets[id];
-                localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(customPresets));
-                
-                // Remove from order
-                const order = getPresetOrder().filter(pid => pid !== id);
-                savePresetOrder(order);
-                
-                console.log(`[PresetStorage] Deleted custom preset: ${id}`);
-                
-                // Return the deleted preset ID and name for caller to handle track updates
-                return { id, name: presetName };
-            } catch (err) {
-                console.error('[PresetStorage] Failed to delete preset:', err);
-                if (showToastFn) showToastFn('Error deleting preset.', 'error');
-                return null;
-            }
-        };
-
-        const getAllPresets = () => {
-            const defaults = MODE_LIBRARY.map(mode => ({
-                id: mode.id,
-                name: mode.label,
-                description: mode.description,
-                preset: mode.preset,
-                color: mode.accent,
-                isDefault: true,
-                createdAt: 0,
-                lastUsedAt: 0
-            }));
-            
-            const custom = Object.values(loadCustomPresets()).map(p => ({
-                ...p,
-                isDefault: false
-            }));
-            
-            // Apply user-defined order
-            const order = getPresetOrder();
-            const allPresets = [...defaults, ...custom];
-            const ordered = order
-                .map(id => allPresets.find(p => p.id === id))
-                .filter(Boolean);
-            
-            // Add any new presets not in order (defensive)
-            const orderedIds = new Set(ordered.map(p => p.id));
-            const missing = allPresets.filter(p => !orderedIds.has(p.id));
-            
-            return [...ordered, ...missing];
-        };
-
-        const getPresetOrder = () => {
-            try {
-                const saved = localStorage.getItem('mpe_8d_preset_order');
-                if (saved) return JSON.parse(saved);
-            } catch (err) {
-                console.error('[PresetStorage] Failed to load preset order:', err);
-            }
-            
-            // Default order: defaults first, then custom by creation date
-            const defaults = MODE_LIBRARY.map(m => m.id);
-            const custom = Object.keys(loadCustomPresets()).sort();
-            return [...defaults, ...custom];
-        };
-
-        const savePresetOrder = (order) => {
-            try {
-                localStorage.setItem('mpe_8d_preset_order', JSON.stringify(order));
-            } catch (err) {
-                console.error('[PresetStorage] Failed to save preset order:', err);
-            }
-        };
+        const loadCustomPresets = () => PresetManager.loadCustomPresets();
+        const saveCustomPreset = (presetData, showToastFn) =>
+            PresetManager.saveCustomPreset(presetData, presetErrorToast(showToastFn, 'saving'));
+        const updateCustomPreset = (id, updates, showToastFn) =>
+            PresetManager.updateCustomPreset(id, updates, presetErrorToast(showToastFn, 'updating'));
+        const deleteCustomPreset = (id, showToastFn) =>
+            PresetManager.deleteCustomPreset(id, presetErrorToast(showToastFn, 'deleting'));
+        const getAllPresets = () => PresetManager.getAllPresets(MODE_LIBRARY);
+        const getPresetOrder = () => PresetManager.getPresetOrder(MODE_LIBRARY);
+        const savePresetOrder = (order) => PresetManager.savePresetOrder(order);
 
         /* REMOVED: formatLastUsed - Now imported from Utils module */
 

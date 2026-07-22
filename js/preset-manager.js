@@ -33,14 +33,16 @@
     /**
      * Save custom presets to localStorage
      * @param {Object} presets - Presets object to save
+     * @param {Function} [onError] - Optional callback invoked with the error (e.g. QuotaExceededError)
      * @returns {boolean} Success status
      */
-    const saveCustomPresetsToStorage = (presets) => {
+    const saveCustomPresetsToStorage = (presets, onError) => {
         try {
             localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
             return true;
         } catch (err) {
             console.error('[PresetManager] Failed to save presets:', err);
+            if (onError) onError(err);
             return false;
         }
     };
@@ -82,9 +84,10 @@
     /**
      * Save a new custom preset
      * @param {Object} presetData - Preset configuration data
+     * @param {Function} [onError] - Optional callback invoked with the error
      * @returns {string|null} New preset ID or null on failure
      */
-    const saveCustomPreset = (presetData) => {
+    const saveCustomPreset = (presetData, onError) => {
         try {
             const customPresets = loadCustomPresets();
             const id = `custom-preset-${Date.now()}`;
@@ -129,7 +132,7 @@
                 tags: presetData.tags || []
             };
 
-            if (!saveCustomPresetsToStorage(customPresets)) {
+            if (!saveCustomPresetsToStorage(customPresets, onError)) {
                 return null;
             }
 
@@ -146,6 +149,7 @@
             } else {
                 console.error('[PresetManager] Failed to save preset:', err);
             }
+            if (onError) onError(err);
             return null;
         }
     };
@@ -154,9 +158,10 @@
      * Update an existing custom preset
      * @param {string} id - Preset ID
      * @param {Object} updates - Properties to update
+     * @param {Function} [onError] - Optional callback invoked with the error
      * @returns {boolean} Success status
      */
-    const updateCustomPreset = (id, updates) => {
+    const updateCustomPreset = (id, updates, onError) => {
         try {
             const customPresets = loadCustomPresets();
             if (customPresets[id]) {
@@ -165,7 +170,7 @@
                     ...updates,
                     lastUsedAt: Date.now()
                 };
-                const success = saveCustomPresetsToStorage(customPresets);
+                const success = saveCustomPresetsToStorage(customPresets, onError);
                 if (success) {
                     console.log(`[PresetManager] Updated custom preset: ${id}`);
                 }
@@ -175,6 +180,7 @@
             return false;
         } catch (err) {
             console.error('[PresetManager] Failed to update preset:', err);
+            if (onError) onError(err);
             return false;
         }
     };
@@ -182,15 +188,16 @@
     /**
      * Delete a custom preset
      * @param {string} id - Preset ID to delete
+     * @param {Function} [onError] - Optional callback invoked with the error
      * @returns {Object|null} Deleted preset info or null on failure
      */
-    const deleteCustomPreset = (id) => {
+    const deleteCustomPreset = (id, onError) => {
         try {
             const customPresets = loadCustomPresets();
             const presetName = customPresets[id]?.name || id;
 
             delete customPresets[id];
-            if (!saveCustomPresetsToStorage(customPresets)) {
+            if (!saveCustomPresetsToStorage(customPresets, onError)) {
                 return null;
             }
 
@@ -202,6 +209,7 @@
             return { id, name: presetName };
         } catch (err) {
             console.error('[PresetManager] Failed to delete preset:', err);
+            if (onError) onError(err);
             return null;
         }
     };
