@@ -44,15 +44,20 @@ module.exports = {
   // Source directory for globbing
   globDirectory: '.',
 
+  // vendor/babel.min.js is ~3.1MB; default 2MB cap would silently drop it from precache
+  maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+
   // Shell assets to precache (cache on install, serve cache-first)
   // These patterns match files in the project root
   globPatterns: [
     'index.html',
-    'audio-engine.js',
+    'css/**/*.css',
+    'js/**/*.js',
+    'vendor/**/*.js', // React, ReactDOM, Babel standalone (vendored for offline)
     'session-logging.js',
     'sensor-consent.js',
-    // Future: Add icons when they exist
-    // 'icons/**/*.png',
+    'manifest.json',
+    'icons/**/*.png',
   ],
 
   // Ignore build artifacts and dev files

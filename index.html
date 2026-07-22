@@ -22,10 +22,10 @@
     <script src="./session-logging.js"></script>
     <script src="./sensor-consent.js"></script>
 
-    <!-- React framework -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- React framework (vendored locally: react/react-dom 18.3.1, @babel/standalone 7.28.5 — required for offline PWA) -->
+    <script src="./vendor/react.production.min.js"></script>
+    <script src="./vendor/react-dom.production.min.js"></script>
+    <script src="./vendor/babel.min.js"></script>
     <!-- Styles extracted to css/styles.css -->
     <link rel="stylesheet" href="./css/styles.css">
 </head>
