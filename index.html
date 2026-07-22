@@ -5690,13 +5690,7 @@ function App() {
             const [ritualStatus, setRitualStatus] = useState('idle');
             const [ritualCountdown, setRitualCountdown] = useState(HERO_BREATH_DURATION);
             const [breathingPhase, setBreathingPhase] = useState(''); // 'inhale', 'hold-in', 'exhale', 'hold-out'
-            const [skipRitualPref, setSkipRitualPref] = useState(() => {
-                try {
-                    return localStorage.getItem('skipBreathingRitual') === 'true';
-                } catch {
-                    return false;
-                }
-            });
+            const [skipRitualPref, setSkipRitualPref] = useState(() => RitualEngine.getSkipPreference());
             const [heroMessage, setHeroMessage] = useState('Select a ritual to begin');
             const [a11yAnnouncement, setA11yAnnouncement] = useState('');
             const [needsAudio, setNeedsAudio] = useState(false);
@@ -5910,9 +5904,7 @@ function App() {
             const eqNodesRef = useRef(null); // EQ filters: bass, mid, treble, clarity
             const modeRefs = useRef([]);
             const dropZoneRef = useRef(null);
-            const ritualTimeoutRef = useRef(null);
-            const ritualIntervalRef = useRef(null);
-            const breathingPhaseIntervalRef = useRef(null);
+            const ritualControllerRef = useRef(RitualEngine.createRitualController());
             const gainChainRef = useRef(null);
             const binauralNodesRef = useRef(null);
             const noiseNodesRef = useRef(null);
@@ -6193,18 +6185,7 @@ function App() {
             };
 
             const clearRitualTimers = () => {
-                if (ritualIntervalRef.current) {
-                    clearInterval(ritualIntervalRef.current);
-                    ritualIntervalRef.current = null;
-                }
-                if (ritualTimeoutRef.current) {
-                    clearTimeout(ritualTimeoutRef.current);
-                    ritualTimeoutRef.current = null;
-                }
-                if (breathingPhaseIntervalRef.current) {
-                    clearInterval(breathingPhaseIntervalRef.current);
-                    breathingPhaseIntervalRef.current = null;
-                }
+                ritualControllerRef.current.stop();
             };
 
             useEffect(() => {
@@ -9799,123 +9780,52 @@ function App() {
                 
                 // Check if skip preference is enabled
                 if (skipRitualPref) {
-                    // Log skip telemetry
-                    try {
-                        const skipEvent = {
-                            type: 'RITUAL_SKIPPED',
-                            timestamp: Date.now(),
-                            modeId: selectedMode.id,
-                            reason: 'skip-preference-enabled'
-                        };
-                        console.log('[SessionLogger]', skipEvent);
-                    } catch (e) {
-                        console.warn('Failed to log ritual skip', e);
-                    }
+                    RitualEngine.logSkip({ modeId: selectedMode.id, reason: 'skip-preference-enabled' });
                     launchRitualPlayback({ ritualUsed: false });
                     return;
                 }
-                
-                clearRitualTimers();
-                setRitualStatus('breathing');
-                setHeroMessage(`Breathe in...`);
-                setRitualCountdown(HERO_BREATH_DURATION);
-                setBreathingPhase('inhale');
-                
-                // Log ritual start telemetry
-                try {
-                    const startEvent = {
-                        type: 'RITUAL_STARTED',
-                        timestamp: Date.now(),
-                        modeId: selectedMode.id,
-                        modeLabel: selectedMode.label,
-                        duration: HERO_BREATH_DURATION
-                    };
-                    console.log('[SessionLogger]', startEvent);
-                } catch (e) {
-                    console.warn('Failed to log ritual start', e);
-                }
-                
-                // Countdown timer (1s intervals)
-                ritualIntervalRef.current = setInterval(() => {
-                    setRitualCountdown((prev) => {
-                        const next = Math.max(prev - 1, 0);
-                        if (next === 0) {
-                            clearInterval(ritualIntervalRef.current);
-                            ritualIntervalRef.current = null;
-                        }
-                        return next;
-                    });
-                }, 1000);
-                
-                // 4-2-4 breathing phase cycle (6s total: 2s in, 1s hold, 2s out, 1s hold)
-                // Repeat ~3.33 times over 20 seconds
-                let phaseStep = 0;
-                breathingPhaseIntervalRef.current = setInterval(() => {
-                    phaseStep++;
-                    const cyclePosition = phaseStep % 6;
-                    
-                    if (cyclePosition === 0 || cyclePosition === 1) {
-                        // Inhale (2 seconds)
-                        setBreathingPhase('inhale');
-                        setHeroMessage('Breathe in...');
-                    } else if (cyclePosition === 2) {
-                        // Hold after inhale (1 second)
-                        setBreathingPhase('hold-in');
-                        setHeroMessage('Hold...');
-                    } else if (cyclePosition === 3 || cyclePosition === 4) {
-                        // Exhale (2 seconds)
-                        setBreathingPhase('exhale');
-                        setHeroMessage('Breathe out...');
-                    } else if (cyclePosition === 5) {
-                        // Hold after exhale (1 second)
-                        setBreathingPhase('hold-out');
-                        setHeroMessage('Hold...');
+
+                // 4-2-4 breathing cycle (2s in, 1s hold, 2s out, 1s hold) over 20s —
+                // timing machinery lives in RitualEngine (js/ritual-engine.js)
+                ritualControllerRef.current.start({ duration: HERO_BREATH_DURATION }, {
+                    onStart: ({ duration }) => {
+                        setRitualStatus('breathing');
+                        setRitualCountdown(duration);
+                        RitualEngine.logStart({
+                            modeId: selectedMode.id,
+                            modeLabel: selectedMode.label,
+                            duration
+                        });
+                    },
+                    onCountdown: (remaining) => setRitualCountdown(Math.max(remaining, 0)),
+                    onPhaseChange: ({ phase, message }) => {
+                        setBreathingPhase(phase);
+                        setHeroMessage(message);
+                    },
+                    onComplete: ({ ritualUsed }) => {
+                        launchRitualPlayback({ ritualUsed });
                     }
-                }, 1000);
-                
-                // Auto-launch after 20 seconds
-                ritualTimeoutRef.current = setTimeout(() => {
-                    clearRitualTimers();
-                    launchRitualPlayback({ ritualUsed: true });
-                }, HERO_BREATH_DURATION * 1000);
+                });
             };
 
             const skipRitual = () => {
                 if (!ensurePlaylistReady()) {
                     return;
                 }
-                
-                // Log skip telemetry
-                try {
-                    const skipEvent = {
-                        type: 'RITUAL_SKIPPED',
-                        timestamp: Date.now(),
-                        modeId: selectedMode.id,
-                        reason: 'user-skip-button'
-                    };
-                    console.log('[SessionLogger]', skipEvent);
-                } catch (e) {
-                    console.warn('Failed to log ritual skip', e);
-                }
-                
-                clearRitualTimers();
-                setRitualCountdown(0);
-                setBreathingPhase('');
-                launchRitualPlayback({ ritualUsed: false });
+
+                RitualEngine.logSkip({ modeId: selectedMode.id, reason: 'user-skip-button' });
+
+                ritualControllerRef.current.skip(() => {
+                    setRitualCountdown(0);
+                    setBreathingPhase('');
+                    launchRitualPlayback({ ritualUsed: false });
+                });
             };
 
             const toggleSkipRitualPref = () => {
                 const newValue = !skipRitualPref;
                 setSkipRitualPref(newValue);
-                try {
-                    if (newValue) {
-                        localStorage.setItem('skipBreathingRitual', 'true');
-                    } else {
-                        localStorage.removeItem('skipBreathingRitual');
-                    }
-                } catch (e) {
-                    console.warn('Failed to persist skip preference', e);
-                }
+                RitualEngine.setSkipPreference(newValue);
             };
 
             // Story 3-1: Apply preset configuration to all audio parameters
@@ -9933,16 +9843,11 @@ function App() {
                 setNoiseVolume(preset.noise.volume);
                 setVisualWaveGain(preset.noise.volume);
 
-                // Apply spatial audio settings if present
-                if (preset.spatial) {
-                    setItdAmount(preset.spatial.itdAmount ?? 0.7);
-                    setHeadShadow(preset.spatial.headShadow ?? 0.5);
-                    setDirectionalDepth(preset.spatial.directionalDepth ?? 0.15);
-                    setCrossBleed(preset.spatial.crossBleed ?? 0);
-                    setPanCurve(preset.spatial.panCurve ?? 2.0);
-                    setBackDepth(preset.spatial.backDepth ?? 0.55);
-                    setHardPanThreshold(preset.spatial.hardPanThreshold ?? 0.1);
-                }
+                // NOTE: preset.spatial (itdAmount/headShadow/panCurve/...) is NOT applied here.
+                // Those states live inside the SpatialAudioTuner component; referencing their
+                // setters from App scope threw a ReferenceError that aborted applyPreset midway
+                // (dual-track, activePresetId, and preset logging never ran). Wiring presets
+                // into the tuner requires lifting that state — tracked as future work.
 
                 // Apply dual track settings if present
                 if (preset.dualTrack) {
