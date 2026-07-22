@@ -1,0 +1,285 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>6</epicId>
+    <storyId>3</storyId>
+    <title>Accessibility & Observability Suite</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-26</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>.bmad-ephemeral/stories/6-3-accessibility-observability-suite.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user and developer</asA>
+    <iWant>the app to sync with my OS accessibility preferences, provide settings overrides, and access a debug panel for troubleshooting</iWant>
+    <soThat>I can customize my experience based on my accessibility needs and easily diagnose issues when something goes wrong</soThat>
+    <tasks>
+      <task n="1" title="Create useAccessibilityObserver Hook" ac="4,5,6">
+        <subtask>Create useAccessibilityObserver hook in index.html with state for prefersReducedMotion, prefersHighContrast, prefersDarkMode</subtask>
+        <subtask>Query matchMedia for all three preferences on mount</subtask>
+        <subtask>Add event listeners for preference changes with cleanup on unmount</subtask>
+        <subtask>Implement reactive OS preference sync handlers</subtask>
+        <subtask>Console logging for all preference detections</subtask>
+      </task>
+      <task n="2" title="Implement User Override System" ac="7">
+        <subtask>Extend useAccessibilityObserver with user overrides state</subtask>
+        <subtask>Implement effectiveSettings merging OS + user overrides</subtask>
+        <subtask>Create setUserPreference(key, value) and resetToOSDefaults() actions</subtask>
+        <subtask>Persist user overrides to localStorage key mp3_8d_a11y_overrides</subtask>
+        <subtask>Create Settings UI for accessibility overrides with toggles</subtask>
+      </task>
+      <task n="3" title="Integrate with ThemeProvider" ac="4,5,6">
+        <subtask>Connect useAccessibilityObserver to ThemeProvider</subtask>
+        <subtask>Update CSS custom properties based on settings</subtask>
+        <subtask>Implement high-contrast theme tokens</subtask>
+        <subtask>Implement reduced-motion effects (throttle visualizer, disable breathing animation)</subtask>
+        <subtask>Implement large-text mode</subtask>
+      </task>
+      <task n="4" title="Create Debug Panel Component" ac="8,9">
+        <subtask>Create useDebugPanel hook with ?debug=true query param detection</subtask>
+        <subtask>Create DebugPanel component with floating overlay positioning</subtask>
+        <subtask>Implement Audio tab consuming AudioGraphProvider state</subtask>
+        <subtask>Implement Sensor tab consuming SensorProvider state</subtask>
+        <subtask>Implement Session tab consuming SessionProvider state</subtask>
+        <subtask>Implement PWA tab consuming useServiceWorker state</subtask>
+      </task>
+      <task n="5" title="Implement Copy Diagnostics Feature" ac="10">
+        <subtask>Create copyDiagnostics() function aggregating all debug tab data</subtask>
+        <subtask>Add Copy Diagnostics button to debug panel</subtask>
+        <subtask>Implement clipboard copy with navigator.clipboard.writeText()</subtask>
+        <subtask>Show toast confirmation on success</subtask>
+      </task>
+      <task n="6" title="CI Accessibility Testing Setup" ac="1,2,3">
+        <subtask>Install pa11y, axe-core, lighthouse dev dependencies</subtask>
+        <subtask>Create npm run test:a11y script</subtask>
+        <subtask>Create npm run lighthouse script</subtask>
+        <subtask>Document CI integration steps</subtask>
+      </task>
+      <task n="7" title="Testing & Verification" ac="all">
+        <subtask>Write unit tests for useAccessibilityObserver</subtask>
+        <subtask>Write unit tests for useDebugPanel</subtask>
+        <subtask>Write tests for copyDiagnostics</subtask>
+        <subtask>Write accessibility integration tests</subtask>
+        <subtask>Manual testing checklist verification</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC6.3.1" title="Pa11y/axe CI Integration">
+      Given the CI pipeline runs on every PR/push, When Pa11y and axe-core analyze the page, Then Pa11y runs against localhost build URL, axe-core validates accessibility rules, build fails if accessibility errors > 0, warnings logged but do not block merge, console output shows specific violation details.
+    </criterion>
+    <criterion id="AC6.3.2" title="Lighthouse Accessibility Score">
+      Given Lighthouse audit runs in CI, When the accessibility score is calculated, Then accessibility score >= 95, score tracked over time for regression detection, audit results saved as CI artifact.
+    </criterion>
+    <criterion id="AC6.3.3" title="Lighthouse PWA Score">
+      Given Lighthouse audit runs in CI, When the PWA score is calculated, Then PWA score >= 90, all PWA criteria from Stories 6-1 and 6-2 validated, audit results saved as CI artifact.
+    </criterion>
+    <criterion id="AC6.3.4" title="Reduced Motion OS Sync">
+      Given the user's OS has prefers-reduced-motion: reduce enabled, When the app loads, Then app detects preference via matchMedia, animations disabled or throttled, effectiveSettings.reducedMotion = true, console log outputs [A11Y] OS prefers-reduced-motion: true, reactive to OS changes during session.
+    </criterion>
+    <criterion id="AC6.3.5" title="High Contrast OS Sync">
+      Given the user's OS has prefers-contrast: more enabled, When the app loads, Then app detects preference via matchMedia, high contrast theme tokens applied, effectiveSettings.highContrast = true, console log outputs [A11Y] OS prefers-contrast: true, reactive to OS changes during session.
+    </criterion>
+    <criterion id="AC6.3.6" title="Dark Mode OS Sync">
+      Given the user's OS has prefers-color-scheme: dark enabled, When the app loads, Then app detects preference via matchMedia, dark theme applied, effectiveSettings.darkMode = true, console log outputs [A11Y] OS prefers-color-scheme: dark, reactive to OS changes during session.
+    </criterion>
+    <criterion id="AC6.3.7" title="User Preference Overrides">
+      Given the user wants to override OS preferences, When they toggle settings in the Settings panel, Then toggles available for Reduced Motion, High Contrast, Dark Mode, Large Text; user override stored in localStorage mp3_8d_a11y_overrides; user override takes precedence over OS preference; Reset to OS Defaults button available; overrides persist across sessions.
+    </criterion>
+    <criterion id="AC6.3.8" title="Debug Panel Access">
+      Given the URL includes ?debug=true query parameter, When the app loads, Then debug panel renders as floating overlay, panel draggable/minimizable, panel does not interfere with normal app usage, console log outputs [Debug] Panel enabled via query param, panel hidden when ?debug=true not present.
+    </criterion>
+    <criterion id="AC6.3.9" title="Debug Panel Tabs">
+      Given the debug panel is visible, When the user views the panel, Then four tabs available (Audio, Sensor, Session, PWA), each showing real-time data from respective providers: Audio tab shows graph nodes, isPlaying, latency, analyzer state; Sensor tab shows connected device, HR, consent list; Session tab shows active session, log count, errors, IndexedDB health; PWA tab shows SW status, cache size, audio cache count, update available flag.
+    </criterion>
+    <criterion id="AC6.3.10" title="Copy Diagnostics Export">
+      Given the debug panel is open, When user clicks Copy Diagnostics button, Then JSON object generated with all debug tab data, structured error codes, timestamp and userAgent; JSON copied to clipboard; toast confirmation shown; console log outputs [Debug] Diagnostics copied.
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-6.md</path>
+        <title>Epic 6 Technical Specification</title>
+        <section>AC6.3 Acceptance Criteria, APIs and Interfaces, Workflows</section>
+        <snippet>Defines useAccessibilityObserver and useDebugPanel hook APIs, error codes, accessibility settings schema, and the Story 6-3 workflow sequence.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture - mp3_to_8D</title>
+        <section>Section 5 - Non-Functional Requirements, Section 3.1 - App Shell</section>
+        <snippet>Accessibility (>=95) enforced via shared token system, Pa11y/axe in CI. ThemeProvider part of global providers wrapping the tree. Hook-based modular design for maintainability.</snippet>
+      </doc>
+      <doc>
+        <path>docs/create-epics-and-stories.md</path>
+        <title>Epics and Stories Backlog</title>
+        <section>E6 - PWA Reliability and Accessibility, S6.3</section>
+        <snippet>Pa11y/axe run per CI; reduced-motion/high-contrast toggles sync with OS preferences; optional debug panel reports audio graph status, sensor connectivity, logging health.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>index.html</path>
+        <kind>main-app</kind>
+        <symbol>useServiceWorker</symbol>
+        <lines>8180-8314</lines>
+        <reason>Hook pattern for service worker state management - follow for useDebugPanel PWA tab data. Returns swStatus, isOffline, updateAvailable, applyUpdate.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>hook</kind>
+        <symbol>useInstallPrompt</symbol>
+        <lines>8320-8523</lines>
+        <reason>Hook pattern for beforeinstallprompt - similar state management pattern for useAccessibilityObserver. Shows query param parsing and localStorage patterns.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>effect</kind>
+        <symbol>parseAndApplyQueryParams</symbol>
+        <lines>9422-9465</lines>
+        <reason>Query param parsing pattern using URLSearchParams - reuse for ?debug=true detection in useDebugPanel.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>style</kind>
+        <symbol>dark-mode, high-contrast</symbol>
+        <lines>37-67</lines>
+        <reason>Existing CSS classes for dark-mode and high-contrast theming. Extend for accessibility observer integration.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>provider</kind>
+        <symbol>SensorBridge, SensorSettings</symbol>
+        <lines>6463-6550, 9485-9530</lines>
+        <reason>Sensor capability detection and consent UI patterns. Debug panel Sensor tab will consume this state.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>service</kind>
+        <symbol>SessionLogger</symbol>
+        <lines>9561-9620, 10799-10984</lines>
+        <reason>Session logging service - Debug panel Session tab will consume logCount, errors, activeSession state.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>function</kind>
+        <symbol>showToast</symbol>
+        <lines>various</lines>
+        <reason>Toast notification system - use for clipboard copy confirmation in Copy Diagnostics feature.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>function</kind>
+        <symbol>setupAudioGraph, disposeAudioGraph</symbol>
+        <lines>9256-9420, 10051-10100</lines>
+        <reason>Audio graph management - Debug panel Audio tab will show graph nodes, isPlaying, analyzer state.</reason>
+      </artifact>
+      <artifact>
+        <path>tests/install-prompt.test.js</path>
+        <kind>test</kind>
+        <symbol>test patterns</symbol>
+        <lines>1-100</lines>
+        <reason>Test file structure and assertion patterns. Use as template for accessibility.test.js.</reason>
+      </artifact>
+      <artifact>
+        <path>tests/service-worker.test.js</path>
+        <kind>test</kind>
+        <symbol>SW mock patterns</symbol>
+        <lines>all</lines>
+        <reason>Service worker mocking patterns - reference for browser API mocking in a11y tests.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="workbox-cli" version="^7.4.0" purpose="Service worker generation" />
+        <package name="fake-indexeddb" version="^6.2.5" purpose="IndexedDB testing" />
+        <package name="pa11y" version="^7.0.0" purpose="NEW - Accessibility testing CLI" />
+        <package name="axe-core" version="^4.8.0" purpose="NEW - Accessibility testing engine" />
+        <package name="lighthouse" version="^11.0.0" purpose="NEW - PWA/Accessibility auditing" />
+      </ecosystem>
+      <browser-apis>
+        <api name="matchMedia" purpose="OS preference detection (prefers-reduced-motion, prefers-contrast, prefers-color-scheme)" />
+        <api name="URLSearchParams" purpose="Query param parsing for ?debug=true" />
+        <api name="navigator.clipboard.writeText" purpose="Copy diagnostics to clipboard" />
+        <api name="localStorage" purpose="User preference override persistence" />
+      </browser-apis>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">All React implementation in index.html (maintaining single-file architecture)</constraint>
+    <constraint type="pattern">Hook-based modular design with isolated subsystems per architecture.md Section 5</constraint>
+    <constraint type="testing">Pa11y/axe CI integration must fail build on accessibility errors greater than 0</constraint>
+    <constraint type="performance">Lighthouse Accessibility score at least 95, PWA score at least 90</constraint>
+    <constraint type="localStorage">Use key pattern mp3_8d_a11y_overrides for user preference storage</constraint>
+    <constraint type="console">Console logging format: [A11Y] prefix for accessibility, [Debug] for debug panel</constraint>
+    <constraint type="wcag">Maintain WCAG 2.1 AA compliance - roving tabindex, ARIA labels, focus indicators</constraint>
+  </constraints>
+  <interfaces>
+    <interface name="useAccessibilityObserver" kind="hook">
+      <signature>
+function useAccessibilityObserver() {
+  // State (reactive to OS changes)
+  prefersReducedMotion: boolean;
+  prefersHighContrast: boolean;
+  prefersDarkMode: boolean;
+  // User overrides
+  userSettings: { reducedMotion, highContrast, darkMode, largeText };
+  // Actions
+  setUserPreference: (key: string, value: boolean) => void;
+  resetToOSDefaults: () => void;
+  // Computed
+  effectiveSettings: merged OS + user overrides;
+}
+      </signature>
+      <path>index.html (NEW)</path>
+    </interface>
+    <interface name="useDebugPanel" kind="hook">
+      <signature>
+function useDebugPanel() {
+  isDebugPanelOpen: boolean;
+  activeTab: 'audio' | 'sensor' | 'session' | 'pwa';
+  toggleDebugPanel: () => void;
+  getAudioGraphStatus: () => AudioDebugInfo;
+  getSensorStatus: () => SensorDebugInfo;
+  getSessionStatus: () => SessionDebugInfo;
+  getServiceWorkerStatus: () => PWADebugInfo;
+  copyDiagnostics: () => void;
+}
+      </signature>
+      <path>index.html (NEW)</path>
+    </interface>
+    <interface name="Accessibility Settings Schema" kind="localStorage">
+      <signature>
+mp3_8d_a11y_overrides: {
+  reducedMotion: boolean | null;
+  highContrast: boolean | null;
+  darkMode: boolean | null;
+  largeText: boolean | null;
+}
+      </signature>
+      <path>localStorage</path>
+    </interface>
+  </interfaces>
+  <tests>
+    <standards>Node.js test runner pattern using simple test() and assert() functions. No external test framework - pure Node.js with custom test harness per existing test files. Mock browser APIs (localStorage, matchMedia, IndexedDB) inline. Console output with emoji indicators for pass/fail.</standards>
+    <locations>
+      <location>tests/accessibility.test.js (NEW)</location>
+      <location>tests/*.test.js (existing pattern)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC6.3.1">Test pa11y returns error count, verify build fails when errors greater than 0</idea>
+      <idea ac="AC6.3.2">Test Lighthouse accessibility audit returns score at least 95</idea>
+      <idea ac="AC6.3.3">Test Lighthouse PWA audit returns score at least 90</idea>
+      <idea ac="AC6.3.4">Mock matchMedia for prefers-reduced-motion, verify effectiveSettings.reducedMotion syncs</idea>
+      <idea ac="AC6.3.5">Mock matchMedia for prefers-contrast, verify effectiveSettings.highContrast syncs</idea>
+      <idea ac="AC6.3.6">Mock matchMedia for prefers-color-scheme, verify effectiveSettings.darkMode syncs</idea>
+      <idea ac="AC6.3.7">Test user override persistence to localStorage, verify override takes precedence</idea>
+      <idea ac="AC6.3.8">Test ?debug=true param detection enables debug panel, false hides it</idea>
+      <idea ac="AC6.3.9">Test debug panel tabs render with correct data from each provider</idea>
+      <idea ac="AC6.3.10">Test copyDiagnostics generates valid JSON with all required fields, mock clipboard API</idea>
+    </ideas>
+  </tests>
+</story-context>

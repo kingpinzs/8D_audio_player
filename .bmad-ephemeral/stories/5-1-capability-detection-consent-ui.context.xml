@@ -1,0 +1,405 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>E5</epicId>
+    <storyId>5-1</storyId>
+    <title>Capability Detection &amp; Consent UI</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-11-25</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>.bmad-ephemeral/stories/5-1-capability-detection-consent-ui.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user with a Bluetooth heart-rate strap or custom serial sensor</asA>
+    <iWant>the app to detect what sensors my browser supports and clearly explain privacy before connecting</iWant>
+    <soThat>I can confidently opt-in to sensor features without worrying about data leaving my device</soThat>
+    <tasks>
+      <task id="1" ac="1,2">
+        <title>SensorProvider Context Setup</title>
+        <subtasks>
+          <item>Create SensorProvider React context with initial state</item>
+          <item>Implement capability detection for Web Bluetooth (navigator.bluetooth)</item>
+          <item>Implement capability detection for Web Serial (navigator.serial)</item>
+          <item>Create useSensorBridge() hook exposing state and actions</item>
+          <item>Add console logging for capability detection results</item>
+          <item>Add provider to App component tree (wrap after PresetProvider)</item>
+        </subtasks>
+      </task>
+      <task id="2" ac="6,7,8">
+        <title>IndexedDB sensor_consent Store</title>
+        <subtasks>
+          <item>Create sensor_consent object store in existing database</item>
+          <item>Implement addConsent(device) helper</item>
+          <item>Implement updateConsent(deviceId, updates) helper</item>
+          <item>Implement getConsentedDevices() helper (filter where revokedAt === null)</item>
+          <item>Implement revokeConsent(deviceId) helper (set revokedAt timestamp)</item>
+          <item>Add database version migration (increment version, add store in onupgradeneeded)</item>
+        </subtasks>
+      </task>
+      <task id="3" ac="4">
+        <title>Consent Modal Component</title>
+        <subtasks>
+          <item>Create ConsentModal component with privacy copy</item>
+          <item>Implement focus trap (trap focus within modal when open)</item>
+          <item>Add Escape key handler to close modal</item>
+          <item>Add "Don't show again" checkbox with localStorage persistence</item>
+          <item>Implement ARIA attributes (role="dialog", aria-modal="true", aria-describedby)</item>
+          <item>Add screen reader announcement via setA11yAnnouncement()</item>
+          <item>Style modal matching existing app modal patterns</item>
+        </subtasks>
+      </task>
+      <task id="4" ac="1,2,3,8">
+        <title>Sensor Settings UI</title>
+        <subtasks>
+          <item>Create SensorSettings component for sensor settings area</item>
+          <item>Conditionally render Bluetooth button based on capability</item>
+          <item>Conditionally render Serial button based on capability</item>
+          <item>Add browser compatibility messaging for Firefox/Safari</item>
+          <item>Render quick-connect device list with Connect/Forget buttons</item>
+          <item>Add relative time formatting for "Last connected" display</item>
+          <item>Add loading states for connection actions</item>
+        </subtasks>
+      </task>
+      <task id="5" ac="5,6">
+        <title>Device Connection Flow</title>
+        <subtasks>
+          <item>Implement scanForDevices() with Heart Rate Service filter (0x180D)</item>
+          <item>Implement connectBluetoothSensor(deviceId) with error handling</item>
+          <item>Implement connectSerialSensor(port) placeholder (actual data parsing in Story 5-2)</item>
+          <item>Add loading spinner and timeout handling (10s)</item>
+          <item>Integrate toast notifications for success/error states</item>
+          <item>Store consent record on successful connection</item>
+        </subtasks>
+      </task>
+      <task id="6" ac="7">
+        <title>Forget Device Flow</title>
+        <subtasks>
+          <item>Add "Forget" button to device list items</item>
+          <item>Implement confirmation dialog (custom modal, not browser confirm())</item>
+          <item>Implement forgetDevice(deviceId) action</item>
+          <item>Handle disconnect if device currently connected</item>
+          <item>Update IndexedDB with revokedAt timestamp</item>
+          <item>Refresh quick-connect list after forget</item>
+        </subtasks>
+      </task>
+      <task id="7" ac="all">
+        <title>Testing &amp; Documentation</title>
+        <subtasks>
+          <item>Write unit tests for capability detection (mock navigator.bluetooth/serial)</item>
+          <item>Write unit tests for IndexedDB consent CRUD operations</item>
+          <item>Write integration test: Connect → Consent stored → Appears in list</item>
+          <item>Write integration test: Forget → Device removed from list</item>
+          <item>Manual test in Chrome (full support)</item>
+          <item>Manual test in Firefox (no Bluetooth, Serial works)</item>
+          <item>Manual test in Safari (no sensors, messaging shown)</item>
+          <item>Document browser compatibility in code comments</item>
+        </subtasks>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="Web Bluetooth Capability Detection">
+      <given>the app loads in any browser</given>
+      <when>SensorProvider initializes</when>
+      <then>
+        <item>Check navigator.bluetooth availability</item>
+        <item>If supported: Show "Connect Bluetooth Sensor" button</item>
+        <item>If unsupported: Hide Bluetooth option from UI</item>
+        <item>Log to console: [SensorBridge] Bluetooth: supported/unsupported</item>
+      </then>
+      <browserMatrix>Chrome 79+: Supported, Edge 79+: Supported, Firefox: Hidden, Safari: Hidden</browserMatrix>
+    </criterion>
+    <criterion id="AC2" title="Web Serial Capability Detection">
+      <given>the app loads in any browser</given>
+      <when>SensorProvider initializes</when>
+      <then>
+        <item>Check navigator.serial availability</item>
+        <item>If supported: Show "Connect Serial Device" button</item>
+        <item>If unsupported: Hide Serial option from UI</item>
+        <item>Log to console: [SensorBridge] Serial: supported/unsupported</item>
+      </then>
+      <browserMatrix>Chrome 89+: Supported, Edge 89+: Supported, Firefox 96+: Supported, Safari: Hidden</browserMatrix>
+    </criterion>
+    <criterion id="AC3" title="Browser Compatibility Messaging">
+      <given>user is in Firefox (no Bluetooth) or Safari (no sensors)</given>
+      <when>user views sensor settings area</when>
+      <then>
+        <item>Firefox: "Bluetooth sensors not supported in Firefox. For heart rate tracking, try Chrome or Edge."</item>
+        <item>Safari: "Sensor features require Chrome or Edge browser."</item>
+        <item>Styled as informational with info icon</item>
+        <item>Performance: Detection completes in &lt;50ms, no browser sniffing</item>
+      </then>
+    </criterion>
+    <criterion id="AC4" title="Consent Modal (Onboarding)">
+      <given>user clicks "Connect Bluetooth Sensor" or "Connect Serial Device" for first time</given>
+      <when>consent modal appears</when>
+      <then>
+        <item>Modal title: "Connect Your Sensor"</item>
+        <item>Privacy copy explains data stays local, never uploaded</item>
+        <item>Buttons: "Connect" (primary) | "Cancel" (secondary)</item>
+        <item>"Don't show again" checkbox with localStorage persistence</item>
+        <item>Modal traps focus, Escape closes, ARIA compliant</item>
+        <item>Screen reader announces modal content on open</item>
+      </then>
+    </criterion>
+    <criterion id="AC5" title="Device Scanning &amp; Selection">
+      <given>user clicks "Connect" in consent modal</given>
+      <when>browser device picker appears</when>
+      <then>
+        <item>Bluetooth: Request devices with Heart Rate Service filter (0x180D)</item>
+        <item>Serial: Request any serial port</item>
+        <item>Show loading spinner during scan</item>
+        <item>10s timeout with "No devices found" toast</item>
+        <item>Error handling for permission denied, device not found, connection failed</item>
+      </then>
+    </criterion>
+    <criterion id="AC6" title="Consent Record Storage">
+      <given>user successfully connects a device</given>
+      <when>connection establishes</when>
+      <then>
+        <item>Create IndexedDB record in sensor_consent store</item>
+        <item>Schema: deviceId, deviceName, type, grantedAt, scopes, lastConnectedAt, connectionCount, revokedAt</item>
+        <item>Log: [SensorBridge] Consent stored for: {deviceName}</item>
+        <item>Show success toast: "Connected to {deviceName}"</item>
+        <item>Subsequent connections: Update lastConnectedAt, increment connectionCount</item>
+      </then>
+    </criterion>
+    <criterion id="AC7" title="Forget Device Functionality">
+      <given>user has connected devices listed</given>
+      <when>user clicks "Forget Device" button</when>
+      <then>
+        <item>Show confirmation modal</item>
+        <item>On confirm: Disconnect, set revokedAt timestamp (soft delete), remove from list</item>
+        <item>Show toast: "Forgot {deviceName}"</item>
+        <item>Log: [SensorBridge] Device forgotten: {deviceId}</item>
+        <item>On cancel: No action</item>
+      </then>
+    </criterion>
+    <criterion id="AC8" title="Quick-Connect List">
+      <given>user has previously connected devices</given>
+      <when>user views sensor settings</when>
+      <then>
+        <item>Show list of consented devices (revokedAt === null)</item>
+        <item>Each item: Device name, type icon, "Last connected: {relative time}", Connect button, Forget button</item>
+        <item>Sorted by lastConnectedAt descending</item>
+        <item>Max 5 devices shown</item>
+      </then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-5.md</path>
+        <title>Epic 5 Technical Specification</title>
+        <section>AC5.1: Capability Detection &amp; Consent UI</section>
+        <snippet>Defines 7 acceptance criteria for sensor capability detection, consent modal, device scanning, IndexedDB storage, forget functionality, and quick-connect list. Includes sensor_consent schema and error codes.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Section 3.6 Sensor Bridge</section>
+        <snippet>Feature-flagged module exposing connectBluetoothSensor(), connectSerialSensor(), disconnectSensor(id), simulateSensor(). Uses Web Bluetooth GATT for HR Service (0x180D). Consent records in IndexedDB sensor_consent store.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>FR7 Sensor Adapters</section>
+        <snippet>Abstract Web Bluetooth and Web Serial connections with clear permissions and per-device storage. Acceptance: Connecting a Polar H10 streams HR at 1 Hz; when HR exceeds threshold, app suggests calmer preset.</snippet>
+      </doc>
+      <doc>
+        <path>docs/create-epics-and-stories.md</path>
+        <title>Epics &amp; Stories Backlog</title>
+        <section>E5 - Sensor &amp; Adaptive Loop</section>
+        <snippet>S5.1 - Capability Detection &amp; Consent UI: Detects Web Bluetooth/Serial support, hides unsupported sensors; onboarding copy explains privacy; "Forget device" clears stored handles.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>index.html</path>
+        <kind>main-app</kind>
+        <symbol>showToast</symbol>
+        <lines>6392-6400</lines>
+        <reason>Toast notification function - reuse for sensor connection success/error messages</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>main-app</kind>
+        <symbol>setA11yAnnouncement</symbol>
+        <lines>6348-6399</lines>
+        <reason>Screen reader announcement helper - use for modal open/close and connection status</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>CheckInModal</symbol>
+        <lines>4907-4908</lines>
+        <reason>Existing modal pattern with role="dialog", aria-modal="true" - follow for ConsentModal</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>SavePresetDialog</symbol>
+        <lines>5775-5776</lines>
+        <reason>Another modal example with ARIA attributes - reference for modal patterns</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>service</kind>
+        <symbol>sessionApi.initDatabase</symbol>
+        <lines>6737</lines>
+        <reason>IndexedDB initialization pattern - extend for sensor_consent store</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>helper</kind>
+        <symbol>saveCustomPreset, updateCustomPreset, deleteCustomPreset</symbol>
+        <lines>2629-2727</lines>
+        <reason>CRUD helper pattern with showToast integration - follow for consent CRUD</reason>
+      </file>
+      <file>
+        <path>session-logging.js</path>
+        <kind>module</kind>
+        <symbol>initDatabase, addSession, getSession</symbol>
+        <lines>all</lines>
+        <reason>IndexedDB API module - reference architecture for SensorConsentManager</reason>
+      </file>
+      <file>
+        <path>tests/session-logging.test.js</path>
+        <kind>test</kind>
+        <symbol>resetDb, runTest, buildSession</symbol>
+        <lines>1-50</lines>
+        <reason>IndexedDB testing pattern using fake-indexeddb - follow for sensor consent tests</reason>
+      </file>
+    </code>
+    <dependencies>
+      <node>
+        <package>react</package>
+        <version>18.2.0</version>
+        <note>CDN loaded UMD build in index.html</note>
+      </node>
+      <node>
+        <package>react-dom</package>
+        <version>18.2.0</version>
+        <note>CDN loaded UMD build in index.html</note>
+      </node>
+      <node>
+        <package>fake-indexeddb</package>
+        <version>^6.2.5</version>
+        <note>devDependency for testing IndexedDB operations</note>
+      </node>
+      <browser>
+        <api>Web Bluetooth API</api>
+        <support>Chrome 79+, Edge 79+</support>
+        <note>Native browser API, no library needed</note>
+      </browser>
+      <browser>
+        <api>Web Serial API</api>
+        <support>Chrome 89+, Edge 89+, Firefox 96+</support>
+        <note>Native browser API, no library needed</note>
+      </browser>
+      <browser>
+        <api>IndexedDB</api>
+        <support>All modern browsers</support>
+        <note>Used for sensor_consent storage</note>
+      </browser>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">All implementation in single index.html file (maintaining monolithic architecture)</constraint>
+    <constraint type="architecture">SensorProvider follows same pattern as PresetProvider and SessionProvider</constraint>
+    <constraint type="architecture">IndexedDB extends existing database via version migration (increment version number)</constraint>
+    <constraint type="architecture">Feature-flagged: Sensors disabled by default until beta validation</constraint>
+    <constraint type="pattern">Use feature detection (navigator.bluetooth) not browser sniffing</constraint>
+    <constraint type="pattern">Graceful degradation: App fully functional without sensors</constraint>
+    <constraint type="pattern">Soft delete pattern: Set revokedAt timestamp instead of hard delete for audit trail</constraint>
+    <constraint type="accessibility">Modal must trap focus, respond to Escape, announce to screen readers</constraint>
+    <constraint type="accessibility">All buttons must have descriptive labels and proper ARIA attributes</constraint>
+    <constraint type="performance">Capability detection completes in &lt;50ms</constraint>
+    <constraint type="performance">Connection timeout: 10 seconds max</constraint>
+    <constraint type="testing">Follow fake-indexeddb pattern from session-logging.test.js</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>useSensorBridge</name>
+      <kind>react-hook</kind>
+      <signature>
+const {
+  sensorStatus,           // "idle" | "scanning" | "connecting" | "connected" | "error"
+  connectedDevice,        // { id, name, type } | null
+  bluetoothSupported,     // boolean
+  serialSupported,        // boolean
+  error,                  // { code, message } | null
+  scanForDevices,         // () =&gt; Promise&lt;void&gt;
+  connectBluetoothSensor, // (deviceId: string) =&gt; Promise&lt;void&gt;
+  connectSerialSensor,    // (port: SerialPort) =&gt; Promise&lt;void&gt;
+  disconnectSensor,       // () =&gt; Promise&lt;void&gt;
+  forgetDevice,           // (deviceId: string) =&gt; Promise&lt;void&gt;
+  getConsentedDevices,    // () =&gt; Promise&lt;ConsentRecord[]&gt;
+} = useSensorBridge();
+      </signature>
+      <path>index.html (new section)</path>
+    </interface>
+    <interface>
+      <name>sensor_consent IndexedDB Store</name>
+      <kind>database-schema</kind>
+      <signature>
+{
+  id: auto-increment,
+  deviceId: string,
+  deviceName: string,
+  type: "bluetooth" | "serial",
+  grantedAt: number,
+  scopes: string[],
+  lastConnectedAt: number | null,
+  connectionCount: number,
+  revokedAt: number | null
+}
+      </signature>
+      <path>index.html (extend initDatabase)</path>
+    </interface>
+    <interface>
+      <name>showToast</name>
+      <kind>function</kind>
+      <signature>showToast(message: string, type: 'info' | 'success' | 'error' = 'info') =&gt; void</signature>
+      <path>index.html:6392</path>
+    </interface>
+    <interface>
+      <name>setA11yAnnouncement</name>
+      <kind>function</kind>
+      <signature>setA11yAnnouncement(message: string) =&gt; void</signature>
+      <path>index.html:6348</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests use Node.js with fake-indexeddb for IndexedDB operations. Test files follow naming pattern: tests/{feature}.test.js. Each test file exports runTest() helper with async/await pattern. Use assert module for assertions. Mock browser APIs (navigator.bluetooth, navigator.serial) for capability detection tests.
+    </standards>
+    <locations>
+      <location>tests/*.test.js</location>
+      <location>tests/sensor-consent.test.js (to be created)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1,AC2">Test capability detection returns correct boolean based on navigator API presence</idea>
+      <idea ac="AC1,AC2">Mock navigator.bluetooth = undefined for Firefox simulation</idea>
+      <idea ac="AC3">Verify correct messaging rendered for each browser capability combination</idea>
+      <idea ac="AC4">Test modal focus trap behavior (Tab/Shift+Tab cycles within modal)</idea>
+      <idea ac="AC4">Test Escape key closes modal</idea>
+      <idea ac="AC4">Test "Don't show again" checkbox persists to localStorage</idea>
+      <idea ac="AC5">Test scanForDevices() with Heart Rate Service filter (0x180D)</idea>
+      <idea ac="AC5">Test 10s timeout behavior and toast message</idea>
+      <idea ac="AC5">Test error handling for each error code (PERMISSION_DENIED, DEVICE_NOT_FOUND, etc.)</idea>
+      <idea ac="AC6">Test addConsent() creates correct IndexedDB record</idea>
+      <idea ac="AC6">Test updateConsent() increments connectionCount and updates lastConnectedAt</idea>
+      <idea ac="AC7">Test revokeConsent() sets revokedAt timestamp (soft delete)</idea>
+      <idea ac="AC7">Test forgetDevice() disconnects if currently connected</idea>
+      <idea ac="AC8">Test getConsentedDevices() filters out revoked devices</idea>
+      <idea ac="AC8">Test list sorted by lastConnectedAt descending</idea>
+      <idea ac="AC8">Test max 5 devices limit</idea>
+    </ideas>
+  </tests>
+</story-context>

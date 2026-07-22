@@ -1,0 +1,243 @@
+<story-context id="bmm/story-context" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>4-2</storyId>
+    <title>Emoji Check-In &amp; Notes Prompt</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-11-25</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/4-2-emoji-checkin-notes-prompt.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user completing a focus session</asA>
+    <iWant>a quick emoji-based mood check-in with optional notes</iWant>
+    <soThat>I can track how sessions make me feel without interrupting my flow or writing lengthy reflections</soThat>
+    <tasks>
+      <task id="1">Implement CheckInModal component with emoji grid (5 emojis), notes textarea, submit/skip buttons</task>
+      <task id="2">Add modal state management (showCheckInModal, checkInSessionId, previousFocusRef)</task>
+      <task id="3">Integrate modal trigger with endSession() callback</task>
+      <task id="4">Implement focus trap (Tab cycles within modal) and Escape key handling</task>
+      <task id="5">Add CSS styling for modal overlay, emoji buttons, notes section, responsive layout</task>
+      <task id="6">Implement reduced motion support (no animations when prefers-reduced-motion)</task>
+      <task id="7">Add accessibility attributes (role="dialog", aria-modal, aria-labelledby, aria-pressed)</task>
+      <task id="8">Add auto-dismiss after 60 seconds timeout</task>
+      <task id="9">Add screen reader announcements via setA11yAnnouncement</task>
+      <task id="10">Manual testing across browsers and accessibility audit</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="Check-In Modal Trigger">
+      Modal appears within 200ms of session end (track finishes OR user stops).
+      Contains heading "How do you feel now?", 5-emoji grid, notes textarea, Submit/Skip buttons.
+      Body scroll disabled while modal open. Auto-dismisses after 60 seconds.
+    </criterion>
+    <criterion id="AC2" title="Emoji Grid Interaction">
+      5 emojis displayed horizontally (vertical stack on mobile &lt;600px).
+      Each emoji button is 80px+ tap target (WCAG 2.1 AA).
+      Emojis: Anxious, Neutral, Calm, Focused, Energized with semantic labels.
+      Selected state: bold border, aria-pressed="true". Click toggles selection.
+    </criterion>
+    <criterion id="AC3" title="Optional Notes Field">
+      Placeholder: "Optional notes (e.g., what helped?)". Max 500 chars with counter.
+      Multiline support (3 rows). Can submit with or without emoji/notes.
+      Empty notes stored as empty string (not null).
+    </criterion>
+    <criterion id="AC4" title="Submit &amp; Skip Actions">
+      Submit: calls updateSession(sessionId, {moodAfter, notes}), shows toast "Session saved", closes modal.
+      Skip: does NOT update session, closes modal, shows toast "Check-in skipped".
+      Escape key: same behavior as Skip. Console logging for both actions.
+    </criterion>
+    <criterion id="AC5" title="Accessibility Requirements">
+      Modal: role="dialog", aria-modal="true", aria-labelledby, aria-describedby.
+      Emoji buttons: aria-label "Rate mood as [label]", aria-pressed for selected.
+      Focus trap: Tab/Shift+Tab cycles within modal. Initial focus on first emoji.
+      After close: focus returns to previous element (play/pause button).
+    </criterion>
+    <criterion id="AC6" title="Reduced Motion Support">
+      No fade-in animation (instant display). No emoji scale animation on hover.
+      No slide-in for notes textarea. Immediate modal close (no fade-out).
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>FR6: Session Logging &amp; Insights Scaffold</section>
+        <snippet>Define emoji feedback capture for post-session mood tracking, enabling pattern analysis and therapist reporting.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Section 3.5: Session Logging &amp; Insights</section>
+        <snippet>SessionLogger listens for SESSION_ENDED events. Emoji check-in modal triggered after session end, updates moodAfter field.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-4.md</path>
+        <title>Epic 4 Technical Specification</title>
+        <section>AC6: Emoji Check-in</section>
+        <snippet>Display accessible modal with emoji picker (5-7 mood options), accept optional notes field (max 500 chars), update session record with moodAfter and notes.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/4-1-session-schema-lifecycle-hooks.md</path>
+        <title>Story 4-1: Session Schema &amp; Lifecycle Hooks</title>
+        <section>Session API Implementation</section>
+        <snippet>Provides updateSession() helper, activeSessionIdRef, getSessionLoggingApi() that Story 4-2 depends on for persisting mood data.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>index.html</path>
+        <kind>main-application</kind>
+        <symbol>endSession</symbol>
+        <lines>6666-6690</lines>
+        <reason>Existing session end function - Story 4-2 must integrate modal trigger after this completes</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>state-management</kind>
+        <symbol>activeSessionId, activeSessionIdRef</symbol>
+        <lines>5065, 5151</lines>
+        <reason>Session tracking state - modal needs sessionId to update session with mood data</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>utility</kind>
+        <symbol>showToast</symbol>
+        <lines>5050-5063</lines>
+        <reason>Toast notification system - reuse for "Session saved" and "Check-in skipped" feedback</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>reducedMotion</symbol>
+        <lines>5010, 5314</lines>
+        <reason>Reduced motion preference state - modal must respect this for AC6 compliance</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>css</kind>
+        <symbol>.dialog-overlay, .dialog-content</symbol>
+        <lines>1557-1590</lines>
+        <reason>Existing modal overlay styles - reuse pattern for CheckInModal CSS</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>SavePresetDialog</symbol>
+        <lines>4351-4617</lines>
+        <reason>Existing dialog component pattern with focus trap, Escape handling, aria attributes - use as reference</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>api</kind>
+        <symbol>getSessionLoggingApi</symbol>
+        <lines>varies</lines>
+        <reason>Session logging API - provides updateSession() method to persist moodAfter and notes</reason>
+      </file>
+      <file>
+        <path>tests/session-logging.test.js</path>
+        <kind>test</kind>
+        <symbol>session-logging tests</symbol>
+        <lines>full-file</lines>
+        <reason>Existing session tests - extend with mood update tests for Story 4-2</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <ecosystem name="browser-apis">
+        <package name="IndexedDB" version="native">Session data persistence</package>
+        <package name="localStorage" version="native">Reduced motion preference</package>
+      </ecosystem>
+      <ecosystem name="devDependencies">
+        <package name="fake-indexeddb" version="^6.2.5">Mock IndexedDB for Node.js unit tests</package>
+      </ecosystem>
+      <ecosystem name="inline-libraries">
+        <package name="React" version="18.x (CDN)">Component framework, hooks (useState, useRef, useEffect, useCallback)</package>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface>
+      <name>updateSession</name>
+      <kind>IndexedDB API function</kind>
+      <signature>updateSession(sessionId: number, updates: {moodAfter?: string, notes?: string, duration?: number, endedManually?: boolean}): Promise&lt;void&gt;</signature>
+      <path>index.html (getSessionLoggingApi)</path>
+    </interface>
+    <interface>
+      <name>getSession</name>
+      <kind>IndexedDB API function</kind>
+      <signature>getSession(sessionId: number): Promise&lt;SessionRecord | undefined&gt;</signature>
+      <path>index.html (getSessionLoggingApi)</path>
+    </interface>
+    <interface>
+      <name>showToast</name>
+      <kind>UI feedback function</kind>
+      <signature>showToast(message: string, type: 'info' | 'success' | 'warning' | 'error'): void</signature>
+      <path>index.html:5050</path>
+    </interface>
+    <interface>
+      <name>setA11yAnnouncement</name>
+      <kind>Accessibility announcement</kind>
+      <signature>setA11yAnnouncement(message: string): void</signature>
+      <path>index.html (existing a11y system)</path>
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint source="tech-spec-epic-4">IndexedDB update must complete in &lt;30ms P95</constraint>
+    <constraint source="tech-spec-epic-4">Modal render must complete in &lt;100ms from trigger</constraint>
+    <constraint source="architecture">All session data remains local - no network transmission</constraint>
+    <constraint source="story-ac">Emoji buttons must be 80px+ tap targets (WCAG 2.1 AA)</constraint>
+    <constraint source="story-ac">Notes field limited to 500 characters</constraint>
+    <constraint source="story-ac">Auto-dismiss after 60 seconds if no interaction</constraint>
+    <constraint source="story-ac">Focus must return to previous element after modal close</constraint>
+    <constraint source="existing-patterns">Follow SavePresetDialog component patterns for modal structure</constraint>
+    <constraint source="existing-patterns">Reuse .dialog-overlay CSS class for consistent styling</constraint>
+    <constraint source="existing-patterns">Use same toast notification patterns as Story 3-3</constraint>
+  </constraints>
+
+  <tests>
+    <standards>
+      Tests use Node.js with fake-indexeddb for unit testing IndexedDB operations.
+      Manual browser testing required for modal interactions, accessibility, and reduced motion.
+      Run existing tests via: npm test (includes session-logging.test.js).
+      Accessibility audit with axe DevTools and Pa11y CLI targeting 95%+ score.
+      Test on Chrome, Firefox, Safari desktop and iOS Safari, Android Chrome mobile.
+    </standards>
+    <locations>
+      <location>tests/session-logging.test.js</location>
+      <location>Manual: Chrome DevTools Accessibility tab</location>
+      <location>Manual: axe DevTools extension</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC1">Test modal appears within 200ms after track ends naturally</idea>
+      <idea acRef="AC1">Test modal appears after user manually stops playback</idea>
+      <idea acRef="AC1">Test body scroll is disabled while modal open</idea>
+      <idea acRef="AC1">Test auto-dismiss after 60 seconds timeout</idea>
+      <idea acRef="AC2">Test each of 5 emoji buttons selectable with visual feedback</idea>
+      <idea acRef="AC2">Test clicking different emoji deselects previous</idea>
+      <idea acRef="AC2">Test emoji buttons are 80px+ tap targets</idea>
+      <idea acRef="AC2">Test responsive layout (horizontal on desktop, vertical on mobile)</idea>
+      <idea acRef="AC3">Test character counter updates as user types</idea>
+      <idea acRef="AC3">Test 500 character limit enforced</idea>
+      <idea acRef="AC3">Test submit works with emoji only (notes = "")</idea>
+      <idea acRef="AC3">Test submit works with notes only (moodAfter = null)</idea>
+      <idea acRef="AC4">Test Submit saves moodAfter and notes to IndexedDB</idea>
+      <idea acRef="AC4">Test Skip closes modal without saving</idea>
+      <idea acRef="AC4">Test Escape key behaves same as Skip</idea>
+      <idea acRef="AC4">Test toast notifications appear for submit/skip</idea>
+      <idea acRef="AC5">Test Tab key cycles through modal elements (focus trap)</idea>
+      <idea acRef="AC5">Test initial focus on first emoji button</idea>
+      <idea acRef="AC5">Test focus returns to play button after modal close</idea>
+      <idea acRef="AC5">Test screen reader announces emoji selection</idea>
+      <idea acRef="AC6">Test no fade-in animation with prefers-reduced-motion</idea>
+      <idea acRef="AC6">Test no hover scale animation with reduced motion</idea>
+    </ideas>
+  </tests>
+</story-context>

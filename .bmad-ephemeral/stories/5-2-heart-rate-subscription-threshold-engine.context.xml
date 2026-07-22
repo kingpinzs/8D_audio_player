@@ -1,0 +1,463 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>2</storyId>
+    <title>Heart Rate Subscription &amp; Threshold Engine</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-25</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>.bmad-ephemeral/stories/5-2-heart-rate-subscription-threshold-engine.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user with a connected Bluetooth heart rate sensor</asA>
+    <iWant>real-time HR monitoring with intelligent threshold-based suggestions</iWant>
+    <soThat>the app can help me manage stress through adaptive preset recommendations when my heart rate stays elevated</soThat>
+    <tasks>
+      <task id="1" ac="1">
+        <title>HR Characteristic Subscription</title>
+        <subtasks>
+          <item>Implement subscribeToHeartRate(device) function in SensorProvider</item>
+          <item>Parse HR Measurement characteristic (0x2A37) per Bluetooth spec</item>
+          <item>Handle 8-bit vs 16-bit HR value format based on flags byte</item>
+          <item>Update currentHR state on each notification</item>
+          <item>Add error handling for subscription failures</item>
+          <item>Add console logging with [SensorBridge] HR: {value} prefix</item>
+        </subtasks>
+      </task>
+      <task id="2" ac="2">
+        <title>Real-Time HR Display &amp; History Buffer</title>
+        <subtasks>
+          <item>Add hrHistory state array (rolling 60-second window, ~60 samples at 1Hz)</item>
+          <item>Implement circular buffer logic for efficient history management</item>
+          <item>Create HR display component showing current HR and rolling average</item>
+          <item>Add performance.mark() instrumentation for latency measurement</item>
+          <item>Display HR in sensor settings area when connected</item>
+          <item>Style HR display with heart icon and appropriate formatting</item>
+        </subtasks>
+      </task>
+      <task id="3" ac="3">
+        <title>Automatic Reconnection Logic</title>
+        <subtasks>
+          <item>Add gatt.addEventListener('gattserverdisconnected', handler) listener</item>
+          <item>Implement reconnection loop (6 attempts over 3 seconds, 500ms interval)</item>
+          <item>Add "Reconnecting..." status state and UI indicator</item>
+          <item>Handle reconnect success: Re-subscribe to HR characteristic</item>
+          <item>Handle reconnect failure: Update status, show error toast</item>
+          <item>Add manual reconnect button for failed auto-reconnect</item>
+        </subtasks>
+      </task>
+      <task id="4" ac="4">
+        <title>SensorRuleEngine Implementation</title>
+        <subtasks>
+          <item>Create SensorRuleEngine module/class</item>
+          <item>Implement 10-second evaluation interval using setInterval</item>
+          <item>Calculate rolling average from hrHistory buffer</item>
+          <item>Check if average &gt; threshold for consecutive checks (track consecutiveExceeded counter)</item>
+          <item>Emit SENSOR_THRESHOLD_EXCEEDED event via event bus or callback</item>
+          <item>Implement 5-minute cooldown after trigger</item>
+          <item>Clean up interval on component unmount/disconnect</item>
+        </subtasks>
+      </task>
+      <task id="5" ac="5">
+        <title>Suggestion Toast UI</title>
+        <subtasks>
+          <item>Create SensorSuggestionToast component</item>
+          <item>Implement 15-second auto-dismiss timer</item>
+          <item>Add "Switch" button that calls applyPreset('calm')</item>
+          <item>Add "Dismiss" button that closes toast</item>
+          <item>Implement focus trap and keyboard handling (Escape to dismiss)</item>
+          <item>Add ARIA attributes for screen reader announcement</item>
+          <item>Style toast matching existing toast patterns</item>
+        </subtasks>
+      </task>
+      <task id="6" ac="6">
+        <title>Session Event Logging Integration</title>
+        <subtasks>
+          <item>Extend session schema to include sensorEvents[] array</item>
+          <item>Implement logSensorEvent(eventType, data) helper function</item>
+          <item>Log events: THRESHOLD_EXCEEDED, SUGGESTION_SHOWN, SUGGESTION_ACCEPTED, SUGGESTION_DISMISSED, SUGGESTION_TIMEOUT</item>
+          <item>Calculate hrAvg, hrMax, hrMin, hrDelta on session end</item>
+          <item>Update session record with HR summary statistics</item>
+          <item>Verify integration with existing SessionLogger from Epic 4</item>
+        </subtasks>
+      </task>
+      <task id="7" ac="7">
+        <title>Threshold Settings UI</title>
+        <subtasks>
+          <item>Add "Heart Rate Threshold" input to sensor settings section</item>
+          <item>Implement number input with range 60-120, step 5, default 85</item>
+          <item>Persist threshold to localStorage (mp3_8d_hr_threshold)</item>
+          <item>Load threshold from localStorage on app init</item>
+          <item>Wire threshold to SensorRuleEngine for live updates</item>
+          <item>Add helper text explaining the setting</item>
+        </subtasks>
+      </task>
+      <task id="8" ac="8">
+        <title>Sensor Simulator Implementation</title>
+        <subtasks>
+          <item>Check for ?simulate_sensor=true URL param or localStorage flag</item>
+          <item>Implement SensorSimulator class with configurable parameters</item>
+          <item>Generate baseline HR with random variation (+/-5 BPM)</item>
+          <item>Implement periodic "stress events" that ramp HR up</item>
+          <item>Expose console API: window.startSensorSimulation(), window.stopSensorSimulation(), window.setSensorHR()</item>
+          <item>Show simulated device in device list with "Simulated Sensor" name</item>
+          <item>Set isSimulated: true in sensor state during simulation</item>
+        </subtasks>
+      </task>
+      <task id="9" ac="all">
+        <title>Testing &amp; Documentation</title>
+        <subtasks>
+          <item>Write unit tests for HR characteristic parsing (8-bit and 16-bit formats)</item>
+          <item>Write unit tests for SensorRuleEngine threshold logic</item>
+          <item>Write unit tests for reconnection logic (mock disconnect events)</item>
+          <item>Write integration test: Simulated sensor to threshold exceeded to suggestion shown</item>
+          <item>Write integration test: Accept suggestion to preset applied to event logged</item>
+          <item>Add test script to package.json</item>
+          <item>Document simulator API in code comments</item>
+        </subtasks>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="Heart Rate Service Subscription (BLE GATT)">
+      <given>A Bluetooth device is connected via Story 5-1 connection flow</given>
+      <when>Device advertises Heart Rate Service (0x180D)</when>
+      <then>
+        <item>Subscribe to Heart Rate Measurement characteristic (0x2A37)</item>
+        <item>Parse HR value from characteristic notification (handle different data formats per spec)</item>
+        <item>Update currentHR state on each notification</item>
+        <item>Log to console: [SensorBridge] HR: {value} bpm</item>
+      </then>
+      <technicalNotes>HR Measurement characteristic uses variable-length format. Bit 0 of flags byte indicates 8-bit (0) vs 16-bit (1) HR value. Handle both contact sensor and non-contact device flags.</technicalNotes>
+    </criterion>
+    <criterion id="AC2" title="Real-Time HR Display (&lt;100ms Latency)">
+      <given>Sensor is connected and streaming HR data</given>
+      <when>HR notification received from BLE device</when>
+      <then>
+        <item>Update currentHR state within 100ms of notification</item>
+        <item>Display current HR in sensor settings area (e.g., heart icon 72 bpm)</item>
+        <item>Push HR value to rolling 60-second history buffer (hrHistory[])</item>
+        <item>Calculate and display rolling average if &gt;10 samples available</item>
+      </then>
+      <performance>Use performance.mark() to measure notification-to-render latency. Target: P95 &lt;100ms</performance>
+    </criterion>
+    <criterion id="AC3" title="Automatic Reconnection (3-second window)">
+      <given>Sensor was connected and streaming</given>
+      <when>BLE device disconnects unexpectedly (user didn't click disconnect)</when>
+      <then>
+        <item>Immediately show status: "Reconnecting..."</item>
+        <item>Attempt reconnection every 500ms for up to 3 seconds (6 attempts)</item>
+        <item>On reconnect success: Resume HR subscription, show toast "Reconnected to {deviceName}"</item>
+        <item>On reconnect failure after 3s: Show toast "Couldn't reconnect. Please reconnect manually."</item>
+        <item>Update status to "disconnected" and enable manual reconnect button</item>
+      </then>
+      <errorHandling>
+        <scenario error="Device out of range">Couldn't reconnect. Move closer to your device.</scenario>
+        <scenario error="Device powered off">Couldn't reconnect. Make sure your device is on.</scenario>
+        <scenario error="Generic failure">Couldn't reconnect. Please reconnect manually.</scenario>
+      </errorHandling>
+    </criterion>
+    <criterion id="AC4" title="Threshold Rule Engine">
+      <given>HR data is streaming and threshold is configured</given>
+      <when>HR exceeds user-defined threshold continuously</when>
+      <then>
+        <item>Check threshold every 10 seconds (evaluate hrHistory buffer)</item>
+        <item>Rule triggers when: Average HR &gt; threshold for 3 consecutive checks (30 seconds minimum)</item>
+        <item>On trigger: Emit SENSOR_THRESHOLD_EXCEEDED event</item>
+        <item>Log to sensorEvents[]: { type: "THRESHOLD_EXCEEDED", timestamp, data: { hr, threshold } }</item>
+        <item>Show suggestion toast (see AC5)</item>
+        <item>Cooldown: After trigger, wait 5 minutes before re-triggering same rule</item>
+      </then>
+      <defaults>Default threshold: 85 BPM (configurable per AC7)</defaults>
+    </criterion>
+    <criterion id="AC5" title="Preset Suggestion Toast">
+      <given>Threshold rule has triggered</given>
+      <when>Suggestion should display</when>
+      <then>
+        <item>Show toast with message: "Heart rate elevated. Switch to Calm preset?"</item>
+        <item>Include two buttons: "Switch" (primary) | "Dismiss" (secondary)</item>
+        <item>Toast remains visible for 15 seconds or until user action</item>
+        <item>On "Switch": Call applyPreset('calm'), log event SUGGESTION_ACCEPTED</item>
+        <item>On "Dismiss": Log event SUGGESTION_DISMISSED, close toast</item>
+        <item>On timeout: Treat as dismissed, log SUGGESTION_TIMEOUT</item>
+      </then>
+      <accessibility>
+        <item>Toast announced to screen readers: "Heart rate elevated at {HR} bpm. Suggestion: Switch to Calm preset."</item>
+        <item>Keyboard focus moves to toast on appear</item>
+        <item>Escape key dismisses</item>
+      </accessibility>
+    </criterion>
+    <criterion id="AC6" title="Session Event Logging">
+      <given>Sensor is connected during an active session</given>
+      <when>Sensor events occur (threshold exceeded, suggestion shown, accepted, dismissed)</when>
+      <then>
+        <item>Push to current session's sensorEvents[] array with timestamp, type, and data</item>
+        <item>Event types: THRESHOLD_EXCEEDED, SUGGESTION_SHOWN, SUGGESTION_ACCEPTED, SUGGESTION_DISMISSED, SUGGESTION_TIMEOUT</item>
+        <item>Data includes: hr, hrAvg, threshold, presetApplied (if applicable)</item>
+        <item>On session end: Calculate and store hrAvg, hrMax, hrMin, hrDelta from history buffer</item>
+      </then>
+    </criterion>
+    <criterion id="AC7" title="Configurable Threshold Setting">
+      <given>User wants to customize HR threshold</given>
+      <when>User opens Settings</when>
+      <then>
+        <item>Show "Heart Rate Threshold" setting in sensor settings section</item>
+        <item>Number input with range 60-120 BPM, step 5</item>
+        <item>Default value: 85 BPM</item>
+        <item>Persist to localStorage: mp3_8d_hr_threshold</item>
+        <item>Show helper text: "Alert when heart rate exceeds this for 30+ seconds"</item>
+        <item>Live update: Changing threshold immediately affects rule engine (no restart needed)</item>
+      </then>
+    </criterion>
+    <criterion id="AC8" title="Sensor Simulator Mode">
+      <given>Developer or tester needs to test without physical sensor</given>
+      <when>URL parameter ?simulate_sensor=true is present OR localStorage flag set</when>
+      <then>
+        <item>Show "Start Simulation" button in sensor settings</item>
+        <item>On click: Generate simulated HR data stream with base HR 70 BPM +/- 5 random variation</item>
+        <item>"Stress event" every 60 seconds: Ramp HR to 95 BPM over 20 seconds</item>
+        <item>Configurable via console: window.setSensorSimulation({ baseHR, stressHR, stressInterval })</item>
+        <item>Simulated device appears as "Simulated Sensor" in device list</item>
+        <item>isSimulated flag set to true in sensor state</item>
+        <item>All rule engine and logging behavior functions identically to real sensor</item>
+      </then>
+      <consoleApi>
+        <method>window.startSensorSimulation({ baseHR, stressHR, stressInterval })</method>
+        <method>window.stopSensorSimulation()</method>
+        <method>window.setSensorHR(value)</method>
+      </consoleApi>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture - mp3_to_8D</title>
+        <section>Section 3.6 - Sensor Bridge</section>
+        <snippet>SensorRuleEngine monitors data stream, triggering recommendations when thresholds exceed user-defined ranges (e.g., HR &gt; 85 bpm for 3 min). Emits SENSOR_THRESHOLD_EXCEEDED event consumed by presets + UI to show suggestions.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-5.md</path>
+        <title>Epic Technical Specification: Sensor &amp; Adaptive Loop</title>
+        <section>Full Spec - Workflows, Data Models, APIs</section>
+        <snippet>Defines SensorProvider, useSensorBridge hook API, error codes, data models for sensor_consent and extended session schema. Story 5-2 workflow sequence: BLE connect, HR subscription, history buffer, rule evaluation, threshold trigger, suggestion toast.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/5-1-capability-detection-consent-ui.md</path>
+        <title>Story 5.1: Capability Detection &amp; Consent UI</title>
+        <section>Dev Agent Record - Completion Notes</section>
+        <snippet>Prerequisite story implementing SensorProvider context, IndexedDB sensor_consent store, capability detection, consent modal. Pattern: single-file architecture in index.html, soft-delete for audit trails, 21 automated tests passing.</snippet>
+      </doc>
+      <doc>
+        <path>docs/create-epics-and-stories.md</path>
+        <title>Epics &amp; Stories - mp3_to_8D</title>
+        <section>E5 - Sensor &amp; Adaptive Loop</section>
+        <snippet>Story S5.2 acceptance: Connects to standard Heart Rate Service; handles reconnect &lt;3s; rule engine triggers Calm suggestion when HR &gt; user-defined threshold for 3 min; event logged in session record. KPI: sensor connection success &gt;=85%.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-5.md</path>
+        <title>Epic Technical Specification: Sensor &amp; Adaptive Loop</title>
+        <section>Non-Functional Requirements - Performance</section>
+        <snippet>HR update latency: &lt;100ms. Reconnect time: &lt;3s. Rule evaluation: &lt;50ms. Memory footprint: &lt;5MB for 60s HR history buffer + consent records.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-5.md</path>
+        <title>Epic Technical Specification: Sensor &amp; Adaptive Loop</title>
+        <section>Data Models - Extended Session Schema</section>
+        <snippet>Session record additions: hrAvg, hrMax, hrMin, hrDelta (all number|null), sensorEvents[] array with timestamp, type, and data object for context-specific information.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-5.md</path>
+        <title>Epic Technical Specification: Sensor &amp; Adaptive Loop</title>
+        <section>APIs and Interfaces - Error Codes</section>
+        <snippet>Error codes: BT_NOT_SUPPORTED, SERIAL_NOT_SUPPORTED, PERMISSION_DENIED, DEVICE_NOT_FOUND, CONNECTION_FAILED, DISCONNECTED, RECONNECT_TIMEOUT with user-facing messages.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>sensor-consent.js</path>
+        <kind>module</kind>
+        <symbol>sensorConsentApi</symbol>
+        <lines>1-355</lines>
+        <reason>IndexedDB consent CRUD module created in Story 5-1. Reuse soft-delete pattern for sensorEvents. Provides addConsent, getConsent, revokeConsent APIs. Already integrated with app.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>Sensor state declarations</symbol>
+        <lines>7212-7232</lines>
+        <reason>Sensor state variables already declared: bluetoothSupported, serialSupported, sensorStatus, connectedDevice, sensorError, consentedDevices, etc. Extend with hrHistory, currentHR, hrThreshold for Story 5-2.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>function</kind>
+        <symbol>applyPreset(preset, presetId)</symbol>
+        <lines>10415-10462</lines>
+        <reason>Preset application function from Epic 3. Call this when user accepts suggestion toast (AC5). Handles speed, intensity, spatialDepth, movement, binaural, noise parameters with &lt;20ms latency.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>sensorLocked</symbol>
+        <lines>7210</lines>
+        <reason>Sensor automation lock state from Epic 3-2. Used to disable sliders when sensor automation is active. Story 5-3 will use this; Story 5-2 prepares the foundation.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>function</kind>
+        <symbol>showToast(message, type)</symbol>
+        <lines>7266-7279</lines>
+        <reason>Toast notification system. Use for suggestion toast (AC5), reconnection status (AC3). Existing pattern: 5-second auto-dismiss, a11y announcement.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>integration</kind>
+        <symbol>SessionLogger</symbol>
+        <lines>7674-9097</lines>
+        <reason>Session logging infrastructure from Epic 4. Extend to log sensorEvents[] (AC6). Uses IndexedDB mp3_8d_sessions store. Pattern: [SessionLogger] console prefix.</reason>
+      </artifact>
+      <artifact>
+        <path>tests/sensor-consent.test.js</path>
+        <kind>test</kind>
+        <symbol>Sensor consent tests</symbol>
+        <lines>1-413</lines>
+        <reason>Test patterns from Story 5-1: capability detection mocks, IndexedDB CRUD tests, integration tests. Follow same structure for HR parsing and rule engine tests.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <node>
+        <package>react</package>
+        <version>18.2.0 (UMD)</version>
+        <usage>State management, hooks (useState, useEffect, useRef, useCallback)</usage>
+      </node>
+      <node>
+        <package>fake-indexeddb</package>
+        <version>^6.2.5</version>
+        <usage>Dev dependency for mocking IndexedDB in tests</usage>
+      </node>
+      <browser>
+        <api>Web Bluetooth API</api>
+        <service>Heart Rate Service (0x180D)</service>
+        <characteristic>Heart Rate Measurement (0x2A37)</characteristic>
+        <methods>requestDevice, connect, getPrimaryService, getCharacteristic, startNotifications</methods>
+      </browser>
+      <browser>
+        <api>IndexedDB</api>
+        <stores>sensor_consent, sessions</stores>
+        <usage>Consent records, session logging with sensorEvents[]</usage>
+      </browser>
+      <browser>
+        <api>Performance API</api>
+        <methods>performance.mark(), performance.measure()</methods>
+        <usage>Latency measurement for HR updates (&lt;100ms target)</usage>
+      </browser>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">Single-file architecture: All implementation in index.html (maintaining project convention)</constraint>
+    <constraint type="architecture">No server-side components: All sensor processing runs client-side</constraint>
+    <constraint type="architecture">Privacy-first: All biometric data stays in IndexedDB, never leaves device</constraint>
+    <constraint type="performance">HR update latency must be &lt;100ms (P95) from BLE notification to UI update</constraint>
+    <constraint type="performance">Preset application via applyPreset() must complete in &lt;20ms</constraint>
+    <constraint type="performance">Rule evaluation must complete in &lt;50ms per 10-second tick</constraint>
+    <constraint type="performance">Reconnect attempts must complete within 3 seconds (6 attempts at 500ms)</constraint>
+    <constraint type="ux">Suggestion toast stays 15 seconds; 5-minute cooldown after trigger</constraint>
+    <constraint type="ux">Default threshold: 85 BPM, configurable range 60-120 BPM, step 5</constraint>
+    <constraint type="testing">Must provide simulator mode for CI/CD testing without physical hardware</constraint>
+    <constraint type="pattern">Follow existing console log patterns: [SensorBridge] for sensor ops, [SensorRuleEngine] for threshold eval</constraint>
+    <constraint type="pattern">Follow existing test patterns from tests/sensor-consent.test.js</constraint>
+    <constraint type="integration">Build on Story 5-1 SensorProvider and connection flow (status: review)</constraint>
+    <constraint type="integration">Integrate with Epic 3 applyPreset() for suggestion acceptance</constraint>
+    <constraint type="integration">Integrate with Epic 4 SessionLogger for sensorEvents[] logging</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>Heart Rate Measurement Characteristic</name>
+      <kind>BLE GATT</kind>
+      <signature>UUID: 0x2A37, Flags byte + HR value (8 or 16 bit)</signature>
+      <path>Web Bluetooth API</path>
+      <notes>Bit 0 of flags = 0: 8-bit HR (byte 1). Bit 0 = 1: 16-bit HR (bytes 1-2 little endian).</notes>
+    </interface>
+    <interface>
+      <name>applyPreset</name>
+      <kind>function</kind>
+      <signature>applyPreset(preset: PresetConfig, presetId: string): void</signature>
+      <path>index.html:10415</path>
+      <notes>Applies preset parameters to audio graph. Used when user accepts suggestion toast.</notes>
+    </interface>
+    <interface>
+      <name>showToast</name>
+      <kind>function</kind>
+      <signature>showToast(message: string, type: 'info' | 'success' | 'error'): void</signature>
+      <path>index.html:7266</path>
+      <notes>Displays toast notification with 5s auto-dismiss. Use for reconnection status and errors.</notes>
+    </interface>
+    <interface>
+      <name>sensorConsentApi</name>
+      <kind>module</kind>
+      <signature>{ addConsent, getConsent, getConsentedDevices, revokeConsent, recordConnection, ... }</signature>
+      <path>sensor-consent.js</path>
+      <notes>IndexedDB CRUD for consent records. Call recordConnection when reconnecting.</notes>
+    </interface>
+    <interface>
+      <name>SessionLogger</name>
+      <kind>module</kind>
+      <signature>{ startSession, endSession, saveCheckIn, getSessions, ... }</signature>
+      <path>index.html:7674-9097</path>
+      <notes>Extend to accept sensorEvents[] and HR summary stats on session end.</notes>
+    </interface>
+    <interface>
+      <name>SensorRuleEngine (to implement)</name>
+      <kind>class</kind>
+      <signature>class SensorRuleEngine { constructor(options), start(), stop(), setThreshold(bpm), onThresholdExceeded(callback) }</signature>
+      <path>index.html (new)</path>
+      <notes>New module: 10s evaluation interval, 3 consecutive checks, 5min cooldown, emits SENSOR_THRESHOLD_EXCEEDED.</notes>
+    </interface>
+    <interface>
+      <name>Console API for Simulator</name>
+      <kind>window global</kind>
+      <signature>window.startSensorSimulation(config), window.stopSensorSimulation(), window.setSensorHR(value)</signature>
+      <path>index.html (new)</path>
+      <notes>Development/testing API exposed on window object for manual sensor simulation.</notes>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests follow Jest-style patterns using Node.js assert module. Test files are in tests/ directory and run via npm test. Use fake-indexeddb for IndexedDB mocking. Pattern: runTest wrapper function with async/await, console log output with checkmark/X indicators. Tests grouped by category: capability detection, CRUD operations, integration flows. Story 5-1 established 21 passing tests as baseline.
+    </standards>
+    <locations>
+      <location>tests/sensor-consent.test.js</location>
+      <location>tests/*.test.js (new test files)</location>
+      <location>package.json scripts.test</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Unit test: Parse 8-bit HR value (flags byte = 0x00, HR = 72) returns 72</idea>
+      <idea ac="AC1">Unit test: Parse 16-bit HR value (flags byte = 0x01, HR = 256) returns 256</idea>
+      <idea ac="AC1">Unit test: Handle malformed characteristic data gracefully (return null, log error)</idea>
+      <idea ac="AC2">Performance test: Measure notification-to-state-update latency &lt;100ms</idea>
+      <idea ac="AC2">Unit test: hrHistory buffer maintains 60-second rolling window</idea>
+      <idea ac="AC2">Unit test: Rolling average calculation with &lt;10 samples returns null</idea>
+      <idea ac="AC3">Unit test: Reconnection loop attempts 6 times over 3 seconds</idea>
+      <idea ac="AC3">Integration test: Mock disconnect event triggers reconnection flow</idea>
+      <idea ac="AC4">Unit test: Rule engine triggers after 3 consecutive threshold exceedances</idea>
+      <idea ac="AC4">Unit test: Rule engine respects 5-minute cooldown</idea>
+      <idea ac="AC4">Unit test: Threshold change takes effect immediately</idea>
+      <idea ac="AC5">Integration test: Suggestion toast appears on threshold exceeded</idea>
+      <idea ac="AC5">Integration test: "Switch" button calls applyPreset('calm')</idea>
+      <idea ac="AC5">Integration test: Toast dismissed after 15 seconds logs SUGGESTION_TIMEOUT</idea>
+      <idea ac="AC6">Integration test: Sensor events logged to session record</idea>
+      <idea ac="AC6">Unit test: HR summary stats calculated correctly on session end</idea>
+      <idea ac="AC7">Unit test: Threshold persists to localStorage</idea>
+      <idea ac="AC7">Unit test: Threshold loads from localStorage on init</idea>
+      <idea ac="AC8">Integration test: Simulator generates HR data stream</idea>
+      <idea ac="AC8">Integration test: Stress event ramps HR to target over 20 seconds</idea>
+      <idea ac="AC8">Integration test: Full flow - simulator to threshold to suggestion to accept</idea>
+    </ideas>
+  </tests>
+</story-context>

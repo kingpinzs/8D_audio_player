@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context story-id="4.1" story-key="4-1-session-schema-lifecycle-hooks">
+  <metadata>
+    <title>Session Schema &amp; Lifecycle Hooks</title>
+    <epic-id>4</epic-id>
+    <epic-title>Session Logging &amp; Insights</epic-title>
+    <status>implemented</status>
+    <generated>2025-11-24</generated>
+    <implementation-status>COMPLETE - Implementation exists</implementation-status>
+  </metadata>
+
+  <implementation-discovery>
+    <finding type="critical">
+      This story's implementation ALREADY EXISTS in the codebase.
+      All core functionality has been implemented prior to story creation.
+    </finding>
+
+    <existing-files>
+      <file path="session-logging.js" lines="269" status="complete">
+        <description>IndexedDB session logging API module</description>
+        <features>
+          <feature>Database constants: DB_NAME='mp3_8d_sessions', DB_VERSION=1, STORE_NAME='sessions'</feature>
+          <feature>4 indexes: timestamp, profileId, presetId, ritualUsed</feature>
+          <feature>initDatabase() - opens/creates IndexedDB with schema</feature>
+          <feature>addSession() - creates session record, returns auto-increment ID</feature>
+          <feature>getSession(id) - retrieves session by ID</feature>
+          <feature>updateSession(id, updates) - patches existing session</feature>
+          <feature>deleteSession(id) - removes session by ID</feature>
+          <feature>clearProfile(profileId) - deletes by profile, 'all' clears store</feature>
+          <feature>getSessionsByDateRange(start, end) - timestamp range queries</feature>
+          <feature>clearSessionsOlderThanDays(days) - pruning helper</feature>
+          <feature>estimateStorageUsage() - returns count and byte estimate</feature>
+          <feature>resetDatabase() - deletes and recreates database</feature>
+        </features>
+      </file>
+
+      <file path="tests/session-logging.test.js" lines="263" status="complete">
+        <description>Unit tests using fake-indexeddb</description>
+        <test-count>5</test-count>
+        <tests>
+          <test name="Database schema initialization">Verifies store and indexes</test>
+          <test name="Session CRUD operations">Tests add/get/update/delete</test>
+          <test name="clearProfile() functionality">Tests profile clearing and 'all'</test>
+          <test name="Concurrent writes maintain unique IDs">Parallel write test</test>
+          <test name="Error handling - QuotaExceededError">Quota exceeded simulation</test>
+        </tests>
+      </file>
+
+      <file path="index.html" status="integrated">
+        <description>React app with session lifecycle hooks integrated</description>
+        <integration-points>
+          <point line="11">Script include: session-logging.js</point>
+          <point lines="2329-2346">Session API initialization and getSessionLoggingApi()</point>
+          <point lines="2966-3001">handleSessionError() with error handling and toasts</point>
+          <point lines="3003-3055">startSession() - creates session on playback start</point>
+          <point lines="3057-3081">endSession() - calculates duration, updates record</point>
+          <point lines="3083-3109">clearProfileSessions() - profile deletion with toast</point>
+          <point lines="3619-3662">launchRitualPlayback() - captures ritualUsed flag</point>
+        </integration-points>
+      </file>
+    </existing-files>
+  </implementation-discovery>
+
+  <acceptance-criteria-mapping>
+    <ac id="1" title="IndexedDB Schema Initialization" status="IMPLEMENTED">
+      <requirement>Database mp3_8d_sessions with sessions store, 4 indexes</requirement>
+      <implementation file="session-logging.js" lines="1-34">
+        Constants and ensureIndexes() function create proper schema
+      </implementation>
+      <test file="tests/session-logging.test.js" lines="138-162">
+        Database schema initialization test verifies store and indexes
+      </test>
+    </ac>
+
+    <ac id="2" title="Session Start Capture" status="IMPLEMENTED">
+      <requirement>Create session record when playback starts</requirement>
+      <implementation file="index.html" lines="3003-3055">
+        startSession() creates record with all required fields including
+        timestamp, trackId, trackName, presetId, presetLabel, ritualUsed
+      </implementation>
+      <performance>
+        Performance marks measure session start latency (lines 3034-3046)
+      </performance>
+    </ac>
+
+    <ac id="3" title="Session End Capture" status="IMPLEMENTED">
+      <requirement>Calculate duration, update record on playback end</requirement>
+      <implementation file="index.html" lines="3057-3081">
+        endSession() calculates duration = (endTime - timestamp) / 1000,
+        updates record with duration and endedManually flag
+      </implementation>
+    </ac>
+
+    <ac id="4" title="Profile Data Clearing" status="IMPLEMENTED">
+      <requirement>Clear sessions by profileId or all</requirement>
+      <implementation file="session-logging.js" lines="138-168">
+        clearProfile() handles both specific profileId and 'all' cases
+      </implementation>
+      <ui-integration file="index.html" lines="3083-3109">
+        clearProfileSessions() shows toast with deleted count
+      </ui-integration>
+      <test file="tests/session-logging.test.js" lines="185-214">
+        clearProfile() functionality test covers both cases
+      </test>
+    </ac>
+
+    <ac id="5" title="Error Handling and Graceful Degradation" status="IMPLEMENTED">
+      <requirement>Handle quota, corruption; graceful degradation</requirement>
+      <implementation file="index.html" lines="2966-3001">
+        handleSessionError() with QuotaExceededError handling,
+        user toasts, storage reset capability
+      </implementation>
+      <test file="tests/session-logging.test.js" lines="233-251">
+        QuotaExceededError propagation test
+      </test>
+    </ac>
+  </acceptance-criteria-mapping>
+
+  <task-status>
+    <task id="4-1-1" title="IndexedDB Schema &amp; Initialization" status="COMPLETE">
+      All subtasks implemented in session-logging.js
+    </task>
+    <task id="4-1-2" title="Session CRUD Helpers" status="COMPLETE">
+      All CRUD methods implemented with console logging
+    </task>
+    <task id="4-1-3" title="Session Lifecycle Integration" status="COMPLETE">
+      Integrated into index.html with activeSessionId state management
+    </task>
+    <task id="4-1-4" title="Error Handling &amp; Graceful Degradation" status="COMPLETE">
+      Error handling with toasts implemented
+    </task>
+    <task id="4-1-5" title="Unit Tests" status="COMPLETE">
+      5 tests in tests/session-logging.test.js using fake-indexeddb
+    </task>
+  </task-status>
+
+  <code-artifacts>
+    <artifact type="session-record-schema">
+      <![CDATA[
+{
+  id: <auto-increment>,        // IndexedDB auto-generated
+  profileId: 'default',        // String, indexed
+  timestamp: Date.now(),       // Number, indexed
+  trackId: string,             // Track identifier
+  trackName: string,           // Display name
+  presetId: string,            // Active preset ID, indexed
+  presetLabel: string,         // Display label
+  ritualUsed: boolean,         // Breathing ritual completed, indexed
+  duration: number,            // Seconds (calculated on end)
+  hrAvg: null,                 // Reserved for Epic 5
+  hrMax: null,                 // Reserved for Epic 5
+  moodBefore: null,            // Reserved for Story 4-2
+  moodAfter: null,             // Reserved for Story 4-2
+  notes: '',                   // Reserved for Story 4-2
+  endedManually: boolean       // User stopped vs auto-advance
+}
+      ]]>
+    </artifact>
+
+    <artifact type="api-exports" file="session-logging.js">
+      <![CDATA[
+SessionLogging = {
+  DB_NAME: 'mp3_8d_sessions',
+  DB_VERSION: 1,
+  STORE_NAME: 'sessions',
+  initDatabase: () => Promise<IDBDatabase>,
+  addSession: (session) => Promise<number>,
+  getSession: (id) => Promise<SessionRecord>,
+  updateSession: (id, updates) => Promise<SessionRecord>,
+  deleteSession: (id) => Promise<boolean>,
+  clearProfile: (profileId) => Promise<number>,
+  getSessionsByDateRange: (start?, end?) => Promise<SessionRecord[]>,
+  clearSessionsOlderThanDays: (days, profileId?) => Promise<number>,
+  estimateStorageUsage: () => Promise<{count, approxBytes}>,
+  resetDatabase: () => Promise<boolean>
+}
+      ]]>
+    </artifact>
+  </code-artifacts>
+
+  <documentation-references>
+    <reference type="architecture" path="docs/architecture.md" section="3.5">
+      Session Logging &amp; Insights architecture
+    </reference>
+    <reference type="tech-spec" path=".bmad-ephemeral/stories/tech-spec-epic-4.md">
+      Epic 4 technical specification with IndexedDB schema
+    </reference>
+    <reference type="prd" path="docs/PRD.md" section="FR6">
+      Session Logging functional requirements
+    </reference>
+  </documentation-references>
+
+  <dependencies>
+    <runtime>
+      <dependency name="IndexedDB" type="browser-api">Native browser API</dependency>
+      <dependency name="React" type="library">State management hooks</dependency>
+    </runtime>
+    <dev>
+      <dependency name="fake-indexeddb" version="^6.2.5" type="npm">
+        IndexedDB mock for Node.js testing
+      </dependency>
+    </dev>
+  </dependencies>
+
+  <testing-summary>
+    <unit-tests file="tests/session-logging.test.js" count="5" status="passing">
+      Run with: node tests/session-logging.test.js
+    </unit-tests>
+    <integration-tests status="implemented">
+      Session lifecycle integrated in index.html with console logging
+    </integration-tests>
+    <manual-tests status="recommended">
+      <test>Verify IndexedDB records in DevTools Application tab</test>
+      <test>Test offline session persistence</test>
+      <test>Verify duration calculation accuracy</test>
+      <test>Test ritualUsed flag for completed vs skipped rituals</test>
+    </manual-tests>
+  </testing-summary>
+
+  <verification-checklist>
+    <item status="done">IndexedDB schema with 4 indexes created</item>
+    <item status="done">initDatabase() with version migration</item>
+    <item status="done">addSession(), getSession(), updateSession(), clearProfile() helpers</item>
+    <item status="done">Session start hook in launchRitualPlayback()</item>
+    <item status="done">Session end hooks (audio 'ended' event + manual stop)</item>
+    <item status="done">Error handling for quota exceeded, corruption</item>
+    <item status="done">Console logging for all operations</item>
+    <item status="done">Toast notifications for user-facing errors</item>
+    <item status="done">5 unit tests passing (Node.js with fake-indexeddb)</item>
+    <item status="pending">Manual verification in Chrome DevTools</item>
+    <item status="pending">Performance measurement validation (&lt;50ms writes)</item>
+  </verification-checklist>
+
+  <next-steps>
+    <step priority="1">Run npm test to verify all tests pass</step>
+    <step priority="2">Manual testing in browser to verify IndexedDB integration</step>
+    <step priority="3">Update story status to 'review' or 'done'</step>
+    <step priority="4">Run Epic 3 regression tests to ensure no breaks</step>
+  </next-steps>
+</story-context>

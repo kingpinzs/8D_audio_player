@@ -1,0 +1,25 @@
+*workflow-init
+
+
+Level 0
+workflow tech-spec
+
+workflow architecture
+workflow create-epics-and-stories
+workflow epic-tech-context {epic-id}
+workflow create-story
+
+workflow sprint-planning
+
+
+Level 3 #note start a new prompt before moving forward 
+workflow workflow-status
+workflow epic-tech-context epic-2
+
+workflow create-story
+workflow story-context
+workflow develop-story
+workflow code-review
+workflow story-done
+
+workflow 

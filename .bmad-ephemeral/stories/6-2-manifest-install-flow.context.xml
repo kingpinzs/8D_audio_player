@@ -1,0 +1,333 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>6</epicId>
+    <storyId>2</storyId>
+    <title>Manifest &amp; Install Flow</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-26</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>.bmad-ephemeral/stories/6-2-manifest-install-flow.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user who wants quick access to mp3_to_8D</asA>
+    <iWant>to install the app on my device with a guided flow and app shortcuts</iWant>
+    <soThat>I can launch focus/calm sessions directly from my home screen without opening a browser</soThat>
+    <tasks>
+      <task id="1" title="Create Web App Manifest" ac="1">
+        <subtask>Create manifest.json in project root with name, short_name, description</subtask>
+        <subtask>Add start_url with ?source=pwa parameter</subtask>
+        <subtask>Add display: standalone, orientation: any</subtask>
+        <subtask>Add theme_color and background_color (#1a1a2e or match existing dark theme)</subtask>
+        <subtask>Add categories: health, wellness, music</subtask>
+        <subtask>Create icons directory with icon-192.png, icon-512.png, icon-maskable.png</subtask>
+        <subtask>Add focus.png and calm.png for shortcuts</subtask>
+        <subtask>Add shortcuts array for Focus and Calm modes</subtask>
+        <subtask>Add link rel="manifest" to index.html</subtask>
+      </task>
+      <task id="2" title="Implement useInstallPrompt Hook" ac="2,4,6">
+        <subtask>Create useInstallPrompt hook in index.html (follow useServiceWorker pattern)</subtask>
+        <subtask>State: canInstall, isInstalled, installPromptDeferred</subtask>
+        <subtask>Capture beforeinstallprompt event and defer</subtask>
+        <subtask>Detect standalone mode via matchMedia</subtask>
+        <subtask>Track isInstalled in localStorage (mp3_8d_is_installed)</subtask>
+        <subtask>Implement showInstallPrompt() function</subtask>
+        <subtask>Implement dismissInstallPrompt() function</subtask>
+        <subtask>Add console logging with [PWA] prefix</subtask>
+      </task>
+      <task id="3" title="Create Install Prompt Component" ac="3">
+        <subtask>Create InstallPrompt component</subtask>
+        <subtask>Render when canInstall === true and !isInstalled</subtask>
+        <subtask>Display app icon and CTA: "Install for quick access"</subtask>
+        <subtask>"Not now" dismiss button</subtask>
+        <subtask>Style matching existing toast/banner patterns</subtask>
+        <subtask>Add accessibility attributes (role="dialog", aria-labelledby)</subtask>
+        <subtask>Position in hero section below mode buttons</subtask>
+      </task>
+      <task id="4" title="Implement Install Telemetry" ac="5">
+        <subtask>Extend SessionLogger for install events</subtask>
+        <subtask>Add INSTALL_PROMPT_SHOWN, INSTALL_ACCEPTED, INSTALL_DISMISSED, APP_INSTALLED event types</subtask>
+        <subtask>Capture metadata: timestamp, userAgent, platform (desktop/mobile)</subtask>
+        <subtask>Wire up logging calls in useInstallPrompt hook</subtask>
+      </task>
+      <task id="5" title="Implement Shortcut Mode Detection" ac="7">
+        <subtask>Parse query params on app load (?mode=focus, ?mode=calm, ?source=pwa)</subtask>
+        <subtask>Auto-apply preset based on mode param</subtask>
+        <subtask>Clear query params from URL after processing</subtask>
+        <subtask>Log shortcut launch event if applicable</subtask>
+      </task>
+      <task id="6" title="Safari Fallback Instructions" ac="8">
+        <subtask>Detect Safari browser (user agent + no beforeinstallprompt)</subtask>
+        <subtask>Create SafariInstallInstructions component</subtask>
+        <subtask>Show: "To install: tap Share > Add to Home Screen"</subtask>
+        <subtask>"Got it" dismissal button</subtask>
+        <subtask>Persist dismissal to localStorage (mp3_8d_safari_install_dismissed)</subtask>
+      </task>
+      <task id="7" title="Testing &amp; Verification" ac="9">
+        <subtask>Write unit tests for useInstallPrompt hook</subtask>
+        <subtask>Write tests for InstallPrompt component</subtask>
+        <subtask>Write tests for query param parsing</subtask>
+        <subtask>Manual testing on Chrome Desktop, Chrome Android, Firefox, Safari</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC1" ref="AC6.2.1" title="Manifest Configuration">
+      <given>the app is deployed with manifest.json</given>
+      <when>the browser parses the manifest</when>
+      <then>Manifest includes name: "mp3_to_8D - Focus Audio", short_name: "8D Audio", icons (192x192, 512x512, maskable), theme_color, background_color, categories, display: standalone, start_url: "/index.html?source=pwa"</then>
+    </ac>
+    <ac id="AC2" ref="AC6.2.2" title="Install Event Capture">
+      <given>the browser fires beforeinstallprompt event</given>
+      <when>the app loads</when>
+      <then>Event is captured and deferred, canInstall state set to true, in-app install prompt becomes visible</then>
+    </ac>
+    <ac id="AC3" ref="AC6.2.3" title="Install Prompt UI">
+      <given>canInstall === true</given>
+      <when>the install prompt is displayed</when>
+      <then>CTA text: "Install for quick access", includes app icon, dismiss button available, has ARIA role="dialog"</then>
+    </ac>
+    <ac id="AC4" ref="AC6.2.4" title="Native Install Flow Trigger">
+      <given>user clicks the install button</given>
+      <when>showInstallPrompt() is called</when>
+      <then>Deferred event.prompt() invoked, native browser install dialog appears, user choice tracked</then>
+    </ac>
+    <ac id="AC5" ref="AC6.2.5" title="Install Telemetry">
+      <given>install prompt is shown or user makes choice</given>
+      <when>each event occurs</when>
+      <then>INSTALL_PROMPT_SHOWN, INSTALL_ACCEPTED, INSTALL_DISMISSED events logged with timestamp, userAgent, platform</then>
+    </ac>
+    <ac id="AC6" ref="AC6.2.6" title="Post-Install Detection">
+      <given>user has installed the app</given>
+      <when>the app is launched in standalone mode</when>
+      <then>display-mode: standalone detected, isInstalled = true, install prompt hidden permanently, APP_INSTALLED logged</then>
+    </ac>
+    <ac id="AC7" ref="AC6.2.7" title="App Shortcuts">
+      <given>the app is installed</given>
+      <when>user long-presses app icon</when>
+      <then>"Start Focus" shortcut launches with ?mode=focus, "Start Calm" launches with ?mode=calm, auto-selects preset</then>
+    </ac>
+    <ac id="AC8" ref="AC6.2.8" title="Safari Manual Instructions">
+      <given>user is on Safari</given>
+      <when>beforeinstallprompt is not supported</when>
+      <then>Show alternative instructions: "To install: tap Share > Add to Home Screen", dismissible, persisted</then>
+    </ac>
+    <ac id="AC9" ref="AC6.2.9" title="Cross-Browser Verification">
+      <given>the install flow is implemented</given>
+      <when>testing on target browsers</when>
+      <then>Chrome Desktop: full flow, Chrome Android: full flow + shortcuts, Firefox: install flow, Edge: full flow, Safari: manual instructions</then>
+    </ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture - mp3_to_8D</title>
+        <section>Section 3.7 - Service Worker &amp; Offline Layer</section>
+        <snippet>Workbox CLI generates SW with precacheManifest for shell assets; audio files only cached when user opts in. Service worker + manifest + HTTPS = browser install prompt criteria.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-6.md</path>
+        <title>Epic Technical Specification: PWA Reliability &amp; Accessibility</title>
+        <section>AC6.2: Manifest &amp; Install Flow</section>
+        <snippet>Defines manifest.json structure, InstallPromptManager hook API, install telemetry schema, workflow sequence for install flow.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-6.md</path>
+        <title>Epic Technical Specification</title>
+        <section>APIs: useInstallPrompt</section>
+        <snippet>Hook API: canInstall, isInstalled, installPromptDeferred states; showInstallPrompt(), dismissInstallPrompt() actions; logInstallEvent() telemetry.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-6.md</path>
+        <title>Epic Technical Specification</title>
+        <section>Data Models: Web App Manifest</section>
+        <snippet>name: "mp3_to_8D - Focus Audio", short_name: "8D Audio", start_url: "/index.html?source=pwa", display: standalone, theme_color: "#1a1a2e"</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-6.md</path>
+        <title>Epic Technical Specification</title>
+        <section>Data Models: Install Telemetry Schema</section>
+        <snippet>eventType: INSTALL_PROMPT_SHOWN | INSTALL_ACCEPTED | INSTALL_DISMISSED | APP_INSTALLED, timestamp, userAgent, platform</snippet>
+      </doc>
+      <doc>
+        <path>docs/create-epics-and-stories.md</path>
+        <title>Epics &amp; Stories - mp3_to_8D</title>
+        <section>E6 - PWA Reliability &amp; Accessibility</section>
+        <snippet>S6.2 - Manifest &amp; Install Flow: Manifest lists icons, categories, orientation, shortcuts; in-app prompt teaches A2HS; telemetry captures install attempts/success.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/6-1-service-worker-offline-ux.md</path>
+        <title>Story 6.1: Service Worker &amp; Offline UX</title>
+        <section>Dev Agent Record</section>
+        <snippet>Patterns established: useServiceWorker hook at index.html:8013-8147, OfflineBanner at 8153-8218, localStorage key pattern mp3_8d_*, console logging [SW] prefix, 44 tests in service-worker.test.js</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>index.html</path>
+        <kind>hook</kind>
+        <symbol>useServiceWorker</symbol>
+        <lines>8013-8147</lines>
+        <reason>Pattern to follow for useInstallPrompt hook structure, state management, and event handling</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>OfflineBanner</symbol>
+        <lines>8153-8218</lines>
+        <reason>Pattern for InstallPrompt component styling, ARIA attributes, and dismissal behavior</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>UpdateToast</symbol>
+        <lines>8222-8272</lines>
+        <reason>Pattern for toast/prompt UI with action buttons and persistence</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>function</kind>
+        <symbol>applyPreset</symbol>
+        <lines>12403</lines>
+        <reason>Function to call when ?mode= query param detected for auto-applying Focus/Calm preset</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>module</kind>
+        <symbol>SessionLogger</symbol>
+        <lines>9005-9013</lines>
+        <reason>Telemetry module to extend with INSTALL_* event types</reason>
+      </artifact>
+      <artifact>
+        <path>workbox-config.js</path>
+        <kind>config</kind>
+        <symbol>workbox-config</symbol>
+        <lines>1-178</lines>
+        <reason>Workbox configuration context - manifest.json will complement this for full PWA installability</reason>
+      </artifact>
+      <artifact>
+        <path>sw.js</path>
+        <kind>service-worker</kind>
+        <symbol>sw.js</symbol>
+        <lines>1-end</lines>
+        <reason>Generated service worker - install prompt requires active SW to trigger beforeinstallprompt</reason>
+      </artifact>
+      <artifact>
+        <path>tests/service-worker.test.js</path>
+        <kind>test</kind>
+        <symbol>service-worker.test.js</symbol>
+        <lines>1-346</lines>
+        <reason>Test pattern to follow for install-prompt.test.js structure, mocking, and assertions</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <node>
+        <package>react</package>
+        <version>18.2.0</version>
+        <source>unpkg.com CDN</source>
+      </node>
+      <node>
+        <package>react-dom</package>
+        <version>18.2.0</version>
+        <source>unpkg.com CDN</source>
+      </node>
+      <node>
+        <package>@babel/standalone</package>
+        <version>latest</version>
+        <source>unpkg.com CDN</source>
+      </node>
+      <devDependencies>
+        <package>workbox-cli</package>
+        <version>^7.4.0</version>
+        <purpose>Service worker generation</purpose>
+      </devDependencies>
+      <devDependencies>
+        <package>fake-indexeddb</package>
+        <version>^6.2.5</version>
+        <purpose>Testing IndexedDB operations</purpose>
+      </devDependencies>
+      <browserAPIs>
+        <api>beforeinstallprompt event</api>
+        <api>matchMedia (display-mode: standalone)</api>
+        <api>Web App Manifest</api>
+        <api>Service Worker API</api>
+        <api>localStorage</api>
+        <api>URL/URLSearchParams</api>
+      </browserAPIs>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">All React implementation in index.html (single-file architecture maintained)</constraint>
+    <constraint type="architecture">manifest.json at project root for proper serving</constraint>
+    <constraint type="architecture">Icons in /icons/ directory matching manifest paths</constraint>
+    <constraint type="pattern">Follow localStorage key naming convention: mp3_8d_*</constraint>
+    <constraint type="pattern">Console logging prefix: [PWA] for install-related logs</constraint>
+    <constraint type="pattern">Hook structure follows useServiceWorker pattern</constraint>
+    <constraint type="pattern">Component styling follows toast/banner patterns from E2/E5/E6.1</constraint>
+    <constraint type="accessibility">ARIA role="dialog" and aria-labelledby on install prompt</constraint>
+    <constraint type="accessibility">Keyboard accessible dismiss and install buttons</constraint>
+    <constraint type="performance">Install prompt appearance: &lt;100ms after beforeinstallprompt</constraint>
+    <constraint type="performance">Query param parsing: synchronous on load</constraint>
+    <constraint type="performance">Lighthouse PWA score: &gt;= 90</constraint>
+    <constraint type="browser">Safari does not fire beforeinstallprompt - requires manual A2HS instructions</constraint>
+    <constraint type="browser">Chrome 79+, Edge 79+, Firefox 44+, Safari 11.1+ compatibility</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>useInstallPrompt Hook API</name>
+      <kind>React hook</kind>
+      <signature>function useInstallPrompt(): { canInstall: boolean, isInstalled: boolean, installPromptDeferred: BeforeInstallPromptEvent | null, showInstallPrompt: () => Promise&lt;"accepted" | "dismissed"&gt;, dismissInstallPrompt: () => void }</signature>
+      <path>index.html (NEW)</path>
+    </interface>
+    <interface>
+      <name>Web App Manifest</name>
+      <kind>JSON file</kind>
+      <signature>{ name, short_name, description, start_url, display, orientation, theme_color, background_color, categories, icons[], shortcuts[] }</signature>
+      <path>manifest.json (NEW)</path>
+    </interface>
+    <interface>
+      <name>applyPreset</name>
+      <kind>function</kind>
+      <signature>function applyPreset(preset: PresetConfig, presetId: string): void</signature>
+      <path>index.html:12403</path>
+    </interface>
+    <interface>
+      <name>SessionLogger.logEvent</name>
+      <kind>function</kind>
+      <signature>SessionLogger.logEvent(event: { type: string, ...data }): void</signature>
+      <path>index.html (existing)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Unit tests use Node.js with custom assert helpers (no Jest). Test files in tests/ directory with *.test.js naming. Mock localStorage, navigator, and browser APIs. Follow existing test structure from service-worker.test.js (44 tests). Tests run via npm test which chains all test files. Console output with emoji indicators for pass/fail.
+    </standards>
+    <locations>
+      <location>tests/install-prompt.test.js</location>
+      <location>tests/service-worker.test.js (existing, for reference)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Parse manifest.json and verify all required fields present (name, icons, theme_color, categories, shortcuts)</idea>
+      <idea ac="AC2">Mock beforeinstallprompt event capture, verify canInstall state transitions</idea>
+      <idea ac="AC2">Test event deferral and later invocation</idea>
+      <idea ac="AC3">Test InstallPrompt render conditions (canInstall && !isInstalled)</idea>
+      <idea ac="AC3">Verify ARIA attributes on dialog component</idea>
+      <idea ac="AC4">Mock userChoice promise resolution, verify accepted/dismissed handling</idea>
+      <idea ac="AC5">Verify INSTALL_* events logged with correct metadata</idea>
+      <idea ac="AC6">Mock matchMedia for standalone detection, verify isInstalled state</idea>
+      <idea ac="AC6">Test localStorage persistence of installed state</idea>
+      <idea ac="AC7">Test query param parsing for ?mode=focus, ?mode=calm</idea>
+      <idea ac="AC7">Verify applyPreset called with correct preset on mode detection</idea>
+      <idea ac="AC7">Test URL cleanup after param processing</idea>
+      <idea ac="AC8">Test Safari detection logic (UA + no beforeinstallprompt)</idea>
+      <idea ac="AC8">Verify dismissal persistence to localStorage</idea>
+      <idea ac="AC9">Manual testing matrix: Chrome Desktop, Chrome Android, Firefox, Safari iOS/macOS</idea>
+    </ideas>
+  </tests>
+</story-context>

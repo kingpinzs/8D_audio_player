@@ -1,0 +1,263 @@
+<story-context id="bmm/story-context" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>4-3</storyId>
+    <title>Insights Dashboard &amp; Export</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-11-25</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/4-3-insights-dashboard-export.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>caregiver or user reviewing focus session history</asA>
+    <iWant>visual insights showing trends, preset effectiveness, and mood patterns with export capability</iWant>
+    <soThat>I can understand what works best and share objective data with therapists or teachers</soThat>
+    <tasks>
+      <task id="1">Implement InsightsPanel component with date range selector (7/14/30 days)</task>
+      <task id="2">Create 4 summary statistics cards (total sessions, total time, felt better rate, ritual completion)</task>
+      <task id="3">Implement bar chart for session duration by day (Canvas 2D)</task>
+      <task id="4">Implement line chart for preset effectiveness (Canvas 2D)</task>
+      <task id="5">Implement donut chart for mood improvement (Canvas 2D)</task>
+      <task id="6">Create chart calculation helpers (groupSessionsByDay, calculatePresetStats, calculateMoodImprovement)</task>
+      <task id="7">Create canvas rendering helpers (drawBarChart, drawLineChart, drawDonutChart)</task>
+      <task id="8">Implement export as JSON functionality</task>
+      <task id="9">Implement export as CSV functionality with proper escaping</task>
+      <task id="10">Add empty states (0 sessions, &lt;3 sessions)</task>
+      <task id="11">Add date range filtering logic</task>
+      <task id="12">Implement reduced motion support (no chart animations)</task>
+      <task id="13">Add responsive layout (mobile + desktop)</task>
+      <task id="14">Add CSS styling for cards, charts, export section</task>
+      <task id="15">Performance testing (&lt;500ms render, &lt;300ms export)</task>
+      <task id="16">Accessibility audit (aria-labels on canvas, HTML legends)</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="Insights Dashboard Layout">
+      Dashboard appears in right column below playlist. Date range selector: 7/14/30 days (default: 7).
+      Summary cards: Total sessions, Total time, Felt better rate, Ritual completion rate.
+      Three charts: Session duration bar, Preset effectiveness line, Mood improvement donut.
+      Export button with JSON/CSV dropdown. Empty states for 0 or &lt;3 sessions.
+      Performance: Dashboard renders in &lt;500ms with 100 sessions.
+    </criterion>
+    <criterion id="AC2" title="Summary Statistics Cards">
+      Total Sessions: count in date range + change from previous period.
+      Total Time: sum of durations as "Xh Ym" + average per session.
+      Felt Better Rate: moodAfter > moodBefore / rated sessions, icon based on rate.
+      Ritual Completion Rate: ritualUsed=true / total sessions.
+      Data freshness: recalculates on date range change, cached in memory.
+    </criterion>
+    <criterion id="AC3" title="Session Duration Bar Chart">
+      Vertical bar chart (Canvas 2D). X-axis: days. Y-axis: minutes per day.
+      Bar color matches preset accent. Hover shows tooltip.
+      Accessibility: aria-label on canvas, keyboard navigation.
+      Reduced motion: no bar grow animation.
+    </criterion>
+    <criterion id="AC4" title="Preset Effectiveness Line Chart">
+      Multi-line chart (Canvas 2D). X-axis: preset names. Y-axis: completion rate %.
+      Lines colored by preset. Dot markers, hover highlights.
+      Legend is HTML (screen reader accessible). Empty state if only 1 preset.
+    </criterion>
+    <criterion id="AC5" title="Mood Improvement Donut Chart">
+      Donut chart (Canvas 2D). Segments: felt better (green), same (gray), worse (orange).
+      Center label: "XX% felt better". Emoji value scale for comparison.
+      Empty state if 0 sessions rated. Legend in HTML.
+    </criterion>
+    <criterion id="AC6" title="Export Functionality">
+      Dropdown: "Export as JSON" | "Export as CSV". Exports current date range.
+      JSON format: exportDate, profileId, version, dateRange, summary, sessions[].
+      CSV format: timestamp, track, preset, duration, ritual, moods, notes, ended_manually.
+      CSV escaping: quotes for commas, double-quotes for quotes.
+      File naming: mp3-8d-sessions-{range}-{date}.{ext}
+      Performance: &lt;300ms for 100 sessions. Blob + URL.createObjectURL pattern.
+      Toast notifications for success/error.
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>FR6: Session Logging &amp; Insights Scaffold</section>
+        <snippet>Visual insights showing trends, preset effectiveness, mood patterns. Export to JSON/CSV for therapist sharing.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Section 3.5: Session Logging &amp; Insights</section>
+        <snippet>InsightsPanel reads session data for charts, trends, recommendations. Export stub serializes filtered sessions to JSON/CSV.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-4.md</path>
+        <title>Epic 4 Technical Specification</title>
+        <section>AC7: Export Scaffold, Sequence 4: Export Flow</section>
+        <snippet>exportSessions() queries by profileId/dateRange, serializes to JSON, triggers browser download. Story 4-3 extends to full CSV/dashboard.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/4-1-session-schema-lifecycle-hooks.md</path>
+        <title>Story 4-1: Session Schema &amp; Lifecycle Hooks</title>
+        <section>Session API Implementation</section>
+        <snippet>Provides getSessionsByDateRange(), clearProfile() that Story 4-3 depends on for querying session data.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/4-2-emoji-checkin-notes-prompt.md</path>
+        <title>Story 4-2: Emoji Check-In &amp; Notes Prompt</title>
+        <section>Emoji Value Scale</section>
+        <snippet>Emoji values for mood comparison: anxious=1, neutral=2, calm=3, focused=4, energized=5.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>index.html</path>
+        <kind>session-api</kind>
+        <symbol>window.SessionLogger.exportSessions</symbol>
+        <lines>5807-5811</lines>
+        <reason>Existing export API that calls getSessionsByDateRange - Story 4-3 builds InsightsPanel on this</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>ui-pattern</kind>
+        <symbol>insight-card, panel</symbol>
+        <lines>9574-9601</lines>
+        <reason>Existing insights column with panel/card patterns - InsightsPanel should match these styles</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>reducedMotion</symbol>
+        <lines>5418</lines>
+        <reason>Reduced motion preference state - charts must respect this for AC3/AC4/AC5 compliance</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>utility</kind>
+        <symbol>showToast</symbol>
+        <lines>5458-5471</lines>
+        <reason>Toast notification system - reuse for export success/error feedback</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>selectedMode, MODE_LIBRARY</symbol>
+        <lines>5400-5410</lines>
+        <reason>Preset data including accent colors - needed for chart styling</reason>
+      </file>
+      <file>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>CheckInModal emojis</symbol>
+        <lines>4543-4549</lines>
+        <reason>Emoji definitions with values - same scale needed for mood improvement calculation</reason>
+      </file>
+      <file>
+        <path>tests/session-logging.test.js</path>
+        <kind>test</kind>
+        <symbol>session-logging tests</symbol>
+        <lines>full-file</lines>
+        <reason>Existing session tests - may need extension for dashboard data calculations</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <ecosystem name="browser-apis">
+        <package name="Canvas 2D API" version="native">Chart rendering</package>
+        <package name="IndexedDB" version="native">Session data queries</package>
+        <package name="Blob/URL.createObjectURL" version="native">Export file download</package>
+      </ecosystem>
+      <ecosystem name="devDependencies">
+        <package name="fake-indexeddb" version="^6.2.5">Mock IndexedDB for Node.js unit tests</package>
+      </ecosystem>
+      <ecosystem name="inline-libraries">
+        <package name="React" version="18.x (CDN)">Component framework, hooks (useState, useRef, useEffect, useMemo)</package>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface>
+      <name>getSessionsByDateRange</name>
+      <kind>IndexedDB API function</kind>
+      <signature>getSessionsByDateRange(startDate: number, endDate: number): Promise&lt;SessionRecord[]&gt;</signature>
+      <path>index.html (getSessionLoggingApi)</path>
+    </interface>
+    <interface>
+      <name>SessionRecord</name>
+      <kind>Data contract</kind>
+      <signature>{ id, profileId, timestamp, trackId, trackName, presetId, presetLabel, ritualUsed, duration, moodBefore, moodAfter, notes, endedManually }</signature>
+      <path>.bmad-ephemeral/stories/tech-spec-epic-4.md</path>
+    </interface>
+    <interface>
+      <name>showToast</name>
+      <kind>UI feedback function</kind>
+      <signature>showToast(message: string, type: 'info' | 'success' | 'warning' | 'error'): void</signature>
+      <path>index.html:5458</path>
+    </interface>
+    <interface>
+      <name>Canvas 2D getContext</name>
+      <kind>Browser API</kind>
+      <signature>canvas.getContext('2d'): CanvasRenderingContext2D</signature>
+      <path>native browser API</path>
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint source="story-ac">Dashboard renders in &lt;500ms with 100 sessions</constraint>
+    <constraint source="story-ac">Export completes in &lt;300ms for 100 sessions</constraint>
+    <constraint source="story-ac">Charts must respect reduced motion preference</constraint>
+    <constraint source="architecture">All session data remains local - no network transmission</constraint>
+    <constraint source="story-ac">Canvas charts need aria-labels for accessibility</constraint>
+    <constraint source="story-ac">Legends must be HTML (not canvas) for screen reader access</constraint>
+    <constraint source="story-ac">CSV must properly escape commas and quotes</constraint>
+    <constraint source="story-ac">useMemo for expensive calculations to prevent re-renders</constraint>
+    <constraint source="tech-spec">Blob URLs must be cleaned up after download to prevent memory leaks</constraint>
+    <constraint source="existing-patterns">Follow insight-card panel styling patterns</constraint>
+  </constraints>
+
+  <tests>
+    <standards>
+      Tests use Node.js with fake-indexeddb for unit testing data calculations.
+      Manual browser testing required for chart rendering, export download, accessibility.
+      Run existing tests via: npm test (includes session-logging.test.js).
+      Accessibility audit with axe DevTools and Pa11y CLI targeting 95%+ score.
+      Performance testing with DevTools Performance panel for render/export timing.
+      Test on Chrome, Firefox, Safari desktop.
+    </standards>
+    <locations>
+      <location>tests/session-logging.test.js</location>
+      <location>Manual: Chrome DevTools Performance tab</location>
+      <location>Manual: axe DevTools extension</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC1">Test dashboard appears in right column with correct layout</idea>
+      <idea acRef="AC1">Test date range selector changes (7/14/30 days)</idea>
+      <idea acRef="AC1">Test empty state with 0 sessions</idea>
+      <idea acRef="AC1">Test unlock message with 1-2 sessions</idea>
+      <idea acRef="AC1">Test render performance with 100 sessions (&lt;500ms)</idea>
+      <idea acRef="AC2">Test total sessions count calculation</idea>
+      <idea acRef="AC2">Test total time formatting (Xh Ym)</idea>
+      <idea acRef="AC2">Test felt better rate calculation (mood comparison)</idea>
+      <idea acRef="AC2">Test ritual completion rate calculation</idea>
+      <idea acRef="AC2">Test data recalculates on date range change</idea>
+      <idea acRef="AC3">Test bar chart renders with session data</idea>
+      <idea acRef="AC3">Test bar chart X-axis shows days</idea>
+      <idea acRef="AC3">Test hover tooltip shows minutes and count</idea>
+      <idea acRef="AC3">Test no animation with reduced motion</idea>
+      <idea acRef="AC4">Test line chart renders with multiple presets</idea>
+      <idea acRef="AC4">Test completion rate calculation per preset</idea>
+      <idea acRef="AC4">Test empty state with only 1 preset</idea>
+      <idea acRef="AC4">Test HTML legend is screen reader accessible</idea>
+      <idea acRef="AC5">Test donut chart segments (better/same/worse)</idea>
+      <idea acRef="AC5">Test center label percentage</idea>
+      <idea acRef="AC5">Test empty state with 0 rated sessions</idea>
+      <idea acRef="AC6">Test JSON export downloads correctly</idea>
+      <idea acRef="AC6">Test JSON structure matches spec</idea>
+      <idea acRef="AC6">Test CSV export downloads correctly</idea>
+      <idea acRef="AC6">Test CSV escaping (commas, quotes)</idea>
+      <idea acRef="AC6">Test export performance with 100 sessions (&lt;300ms)</idea>
+      <idea acRef="AC6">Test toast notifications for success/error</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -1,0 +1,373 @@
+<story-context id="6-1-service-worker-offline-ux" v="1.0">
+  <metadata>
+    <epicId>6</epicId>
+    <storyId>1</storyId>
+    <title>Service Worker &amp; Offline UX</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-26</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>.bmad-ephemeral/stories/6-1-service-worker-offline-ux.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user who relies on mp3_to_8D for focus sessions</asA>
+    <iWant>the app to work offline after my first visit and clearly communicate network status</iWant>
+    <soThat>I can use the app reliably without network dependency</soThat>
+    <tasks>
+      <task id="1" name="Workbox Configuration &amp; SW Generation" ac="1, 9">
+        <subtask>Install workbox-cli as dev dependency</subtask>
+        <subtask>Create workbox-config.js with precache manifest</subtask>
+        <subtask>Configure globPatterns for index.html, CSS, JS, icons</subtask>
+        <subtask>Set up revision hashing strategy</subtask>
+        <subtask>Configure runtimeCaching rules (StaleWhileRevalidate for Google Fonts, CacheFirst for audio)</subtask>
+        <subtask>Add npm script: sw:generate</subtask>
+        <subtask>Document configuration choices in comments</subtask>
+        <subtask>Generate initial /sw.js file</subtask>
+      </task>
+      <task id="2" name="Service Worker Registration" ac="1, 2">
+        <subtask>Create useServiceWorker hook in index.html</subtask>
+        <subtask>Check navigator.serviceWorker support</subtask>
+        <subtask>Register /sw.js on app load</subtask>
+        <subtask>Track swStatus state: unsupported | installing | waiting | active | error</subtask>
+        <subtask>Add lifecycle event handlers (install, activate, controllerchange)</subtask>
+        <subtask>Export hook state: { swStatus, isOffline, updateAvailable }</subtask>
+        <subtask>Add console logging</subtask>
+      </task>
+      <task id="3" name="Offline Detection &amp; Banner" ac="3, 4">
+        <subtask>Implement isOffline state in useServiceWorker hook</subtask>
+        <subtask>Initialize from navigator.onLine</subtask>
+        <subtask>Listen to online/offline events</subtask>
+        <subtask>Create OfflineBanner component</subtask>
+        <subtask>Add ARIA role=alert for accessibility</subtask>
+        <subtask>Use warning color theme (amber)</subtask>
+        <subtask>Auto-dismiss with Back online message on reconnect</subtask>
+        <subtask>Disable URL input when offline</subtask>
+      </task>
+      <task id="4" name="SW Update Flow" ac="5, 6">
+        <subtask>Detect SW update (waiting state)</subtask>
+        <subtask>Listen for statechange on installing worker</subtask>
+        <subtask>Set updateAvailable = true when state === installed</subtask>
+        <subtask>Create update toast notification</subtask>
+        <subtask>Implement applyUpdate() function</subtask>
+        <subtask>Post SKIP_WAITING message to waiting SW</subtask>
+        <subtask>SW calls skipWaiting() in message handler</subtask>
+        <subtask>Listen for controllerchange to trigger reload</subtask>
+        <subtask>Add message handler in SW script</subtask>
+      </task>
+      <task id="5" name="Audio Cache Consent UI" ac="7">
+        <subtask>Add Cache audio for offline toggle to Settings</subtask>
+        <subtask>Position in new Offline or Storage section</subtask>
+        <subtask>Default: OFF</subtask>
+        <subtask>Implement localStorage persistence with key mp3_8d_audio_cache_consent</subtask>
+        <subtask>Wire consent to SW cache strategy</subtask>
+        <subtask>Workbox plugin checks consent flag</subtask>
+        <subtask>Add helper text and storage usage indicator</subtask>
+      </task>
+      <task id="6" name="Cached Track Indicator" ac="8">
+        <subtask>Query Cache API for cached audio files</subtask>
+        <subtask>Build set of cached URLs</subtask>
+        <subtask>Add offline indicator to playlist items</subtask>
+        <subtask>Cloud-checkmark icon for cached tracks</subtask>
+        <subtask>Standard icon for non-cached</subtask>
+        <subtask>Tooltip: Available offline</subtask>
+        <subtask>ARIA label for accessibility</subtask>
+        <subtask>Update indicator when cache changes</subtask>
+      </task>
+      <task id="7" name="Testing &amp; Integration">
+        <subtask>Write unit tests for useServiceWorker hook</subtask>
+        <subtask>Write integration tests</subtask>
+        <subtask>Manual testing checklist</subtask>
+        <subtask>Add test scripts to package.json if needed</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" ref="AC6.1.1" name="Shell Asset Precaching">
+      <given>a user visits the app for the first time</given>
+      <when>the service worker installs</when>
+      <then>
+        <item>Service worker precaches shell assets (HTML, CSS, JS, icons)</item>
+        <item>Console log: [SW] Registered: {scope}</item>
+        <item>Console log: [SW] Cache populated: {count} assets</item>
+        <item>Workbox generates SW with versioned precacheManifest</item>
+      </then>
+    </criterion>
+    <criterion id="AC2" ref="AC6.1.2" name="Offline Reload Success">
+      <given>a user has previously visited the app (SW installed and activated)</given>
+      <when>the user reloads with no network connection</when>
+      <then>
+        <item>App loads from cache successfully</item>
+        <item>Shell renders without network request failures</item>
+        <item>IndexedDB data (presets, playlist, sessions) remains accessible</item>
+        <item>Offline page load completes in &lt;1s</item>
+      </then>
+    </criterion>
+    <criterion id="AC3" ref="AC6.1.3" name="Offline Banner Display">
+      <given>the network status changes to offline (navigator.onLine === false)</given>
+      <when>the app detects the offline state</when>
+      <then>
+        <item>Offline banner displays: You're offline. Cached content available.</item>
+        <item>Banner has ARIA role=alert for screen reader announcement</item>
+        <item>Banner uses warning color theme (amber/yellow)</item>
+        <item>Banner auto-dismisses when back online with confirmation</item>
+      </then>
+    </criterion>
+    <criterion id="AC4" ref="AC6.1.4" name="Streaming URL Disabled Offline">
+      <given>the user is offline</given>
+      <when>viewing the intake/playlist section</when>
+      <then>
+        <item>Streaming URL input is disabled</item>
+        <item>Input shows placeholder: Streaming unavailable offline</item>
+        <item>Local file drag/drop remains functional</item>
+        <item>Cached tracks (if audio caching enabled) remain playable</item>
+        <item>Non-cached tracks show disabled state with offline icon</item>
+      </then>
+    </criterion>
+    <criterion id="AC5" ref="AC6.1.5" name="Update Available Toast">
+      <given>the service worker detects a new version available</given>
+      <when>the SW transitions to waiting state</when>
+      <then>
+        <item>Toast notification appears: Update available. Click to refresh.</item>
+        <item>Toast includes action button for update</item>
+        <item>Console log: [SW] Update available</item>
+        <item>Toast persists until dismissed or acted upon</item>
+      </then>
+    </criterion>
+    <criterion id="AC6" ref="AC6.1.6" name="Apply Update and Reload">
+      <given>an update is available and user clicks Update</given>
+      <when>the update action is triggered</when>
+      <then>
+        <item>Call skipWaiting() on waiting service worker</item>
+        <item>Page reloads to activate new SW version</item>
+        <item>New assets loaded from updated cache</item>
+        <item>Console log: [SW] Update applied, reloading...</item>
+      </then>
+    </criterion>
+    <criterion id="AC7" ref="AC6.1.7" name="Optional Audio Cache Consent">
+      <given>the user views Settings panel</given>
+      <when>viewing offline/caching options</when>
+      <then>
+        <item>Cache audio for offline toggle visible</item>
+        <item>Toggle default: OFF (explicit opt-in required)</item>
+        <item>Persist to localStorage: mp3_8d_audio_cache_consent</item>
+        <item>When enabled: audio files cached via runtime caching</item>
+        <item>Helper text: Enable to cache audio files for offline playback (uses device storage)</item>
+        <item>Storage usage indicator shown when enabled</item>
+      </then>
+    </criterion>
+    <criterion id="AC8" ref="AC6.1.8" name="Offline Indicator on Cached Tracks">
+      <given>audio caching is enabled and tracks are cached</given>
+      <when>viewing the playlist</when>
+      <then>
+        <item>Cached tracks display offline indicator icon (cloud with checkmark)</item>
+        <item>Non-cached tracks show standard icon</item>
+        <item>Icon tooltip: Available offline for cached tracks</item>
+        <item>ARIA label: This track is available offline</item>
+      </then>
+    </criterion>
+    <criterion id="AC9" ref="AC6.1.9" name="Workbox Configuration Documentation">
+      <given>the service worker infrastructure is implemented</given>
+      <then>
+        <item>workbox-config.js file exists in repository root</item>
+        <item>Config includes precacheManifest for shell assets</item>
+        <item>Config includes runtimeCaching rules for fonts, images, optional audio</item>
+        <item>Comments explain caching strategy decisions</item>
+        <item>README or inline docs describe SW update behavior</item>
+      </then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-6.md</path>
+        <title>Epic 6 Technical Specification: PWA Reliability &amp; Accessibility</title>
+        <section>AC6.1: Service Worker &amp; Offline UX</section>
+        <snippet>Defines Workbox-powered service worker with precaching strategy for shell assets, optional audio caching with consent, offline fallback UI, and SW update flow. Contains authoritative AC6.1.1-AC6.1.9 acceptance criteria.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-6.md</path>
+        <title>Epic 6 Technical Specification</title>
+        <section>APIs: ServiceWorkerManager Hook API</section>
+        <snippet>Defines useServiceWorker hook API: swStatus, updateAvailable, isOffline, cacheStatus states; registerServiceWorker, checkForUpdates, applyUpdate, clearAudioCache actions; audioCacheConsent toggle.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-6.md</path>
+        <title>Epic 6 Technical Specification</title>
+        <section>Data Models: Service Worker Cache Strategy</section>
+        <snippet>Workbox config structure with precacheManifest for shell assets and runtimeCaching rules for Google Fonts (StaleWhileRevalidate) and audio (CacheFirst with consent plugin).</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-6.md</path>
+        <title>Epic 6 Technical Specification</title>
+        <section>Workflows: Story 6-1 Sequence</section>
+        <snippet>App loads → SW registers → precaches shell → activates runtime caching. Offline detected: show banner, disable streaming, enable cached playback. Update cycle: detect new version → show toast → skipWaiting → reload.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture – mp3_to_8D</title>
+        <section>3.7 Service Worker &amp; Offline Layer</section>
+        <snippet>Workbox CLI generates SW with precacheManifest for shell assets (HTML, CSS, JS, icons) and runtime caching for fonts/images. Audio files only cached when user opts in. Offline fallback page surfaces when user navigates without cached assets.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture – mp3_to_8D</title>
+        <section>5. Non-Functional Requirements Mapping</section>
+        <snippet>Offline reliability: Service worker precache + IndexedDB persistence; offline banner informs users when streaming disabled. Automated Playwright test simulates offline drag/drop playback.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture – mp3_to_8D</title>
+        <section>3.1 App Shell &amp; Routing</section>
+        <snippet>Global providers wrap the tree: AudioGraphProvider, PresetProvider, SessionProvider, SensorProvider, ThemeProvider. Event bus coordinates cross-cutting events enabling telemetry and UI toast sync.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>index.html</path>
+        <kind>main-app</kind>
+        <symbol>SensorSuggestionToast</symbol>
+        <lines>6425-6505</lines>
+        <reason>Existing toast notification component pattern - reuse for offline banner and update toast notifications</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>SensorSettings</symbol>
+        <lines>6024-6332</lines>
+        <reason>Settings panel pattern - extend for audio cache consent toggle in same section</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>playlist, setPlaylist</symbol>
+        <lines>7739</lines>
+        <reason>Playlist state - add offline indicator icons to playlist items</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>function</kind>
+        <symbol>saveCustomPreset, localStorage patterns</symbol>
+        <lines>3384-3542</lines>
+        <reason>localStorage persistence pattern - follow for mp3_8d_audio_cache_consent key</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>css</kind>
+        <symbol>.sensor-suggestion-toast, .toast</symbol>
+        <lines>1591, 2439-2458</lines>
+        <reason>Toast CSS patterns - reuse for offline banner and update toast styling</reason>
+      </artifact>
+      <artifact>
+        <path>tests/heart-rate-engine.test.js</path>
+        <kind>test</kind>
+        <symbol>test suite pattern</symbol>
+        <reason>Test file structure - follow pattern for service worker tests</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <existing>
+          <package name="fake-indexeddb" version="^6.2.5" note="Test utility for IndexedDB mocking" />
+        </existing>
+        <required>
+          <package name="workbox-cli" version="^7.0.0" note="Generate service worker with precache manifest (dev dependency)" />
+        </required>
+      </ecosystem>
+      <ecosystem name="browser-apis">
+        <api name="Service Worker API" support="Chrome 79+, Edge 79+, Firefox 44+, Safari 11.1+" />
+        <api name="Cache API" support="Native, used by Workbox internally" />
+        <api name="IndexedDB" support="Already in use from E3/E4 - offline accessible" />
+        <api name="localStorage" support="Already in use from E1 - quick flags" />
+      </ecosystem>
+      <ecosystem name="cdn-dependencies">
+        <script name="React 18 UMD" version="18.2.0" note="Already loaded" />
+        <script name="ReactDOM" version="18.2.0" note="Already loaded" />
+        <script name="Babel Standalone" note="For JSX transformation" />
+      </ecosystem>
+      <notes>
+        <note>workbox-cli generates sw.js at build time - no runtime download</note>
+        <note>workbox-window (^7.0.0) optional for client-side SW registration helpers</note>
+        <note>All audio caching is optional and requires explicit user consent</note>
+      </notes>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">Single-file architecture - all React implementation in index.html</constraint>
+    <constraint type="architecture">Workbox config and generated SW at project root level</constraint>
+    <constraint type="pattern">Use existing toast notification patterns from E2/E5 for offline and update notifications</constraint>
+    <constraint type="pattern">Use existing Settings panel structure for audio cache consent toggle</constraint>
+    <constraint type="pattern">localStorage keys must follow existing convention: mp3_8d_* or mpe_8d_*</constraint>
+    <constraint type="pattern">IndexedDB stores (presets, sessions, sensor_consent) must remain accessible offline</constraint>
+    <constraint type="accessibility">All UI elements must include ARIA attributes (role, aria-label, aria-live)</constraint>
+    <constraint type="accessibility">Toast notifications must support reduced-motion preference</constraint>
+    <constraint type="performance">SW install time &lt;3s, offline page load &lt;1s, cache-first audio playback &lt;500ms</constraint>
+    <constraint type="testing">Unit tests for registration lifecycle, update detection, offline state</constraint>
+    <constraint type="security">No credential storage in SW cache; HTTPS required for SW registration</constraint>
+  </constraints>
+  <interfaces>
+    <interface>
+      <name>useServiceWorker hook</name>
+      <kind>React hook</kind>
+      <signature>const { swStatus, updateAvailable, isOffline, audioCacheConsent, registerServiceWorker, applyUpdate, setAudioCacheConsent } = useServiceWorker()</signature>
+      <path>index.html (NEW)</path>
+    </interface>
+    <interface>
+      <name>Service Worker registration</name>
+      <kind>Browser API</kind>
+      <signature>navigator.serviceWorker.register('/sw.js')</signature>
+      <path>index.html (NEW)</path>
+    </interface>
+    <interface>
+      <name>Online/offline events</name>
+      <kind>Browser API</kind>
+      <signature>window.addEventListener('online'|'offline', handler)</signature>
+      <path>index.html (NEW)</path>
+    </interface>
+    <interface>
+      <name>Cache API</name>
+      <kind>Browser API</kind>
+      <signature>caches.open('audio-cache').then(cache =&gt; cache.match(url))</signature>
+      <path>index.html (NEW)</path>
+    </interface>
+    <interface>
+      <name>Workbox skipWaiting message</name>
+      <kind>SW message</kind>
+      <signature>registration.waiting.postMessage({ type: 'SKIP_WAITING' })</signature>
+      <path>sw.js (GENERATED)</path>
+    </interface>
+  </interfaces>
+  <tests>
+    <standards>Project uses Node.js test runner (built-in) with fake-indexeddb for storage mocking. Tests are standalone .test.js files with describe/test blocks. Each test file imports functionality and validates expected behavior. Tests run via npm test command which chains all test files. Follow existing patterns in heart-rate-engine.test.js which has 36 tests covering registration, state changes, and event handling.</standards>
+    <locations>
+      <location>tests/*.test.js</location>
+      <location>tests/service-worker.test.js (NEW)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Test SW registration success with mock navigator.serviceWorker</idea>
+      <idea ac="AC1">Test SW registration failure when API not supported</idea>
+      <idea ac="AC1">Verify console logs for registration scope and cache count</idea>
+      <idea ac="AC2">Mock offline reload scenario - verify cached assets served</idea>
+      <idea ac="AC2">Test IndexedDB data accessible when navigator.onLine === false</idea>
+      <idea ac="AC3">Test offline banner renders when network status changes</idea>
+      <idea ac="AC3">Verify banner has ARIA role="alert" attribute</idea>
+      <idea ac="AC3">Test banner auto-dismisses on reconnection</idea>
+      <idea ac="AC4">Test URL input disabled state when offline</idea>
+      <idea ac="AC4">Verify placeholder text changes to "Streaming unavailable offline"</idea>
+      <idea ac="AC5">Test update available toast appears on SW state change</idea>
+      <idea ac="AC5">Verify toast persists until action taken</idea>
+      <idea ac="AC6">Test skipWaiting message posted correctly</idea>
+      <idea ac="AC6">Verify page reload triggered on controllerchange</idea>
+      <idea ac="AC7">Test audio cache consent toggle persists to localStorage</idea>
+      <idea ac="AC7">Verify default state is OFF</idea>
+      <idea ac="AC7">Test consent flag checked by cache handler</idea>
+      <idea ac="AC8">Test cached track indicator renders for cached URLs</idea>
+      <idea ac="AC8">Verify ARIA label on offline indicator</idea>
+      <idea ac="AC9">Validate workbox-config.js generates valid SW output</idea>
+      <idea perf="SW install">Measure time from register to active &lt;3s</idea>
+      <idea perf="offline load">Measure offline page load time &lt;1s</idea>
+    </ideas>
+  </tests>
+</story-context>

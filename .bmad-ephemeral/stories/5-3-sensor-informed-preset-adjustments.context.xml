@@ -1,0 +1,367 @@
+<story-context id="5-3-sensor-informed-preset-adjustments" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>3</storyId>
+    <title>Sensor-Informed Preset Adjustments</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-26</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>.bmad-ephemeral/stories/5-3-sensor-informed-preset-adjustments.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user with a connected heart rate sensor and active preset suggestions</asA>
+    <iWant>the app to automatically adjust audio parameters when I accept a suggestion or enable auto-adjust</iWant>
+    <soThat>the audio experience adapts to my physiological state without requiring manual intervention</soThat>
+    <tasks>
+      <task id="1" name="Auto-Adjust Toggle UI">
+        <subtask>Add "Auto-adjust" toggle to SensorSettings component</subtask>
+        <subtask>Position below threshold input in sensor settings section</subtask>
+        <subtask>Implement toggle state with localStorage persistence (mp3_8d_auto_adjust_enabled)</subtask>
+        <subtask>Load saved preference on app init</subtask>
+        <subtask>Wire toggle to set sensorLocked state in PresetProvider</subtask>
+        <subtask>Add helper text explaining the feature</subtask>
+        <subtask>Only show toggle when sensor is connected</subtask>
+      </task>
+      <task id="2" name="SensorRuleEngine Automation Mode">
+        <subtask>Extend SensorRuleEngine to support two modes: "suggest" and "auto-apply"</subtask>
+        <subtask>Check autoAdjustEnabled flag before auto-applying changes</subtask>
+        <subtask>When auto-apply mode and threshold exceeded: call applyPreset('calm') directly</subtask>
+        <subtask>Add performance.mark('sensor-preset-start') before apply</subtask>
+        <subtask>Add performance.measure() after apply to validate less-than-20ms latency</subtask>
+        <subtask>Log timing to console: [SensorRuleEngine] Preset applied in {X}ms</subtask>
+        <subtask>Respect 5-minute cooldown from Story 5-2</subtask>
+      </task>
+      <task id="3" name="Lock Icon Integration">
+        <subtask>Locate existing lock icon placeholder in Advanced Controls drawer</subtask>
+        <subtask>Wire icon visibility to sensorLocked state from PresetProvider</subtask>
+        <subtask>Show locked icon when sensorLocked === true</subtask>
+        <subtask>Show unlocked icon when sensorLocked === false and sensor connected</subtask>
+        <subtask>Hide icon when no sensor connected</subtask>
+        <subtask>Add tooltip with appropriate text based on state</subtask>
+        <subtask>Add ARIA label for accessibility</subtask>
+        <subtask>Add CSS pulse animation when automation makes a change</subtask>
+      </task>
+      <task id="4" name="Lock Icon Click Handler">
+        <subtask>Add onClick handler to lock icon</subtask>
+        <subtask>When clicked while locked: set sensorLocked = false</subtask>
+        <subtask>Log AUTOMATION_PAUSED event via logSensorEvent()</subtask>
+        <subtask>Show toast notification</subtask>
+        <subtask>Update icon to unlocked state</subtask>
+        <subtask>When clicked while unlocked: re-enable if auto-adjust toggle is on</subtask>
+      </task>
+      <task id="5" name="Slider Override Detection">
+        <subtask>Identify all affected sliders in Advanced Controls drawer</subtask>
+        <subtask>Add onUserInput or onChange handler to detect manual interaction</subtask>
+        <subtask>Distinguish between programmatic changes and user changes</subtask>
+        <subtask>When user manually adjusts slider: set sensorLocked = false</subtask>
+        <subtask>Log AUTOMATION_PAUSED event with slider name</subtask>
+        <subtask>Show toast with manual adjustment detected message</subtask>
+        <subtask>Ensure user value takes precedence over automation</subtask>
+      </task>
+      <task id="6" name="Event Logging Integration">
+        <subtask>Extend logSensorEvent() to support new event types: AUTOMATION_APPLIED, AUTOMATION_PAUSED, AUTO_ADJUST_ENABLED, AUTO_ADJUST_DISABLED</subtask>
+        <subtask>Include all required data fields (hr, hrAvg, preset, trigger, values)</subtask>
+        <subtask>Log event when auto-adjust toggle changes</subtask>
+        <subtask>Log event when automation applies preset</subtask>
+        <subtask>Log event when user pauses automation (either method)</subtask>
+        <subtask>Verify events appear in session record</subtask>
+      </task>
+      <task id="7" name="Testing and Documentation">
+        <subtask>Write unit tests for auto-adjust toggle persistence</subtask>
+        <subtask>Write unit tests for SensorRuleEngine auto-apply mode</subtask>
+        <subtask>Write integration test: Enable auto-adjust to threshold exceeded to preset applied</subtask>
+        <subtask>Write integration test: Slider interaction to automation paused to event logged</subtask>
+        <subtask>Write integration test: Lock icon click to automation paused to icon changes</subtask>
+        <subtask>Add test script to package.json if needed</subtask>
+        <subtask>Document auto-adjust feature in code comments</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="Auto-Adjust Preset Application">
+      <given>user accepts a sensor suggestion OR enables "Auto-adjust" toggle</given>
+      <when>SensorRuleEngine determines preset change is needed</when>
+      <then>
+        - Apply preset parameters via existing applyPreset() helper
+        - Parameters affected: intensity, noiseVolume, binauralFreq
+        - Changes apply with less-than-20ms latency (matching PRD audio control requirement)
+        - Console log: [SensorRuleEngine] Auto-applying preset: {presetId}
+      </then>
+      <technicalNotes>Reuse applyPreset() from PresetProvider (Epic 3). Must not create new audio graph nodes; only modify parameters.</technicalNotes>
+    </criterion>
+    <criterion id="AC2" title="Lock Icon Visibility">
+      <given>sensor automation is active (sensorLocked = true)</given>
+      <when>user views Advanced Controls drawer</when>
+      <then>
+        - Lock icon appears next to affected sliders (intensity, noise, binaural)
+        - Lock icon has tooltip: "Sensor automation active. Click to pause."
+        - Lock icon has ARIA label: "Sensor automation active, click to take manual control"
+        - Icon animates briefly (pulse) when automation makes a change
+      </then>
+      <integrationPoint>Epic 3 Story 3-2 already implemented sensorLocked state and lock icon placeholder. This story wires the icon to actual sensor automation state.</integrationPoint>
+    </criterion>
+    <criterion id="AC3" title="Manual Control Override (Lock Icon Click)">
+      <given>sensor automation is active</given>
+      <when>user clicks the lock icon</when>
+      <then>
+        - Set sensorLocked = false in PresetProvider
+        - Lock icon changes to unlocked with tooltip "Automation paused"
+        - Log event: { type: "AUTOMATION_PAUSED", trigger: "lock_icon" }
+        - User retains manual control until they re-enable auto-adjust
+        - Toast shown: "Sensor automation paused. Toggle Auto-adjust to resume."
+      </then>
+    </criterion>
+    <criterion id="AC4" title="Slider Interaction Override">
+      <given>sensor automation is active</given>
+      <when>user manually adjusts any slider (intensity, noise, binaural, etc.)</when>
+      <then>
+        - Immediately pause sensor automation (sensorLocked = false)
+        - Log event: { type: "AUTOMATION_PAUSED", trigger: "manual_slider", slider: "{sliderName}" }
+        - Unlock icon shown
+        - User's manual value takes precedence
+        - Toast shown: "Manual adjustment detected. Sensor automation paused."
+      </then>
+    </criterion>
+    <criterion id="AC5" title="Auto-Adjust Settings Toggle">
+      <given>user opens Settings panel</given>
+      <when>user views sensor settings section</when>
+      <then>
+        - "Auto-adjust" toggle visible when sensor is connected
+        - Toggle default: OFF (user must opt-in)
+        - Persist to localStorage: mp3_8d_auto_adjust_enabled
+        - When toggled ON: Set sensorLocked = true, enable rule engine automation
+        - When toggled OFF: Set sensorLocked = false, rule engine only shows suggestions
+        - Helper text: "When enabled, app automatically adjusts audio based on heart rate"
+      </then>
+    </criterion>
+    <criterion id="AC6" title="Session Event Logging">
+      <given>sensor automation performs an action</given>
+      <when>any automation event occurs (applies preset, user pauses, toggle changes)</when>
+      <then>
+        - Push to current session's sensorEvents[] array with schema:
+          { timestamp, type, data: { hr, hrAvg, presetApplied, trigger, previousValue, newValue } }
+        - Integrate with existing logSensorEvent() helper from Story 5-2
+      </then>
+    </criterion>
+    <criterion id="AC7" title="Performance Requirement">
+      <given>sensor automation is active and rule engine triggers a change</given>
+      <when>preset parameters are modified</when>
+      <then>
+        - Change applies in less-than-20ms from rule trigger to audio parameter update
+        - Use performance.mark() and performance.measure() to validate
+        - Log measurement to console in debug mode: [SensorRuleEngine] Preset applied in {X}ms
+      </then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture - mp3_to_8D</title>
+        <section>Section 3.6 - Sensor Bridge</section>
+        <snippet>SensorRuleEngine monitors data stream, triggering recommendations when thresholds exceed user-defined ranges. Emits SENSOR_THRESHOLD_EXCEEDED event consumed by presets + UI to show suggestions.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-5.md</path>
+        <title>Epic Technical Specification: Sensor and Adaptive Loop</title>
+        <section>Story 5-3 Workflow</section>
+        <snippet>1. User accepts suggestion OR enables "Auto-adjust" toggle. 2. sensorLocked state set to true in PresetProvider. 3. Lock icon appears on Advanced Controls drawer. 4. SensorRuleEngine applies preset changes via applyPreset(). 5. User can click lock icon, manually adjust slider, or toggle off to pause automation.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/tech-spec-epic-5.md</path>
+        <title>Epic Technical Specification: Sensor and Adaptive Loop</title>
+        <section>AC5.3 Acceptance Criteria</section>
+        <snippet>AC5.3.1-7: Sensor signals auto-adjust intensity/noise/binaural parameters, lock icon shows automation active, clicking lock pauses automation, slider adjustment auto-pauses, auto-adjust toggle enables/disables, all events logged, changes apply in less-than-20ms.</snippet>
+      </doc>
+      <doc>
+        <path>docs/create-epics-and-stories.md</path>
+        <title>Epics and Stories - mp3_to_8D</title>
+        <section>E5 - Sensor and Adaptive Loop</section>
+        <snippet>S5.3: Sensor signals can auto-adjust intensity/noise/binaural parameters while a lock icon indicates automation; users can pause automation or lock preset; overrides recorded.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>Performance Requirements</section>
+        <snippet>Audio parameter changes apply in less than 20ms - sensor-driven preset changes must match this target.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/5-2-heart-rate-subscription-threshold-engine.md</path>
+        <title>Story 5.2: Heart Rate Subscription and Threshold Engine</title>
+        <section>Dev Agent Record - Completion Notes</section>
+        <snippet>SensorRuleEngine created at index.html:10267-10323. logSensorEvent() helper at index.html:10205-10226. Suggestion toast at index.html:6229-6308. 24 tests in tests/heart-rate-engine.test.js.</snippet>
+      </doc>
+      <doc>
+        <path>.bmad-ephemeral/stories/5-1-capability-detection-consent-ui.md</path>
+        <title>Story 5.1: Capability Detection and Consent UI</title>
+        <section>Dev Agent Record</section>
+        <snippet>SensorProvider pattern with capability detection implemented. useSensorBridge hook exposes connection/disconnection APIs. Toast notification patterns established.</snippet>
+      </doc>
+      <doc>
+        <path>docs/data-models.md</path>
+        <title>Data Models</title>
+        <section>Session Schema</section>
+        <snippet>Session includes sensorEvents[] array for logging sensor-related events with timestamp, type, and contextual data.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>SensorRuleEngine</symbol>
+        <lines>10267-10323</lines>
+        <reason>Core rule engine that evaluates HR thresholds. Extend with auto-apply mode for this story.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>function</kind>
+        <symbol>logSensorEvent</symbol>
+        <lines>10205-10226</lines>
+        <reason>Event logging helper to extend with new event types: AUTOMATION_APPLIED, AUTOMATION_PAUSED, AUTO_ADJUST_ENABLED, AUTO_ADJUST_DISABLED.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>SensorSuggestionToast</symbol>
+        <lines>6229-6308</lines>
+        <reason>Existing toast component for preset suggestions. Reuse toast patterns for automation notifications.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>component</kind>
+        <symbol>AdvancedControls</symbol>
+        <lines>5212-5447</lines>
+        <reason>Contains sliders and lock icon placeholder. Wire lock icon visibility to sensorLocked state and add slider override detection.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>function</kind>
+        <symbol>applyPreset</symbol>
+        <lines>11461-11508</lines>
+        <reason>Existing preset application function with performance.mark() instrumentation. Call from rule engine in auto-apply mode.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>sensorLocked</symbol>
+        <lines>7681</lines>
+        <reason>State variable controlling automation mode. Already implemented in Epic 3 Story 3-2. Wire to auto-adjust toggle.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>state</kind>
+        <symbol>hrThreshold</symbol>
+        <lines>10337-10344</lines>
+        <reason>HR threshold persisted to localStorage (mp3_8d_hr_threshold). Follow same pattern for auto-adjust toggle.</reason>
+      </artifact>
+      <artifact>
+        <path>index.html</path>
+        <kind>function</kind>
+        <symbol>startSensorSimulation</symbol>
+        <lines>10362-10438</lines>
+        <reason>Sensor simulator for testing. Use to test auto-adjust functionality without physical sensor.</reason>
+      </artifact>
+      <artifact>
+        <path>tests/heart-rate-engine.test.js</path>
+        <kind>test</kind>
+        <symbol>SensorRuleEngine tests</symbol>
+        <lines>all</lines>
+        <reason>24 existing tests for HR parsing, buffer, rule engine. Follow structure for new auto-adjust tests.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="fake-indexeddb" version="^6.2.5" purpose="Test IndexedDB in Node.js" />
+      </ecosystem>
+      <framework name="React" version="18.2.0 UMD" purpose="State management, hooks" />
+      <framework name="Web Bluetooth API" version="browser-native" purpose="BLE HR sensor connectivity" />
+      <framework name="Web Serial API" version="browser-native" purpose="Custom board connectivity" />
+      <framework name="IndexedDB" version="browser-native" purpose="Consent and session storage" />
+      <framework name="localStorage" version="browser-native" purpose="Lightweight flags and preferences" />
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">All implementation in index.html (maintaining single-file architecture per project convention)</constraint>
+    <constraint type="architecture">Must not create new audio graph nodes; only modify parameters via applyPreset()</constraint>
+    <constraint type="performance">Preset application latency must be less than 20ms (PRD requirement)</constraint>
+    <constraint type="performance">Rule evaluation must complete in less than 50ms per tick</constraint>
+    <constraint type="integration">Respect 5-minute cooldown from Story 5-2 SensorRuleEngine</constraint>
+    <constraint type="state">sensorLocked state already exists in PresetProvider from Epic 3 Story 3-2 - reuse it</constraint>
+    <constraint type="storage">Use localStorage key mp3_8d_auto_adjust_enabled for toggle persistence (follow mp3_8d_hr_threshold pattern)</constraint>
+    <constraint type="accessibility">Lock icon must have ARIA label and tooltip for screen reader support</constraint>
+    <constraint type="ux">User opt-in required - auto-adjust toggle defaults to OFF</constraint>
+    <constraint type="logging">All automation events must be logged to sensorEvents[] array via logSensorEvent()</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>applyPreset</name>
+      <kind>function</kind>
+      <signature>applyPreset(preset: PresetConfig, presetId: string): void</signature>
+      <path>index.html:11461</path>
+      <notes>Already includes performance.mark() instrumentation. Batch updates all audio parameters.</notes>
+    </interface>
+    <interface>
+      <name>logSensorEvent</name>
+      <kind>function</kind>
+      <signature>logSensorEvent(eventType: string, data?: object): void</signature>
+      <path>index.html:10205</path>
+      <notes>Extend with new event types for automation. Data includes hr, hrAvg, threshold, and contextual fields.</notes>
+    </interface>
+    <interface>
+      <name>setSensorLocked</name>
+      <kind>state-setter</kind>
+      <signature>setSensorLocked(locked: boolean): void</signature>
+      <path>index.html:7681</path>
+      <notes>Controls automation state. When true, sliders are disabled and lock icon shows.</notes>
+    </interface>
+    <interface>
+      <name>showToast</name>
+      <kind>function</kind>
+      <signature>showToast(message: string, type?: 'success' | 'info' | 'warning' | 'error'): void</signature>
+      <path>index.html (existing)</path>
+      <notes>Use for automation pause/resume notifications.</notes>
+    </interface>
+    <interface>
+      <name>setA11yAnnouncement</name>
+      <kind>function</kind>
+      <signature>setA11yAnnouncement(message: string): void</signature>
+      <path>index.html (existing)</path>
+      <notes>Announce automation state changes to screen readers.</notes>
+    </interface>
+    <interface>
+      <name>MODE_LIBRARY</name>
+      <kind>constant</kind>
+      <signature>MODE_LIBRARY: PresetConfig[]</signature>
+      <path>index.html (existing)</path>
+      <notes>Contains preset definitions including 'calm' preset used for threshold-triggered automation.</notes>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Testing follows patterns established in Epic 5 stories. Unit tests written in Node.js with fake-indexeddb for IndexedDB mocking. Tests focus on: localStorage persistence of auto-adjust toggle, SensorRuleEngine auto-apply mode logic, event logging coverage. Integration tests verify full flow from toggle enable through threshold trigger to preset application and event logging.
+    </standards>
+    <locations>
+      <location>tests/heart-rate-engine.test.js</location>
+      <location>tests/sensor-consent.test.js</location>
+    </locations>
+    <ideas>
+      <idea acId="AC1">Test that auto-apply mode calls applyPreset when threshold exceeded and autoAdjustEnabled is true</idea>
+      <idea acId="AC1">Test that suggest mode (autoAdjustEnabled false) only shows toast, does not call applyPreset</idea>
+      <idea acId="AC2">Test lock icon visibility based on sensorLocked state and sensor connection status</idea>
+      <idea acId="AC3">Test lock icon click handler sets sensorLocked to false and logs AUTOMATION_PAUSED event</idea>
+      <idea acId="AC4">Test slider onChange fires with user interaction flag and pauses automation</idea>
+      <idea acId="AC5">Test auto-adjust toggle persistence to localStorage mp3_8d_auto_adjust_enabled</idea>
+      <idea acId="AC5">Test toggle loading from localStorage on app init</idea>
+      <idea acId="AC6">Test logSensorEvent with new event types includes all required data fields</idea>
+      <idea acId="AC7">Test performance.measure() captures preset application timing under 20ms</idea>
+      <idea integration="true">Enable auto-adjust via toggle, use simulator to exceed threshold, verify preset auto-applied and event logged</idea>
+      <idea integration="true">With automation active, manually adjust slider, verify automation pauses and toast shown</idea>
+    </ideas>
+  </tests>
+</story-context>
