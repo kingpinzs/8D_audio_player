@@ -1104,11 +1104,10 @@
     const MATRIX_GLYPHS = 'アィウェオカキクケコサシスセソタチツテトナニヌネノABCDEF0123456789';
 
     /**
-     * Matrix — a spectrum meter built from code rain: bass columns on the
-     * left, treble on the right. Each glyph column lights from the bottom up
-     * to its band's level (dim base building to a bright head, like the bars
-     * visual), so the beat reads directly as jumping stacks. Kicks flash the
-     * heads white and bump the whole field.
+     * Matrix — a full wall of falling code rain, dim by default; the music's
+     * spectrum silhouette (bass left -> treble right) LIGHTS UP inside it, so
+     * the beat emerges out of the chaos. Drops passing through their band's
+     * lit region glow; beats flash them white and lurch the whole wall.
      */
     const drawMatrix = (ctx, canvas, frequencyData, options) => {
         const { bufferLength, visualGain = 1, palette } = options;
@@ -1116,22 +1115,20 @@
         const a = audioBands(frequencyData, bufferLength, visualGain);
         const fontSize = Math.max(10, Math.round(13 * S));
         const nCols = Math.ceil(W / fontSize);
-        const nRows = Math.ceil(H / fontSize);
-        const st = getSceneState(canvas, 'matrix', () => ({ env: null, glyphs: null, surge: 0, size: 0 }));
+        const st = getSceneState(canvas, 'matrix', () => ({ drops: null, env: null, surge: 0, nCols: 0 }));
         const beat = detectSceneBeat(st, a.bass);
         const draining = trackSilence(st, a.energy);
         if (beat) st.surge = 1; else st.surge *= 0.88;
 
-        // persistent glyph grid with gentle churn, rebuilt on resize
-        const cells = nCols * nRows;
-        if (st.size !== cells) {
-            st.size = cells;
-            st.glyphs = Array.from({ length: cells }, () => MATRIX_GLYPHS[(Math.random() * MATRIX_GLYPHS.length) | 0]);
+        if (st.nCols !== nCols) {
+            st.nCols = nCols;
             st.env = new Float32Array(nCols);
-        }
-        const churn = Math.max(2, (cells * 0.02) | 0);
-        for (let k = 0; k < churn; k++) {
-            st.glyphs[(Math.random() * cells) | 0] = MATRIX_GLYPHS[(Math.random() * MATRIX_GLYPHS.length) | 0];
+            // two interleaved drops per column make the wall read as chaos
+            st.drops = [];
+            for (let c = 0; c < nCols; c++) {
+                st.drops.push({ c, y: Math.random() * H, sp: 0.8 + Math.random() * 0.7 });
+                st.drops.push({ c, y: Math.random() * H - H, sp: 0.8 + Math.random() * 0.7 });
+            }
         }
 
         ctx.font = `${fontSize}px ui-monospace, monospace`;
@@ -1139,31 +1136,39 @@
         const hue = palette ? palette.hueBase : 130;
         const sat = palette ? palette.saturation : 80;
 
+        // per-column spectrum envelope (the silhouette that lights the rain)
         for (let c = 0; c < nCols; c++) {
             const fi = Math.floor((c / nCols) * bins);
-            const raw = (frequencyData[fi] / 255) * a.trim;
-            const level = Math.pow(raw, 0.8);
-            // fast attack, snappy release — the stacks jump on the beat
-            st.env[c] = Math.max(level, st.env[c] * 0.86);
+            const level = Math.pow((frequencyData[fi] / 255) * a.trim, 0.8);
+            st.env[c] = Math.max(level, st.env[c] * 0.87);
             if (draining) st.env[c] *= 0.9;
+        }
 
-            const lit = Math.min(nRows, Math.round(st.env[c] * nRows * (1 + st.surge * 0.18)));
-            if (lit < 1) continue;
-
-            for (let r = 0; r < lit; r++) {
-                const y = H - r * fontSize; // r=0 is the bottom row
-                const frac = (r + 1) / lit; // 0 at base -> 1 at the head
-                const ch = st.glyphs[c * nRows + r];
-                if (r === lit - 1) {
-                    // the head: bright, white-hot on the beat
-                    ctx.fillStyle = `hsla(${hue}, ${30 - st.surge * 15}%, ${82 + st.surge * 15}%, 1)`;
-                } else {
-                    // dim base building toward the head
-                    const light = 16 + frac * 40 + st.surge * 8;
-                    ctx.fillStyle = `hsla(${hue}, ${sat}%, ${light}%, ${0.3 + frac * 0.65})`;
-                }
-                ctx.fillText(ch, c * fontSize, y);
+        for (const d of st.drops) {
+            d.y += (d.sp * 2.2 + st.env[d.c] * 3 + st.surge * 7) * S;
+            if (d.y > H + fontSize) {
+                if (draining) continue; // silence: drops exit and don't return
+                d.y = -fontSize * (1 + Math.random() * 4);
+                d.sp = 0.8 + Math.random() * 0.7;
             }
+            if (d.y < -fontSize) continue;
+
+            const env = st.env[d.c];
+            const litTop = H - env * H * (1 + st.surge * 0.12);
+            const inLight = d.y >= litTop && env > 0.04;
+            const ch = MATRIX_GLYPHS[(Math.random() * MATRIX_GLYPHS.length) | 0];
+
+            if (inLight) {
+                // the beat emerging from the chaos: bright, white-hot on kicks
+                const flare = env + st.surge * 0.5;
+                ctx.fillStyle = st.surge > 0.55
+                    ? `hsla(${hue}, 25%, ${88 + st.surge * 10}%, 1)`
+                    : `hsla(${hue}, ${sat}%, ${48 + flare * 30}%, ${0.75 + flare * 0.25})`;
+            } else {
+                // the dim ambient wall
+                ctx.fillStyle = `hsla(${hue}, ${sat * 0.7}%, 20%, 0.35)`;
+            }
+            ctx.fillText(ch, d.c * fontSize, d.y);
         }
     };
 
