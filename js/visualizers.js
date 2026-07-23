@@ -344,25 +344,26 @@
         const gh = st.gridH;
         const t = Date.now() * 0.001;
 
-        // ---- seed the base like a Rubens' tube: each column is a gas jet
-        //      whose flame height follows its slice of the spectrum.
+        // ---- seed the base like a bars-visualizer made of fire: the spectrum
+        //      is grouped into discrete bands, one flame per band, and the
+        //      flame TOPS trace the spectrum shape. Levels are scaled so peaks
+        //      reach ~3/4 height — never a clipped wall of flame.
         //      Silence -> zero seed -> the fire goes out. ----
         const env = st.env;
-        const bins = Math.max(16, Math.min(96, bufferLength));
+        const bands = 32;
+        const bins = Math.max(bands, Math.min(96, bufferLength));
+        const binsPerBand = bins / bands;
         for (let x = 0; x < gw; x++) {
-            const fi = Math.floor((x / gw) * bins);
+            const bandIdx = Math.floor((x / gw) * bands);
+            const fi = Math.floor(bandIdx * binsPerBand);
             const raw = ((frequencyData[fi] + (frequencyData[fi + 1] || 0)) / 510) * trim;
-            // perceptual shaping: compress dynamics upward and tilt toward the
-            // treble so quiet-but-present bins still light their jets
-            const level = Math.pow(raw, 0.6) * (0.75 + 0.55 * (fi / bins));
-            // fast attack, slow release — flames leap on transients, sink after
-            env[x] = Math.max(level, env[x] * 0.90);
-            const flicker =
-                0.78 +
-                0.14 * Math.sin(x * 0.5 + t * 11) +
-                Math.random() * 0.18;
-            let hVal = env[x] * 285 * flicker;
-            if (isBeat) hVal += bass * 60;
+            // mild shaping only — keep the contrast between bands readable
+            const level = Math.pow(raw, 0.8);
+            // fast attack, quick release — the tops dance with the beat
+            env[x] = Math.max(level, env[x] * 0.85);
+            const flicker = 0.85 + 0.10 * Math.sin(x * 0.5 + t * 11) + Math.random() * 0.10;
+            let hVal = env[x] * 230 * flicker;
+            if (isBeat) hVal += bass * 25;
             heat[(gh - 1) * gw + x] = hVal > 255 ? 255 : hVal;
             heat[(gh - 2) * gw + x] = hVal > 255 ? 248 : hVal * 0.97;
         }
@@ -370,15 +371,16 @@
         // ---- propagate upward: each cell pulls from below with random decay
         //      and lateral jitter; slow wind leans the flames ----
         const wind = Math.sin(t * 0.6) * 0.9 + Math.sin(t * 1.7) * 0.3;
-        // Decay normalized by grid height: flames reach ~75% of the canvas
-        // at moderate levels regardless of resolution, taller on heavy bass
-        const decayBase = (280 - Math.min(bass, 1) * 120) / gh;
+        // Decay normalized by grid height and tuned so a full-scale band
+        // peaks at ~3/4 of the canvas — headroom keeps the tops readable
+        const decayBase = (600 - Math.min(bass, 1) * 80) / gh;
         for (let y = 0; y < gh - 2; y++) {
             const rowOff = y * gw;
             const srcRow = (y + 1) * gw;
             for (let x = 0; x < gw; x++) {
-                let srcX = x + ((Math.random() * 3) | 0) - 1;
-                if (Math.random() < Math.abs(wind) * 0.4) srcX += wind > 0 ? 1 : -1;
+                // mostly straight up so each band's flame stays a readable column
+                let srcX = Math.random() < 0.55 ? x : x + ((Math.random() * 3) | 0) - 1;
+                if (Math.random() < Math.abs(wind) * 0.15) srcX += wind > 0 ? 1 : -1;
                 if (srcX < 0) srcX = 0; else if (srcX >= gw) srcX = gw - 1;
                 const src = heat[srcRow + srcX];
                 const d = Math.random() * decayBase;
