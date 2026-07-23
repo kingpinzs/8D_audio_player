@@ -195,7 +195,8 @@
             onEqClarityChange,
             onCalibrationComplete, // Called when calibration is saved
             audioActive = false, // Is anything actually playing right now?
-            onEnsureAudio // Ask the app to start audio for calibration tests
+            onEnsureAudio, // Ask the app to start audio for calibration tests
+            onStartAbMatch // Launch the A/B listening tournament (closes the tuner)
         }) => {
             const [orbPosition, setOrbPosition] = React.useState({ x: 0, y: -80 }); // Start at "front"
             const [isDragging, setIsDragging] = React.useState(false);
@@ -659,6 +660,24 @@
                                 }}
                             >
                                 🧠 Quick Brain Calibration (APD-Friendly)
+                            </button>
+                        )}
+                        {!showCalibration && onStartAbMatch && (
+                            <button
+                                onClick={() => { onClose && onClose(); onStartAbMatch(); }}
+                                style={{
+                                    width: '100%',
+                                    padding: '12px',
+                                    marginBottom: '12px',
+                                    background: 'rgba(74, 222, 128, 0.15)',
+                                    color: '#4ade80',
+                                    border: '1px solid rgba(74, 222, 128, 0.5)',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                }}
+                            >
+                                🎧 A/B Sound Match — listen &amp; vote, no questions
                             </button>
                         )}
 
@@ -9880,6 +9899,84 @@ function App() {
                 }
             };
 
+            // ==================== A/B SOUND MATCH ====================
+            // Brute-force calibration by listening: candidate cue-profiles are
+            // A/B'd through the REAL engine in a king-of-the-hill tournament,
+            // then fine-tuned manually, then saved as the hearing profile.
+            const AB_PROFILES = [
+                { name: 'Balanced', spatial: { itdAmount: 0.7, headShadow: 0.5, backDepth: 0.55, hardPanThreshold: 0.1 } },
+                { name: 'Timing boost', spatial: { itdAmount: 8, headShadow: 0.3, backDepth: 0.6, hardPanThreshold: 0.1 } },
+                { name: 'Strong timing', spatial: { itdAmount: 25, headShadow: 0.2, backDepth: 0.7, hardPanThreshold: 0.1 } },
+                { name: 'Tone-first (APD)', spatial: { itdAmount: 0, headShadow: 1.0, backDepth: 0.35, hardPanThreshold: 0.05 } },
+                { name: 'Loudness-first', spatial: { itdAmount: 0, headShadow: 0.4, backDepth: 0.3, hardPanThreshold: 0.05 } },
+                { name: 'Everything max', spatial: { itdAmount: 20, headShadow: 1.0, backDepth: 0.3, hardPanThreshold: 0.05 } }
+            ];
+            const [abMatch, setAbMatch] = useState(null);
+            const applyAbProfile = (spatial) => {
+                spatialParamsRef.current = { ...(presetSpatialRef.current || {}), ...spatial };
+            };
+            const startAbMatch = () => {
+                ensureAudioForCalibration();
+                const st = { phase: 'vote', champion: 0, challenger: 1, listening: 'A' };
+                setAbMatch(st);
+                applyAbProfile(AB_PROFILES[0].spatial);
+            };
+            const abListen = (side) => {
+                setAbMatch(prev => {
+                    if (!prev) return prev;
+                    const idx = side === 'A' ? prev.champion : prev.challenger;
+                    applyAbProfile(AB_PROFILES[idx].spatial);
+                    return { ...prev, listening: side };
+                });
+            };
+            const abVote = (winnerSide) => {
+                setAbMatch(prev => {
+                    if (!prev) return prev;
+                    const winner = winnerSide === 'B' ? prev.challenger : prev.champion;
+                    const nextChallenger = Math.max(prev.champion, prev.challenger) + 1;
+                    if (nextChallenger >= AB_PROFILES.length) {
+                        const tuned = { ...AB_PROFILES[winner].spatial };
+                        applyAbProfile(tuned);
+                        return { phase: 'tune', winner, tuned, listening: 'A' };
+                    }
+                    applyAbProfile(AB_PROFILES[winner].spatial);
+                    return { phase: 'vote', champion: winner, challenger: nextChallenger, listening: 'A' };
+                });
+            };
+            const abTune = (key, value) => {
+                setAbMatch(prev => {
+                    if (!prev || prev.phase !== 'tune') return prev;
+                    const tuned = { ...prev.tuned, [key]: value };
+                    applyAbProfile(tuned);
+                    return { ...prev, tuned };
+                });
+            };
+            const abSave = () => {
+                if (!abMatch || abMatch.phase !== 'tune') return;
+                try {
+                    let existing = {};
+                    try { existing = JSON.parse(localStorage.getItem('mp3_8d_calibration')) || {}; } catch (e) { existing = {}; }
+                    const data = {
+                        ...existing,
+                        ...abMatch.tuned,
+                        method: 'ab-match',
+                        savedAt: Date.now()
+                    };
+                    localStorage.setItem('mp3_8d_calibration', JSON.stringify(data));
+                    setHasRunCalibration(true);
+                    calibrationProfileRef.current = readCalibrationProfile();
+                } catch (e) {
+                    console.error('[ABMatch] Failed to save:', e);
+                }
+                spatialParamsRef.current = resolveSpatialProfile();
+                setAbMatch(null);
+                showToast('Hearing profile saved — playback now uses it', 'success');
+            };
+            const abCancel = () => {
+                spatialParamsRef.current = resolveSpatialProfile();
+                setAbMatch(null);
+            };
+
             // ==================== END PLAYLIST FUNCTIONS ====================
 
             // Loop mode toggle: off -> track -> playlist -> off
@@ -10399,6 +10496,71 @@ return (
 
                 <div className="screen">
                     {/* First Run Calibration Prompt Modal */}
+                    {abMatch && (
+                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(5, 8, 20, 0.85)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 'var(--radius-panel)', padding: '26px', maxWidth: '560px', width: '100%' }}>
+                                {abMatch.phase === 'vote' && (
+                                    <>
+                                        <h3 style={{ margin: '0 0 6px' }}>🎧 A/B Sound Match</h3>
+                                        <p style={{ margin: '0 0 4px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                            Round {Math.max(abMatch.champion, abMatch.challenger)} of {AB_PROFILES.length - 1} — switch freely, then pick
+                                            whichever makes the music feel most <strong>around you</strong>.
+                                        </p>
+                                        <p style={{ margin: '0 0 16px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                            Listening now: <strong style={{ color: 'var(--accent-default)' }}>{abMatch.listening === 'A' ? AB_PROFILES[abMatch.champion].name : AB_PROFILES[abMatch.challenger].name}</strong>
+                                        </p>
+                                        <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
+                                            <button
+                                                onClick={() => abListen('A')}
+                                                style={{ flex: 1, padding: '18px', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '1rem',
+                                                    background: abMatch.listening === 'A' ? 'var(--accent-default)' : 'var(--surface)',
+                                                    color: abMatch.listening === 'A' ? '#101318' : 'var(--text-primary)',
+                                                    border: '1px solid var(--card-border)' }}
+                                            >
+                                                A · {AB_PROFILES[abMatch.champion].name}
+                                            </button>
+                                            <button
+                                                onClick={() => abListen('B')}
+                                                style={{ flex: 1, padding: '18px', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '1rem',
+                                                    background: abMatch.listening === 'B' ? 'var(--accent-default)' : 'var(--surface)',
+                                                    color: abMatch.listening === 'B' ? '#101318' : 'var(--text-primary)',
+                                                    border: '1px solid var(--card-border)' }}
+                                            >
+                                                B · {AB_PROFILES[abMatch.challenger].name}
+                                            </button>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => abVote('A')} style={{ flex: 1, padding: '12px', background: 'var(--positive)', color: '#101318', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>A sounds better</button>
+                                            <button onClick={() => abVote('B')} style={{ flex: 1, padding: '12px', background: 'var(--positive)', color: '#101318', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>B sounds better</button>
+                                            <button onClick={() => abVote('A')} style={{ padding: '12px', background: 'var(--surface)', color: 'var(--text-secondary)', border: '1px solid var(--card-border)', borderRadius: '8px', cursor: 'pointer' }}>Can't tell</button>
+                                        </div>
+                                    </>
+                                )}
+                                {abMatch.phase === 'tune' && (
+                                    <>
+                                        <h3 style={{ margin: '0 0 6px' }}>🎛 Fine-tune: {AB_PROFILES[abMatch.winner].name}</h3>
+                                        <p style={{ margin: '0 0 16px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                            Every slider applies <strong>live</strong> — adjust until the motion feels strongest, then save.
+                                        </p>
+                                        <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '2px' }}>Timing (ITD) — {abMatch.tuned.itdAmount.toFixed(1)}× ({(abMatch.tuned.itdAmount * 0.7).toFixed(1)}ms max)</label>
+                                        <input type="range" min="0" max="40" step="0.5" value={abMatch.tuned.itdAmount} onChange={(e) => abTune('itdAmount', Number(e.target.value))} style={{ width: '100%', marginBottom: '12px' }} />
+                                        <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '2px' }}>Muffling (head shadow) — {Math.round(abMatch.tuned.headShadow * 100)}%</label>
+                                        <input type="range" min="0" max="1" step="0.05" value={abMatch.tuned.headShadow} onChange={(e) => abTune('headShadow', Number(e.target.value))} style={{ width: '100%', marginBottom: '12px' }} />
+                                        <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '2px' }}>Behind-you quieting — {Math.round((1 - abMatch.tuned.backDepth) * 100)}%</label>
+                                        <input type="range" min="0" max="0.8" step="0.05" value={1 - abMatch.tuned.backDepth} onChange={(e) => abTune('backDepth', 1 - Number(e.target.value))} style={{ width: '100%', marginBottom: '18px' }} />
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={abSave} style={{ flex: 1, padding: '12px', background: 'var(--positive)', color: '#101318', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}>Save my profile ✓</button>
+                                            <button onClick={abCancel} style={{ padding: '12px 16px', background: 'var(--surface)', color: 'var(--text-secondary)', border: '1px solid var(--card-border)', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                                        </div>
+                                    </>
+                                )}
+                                {abMatch.phase === 'vote' && (
+                                    <button onClick={abCancel} style={{ marginTop: '12px', width: '100%', padding: '8px', background: 'transparent', color: 'var(--text-secondary)', border: 'none', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {showFirstRunPrompt && (
                         <div style={{
                             position: 'fixed',
@@ -13196,6 +13358,7 @@ return (
                         onApplyEQ={applyEQ}
                         audioActive={isPlaying}
                         onEnsureAudio={ensureAudioForCalibration}
+                        onStartAbMatch={startAbMatch}
                         currentVolume={volume}
                         onVolumeChange={setVolume}
                         eqBass={eqBass}
