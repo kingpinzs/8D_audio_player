@@ -309,6 +309,159 @@
     };
 
     /**
+     * Draw the Breathe visualizer — a soft orb that follows the app's 4-2-4
+     * breathing rhythm (2s in, 1s hold, 2s out, 1s hold) with a music-reactive
+     * halo. Deliberately quiet: amplitude response is capped so the scene never
+     * demands attention.
+     */
+    const drawBreathe = (ctx, canvas, frequencyData, options) => {
+        const { bufferLength } = options;
+        const t = (Date.now() * 0.001) % 6; // 6s cycle
+
+        // 4-2-4 phase -> orb scale 0.85..1.15 with ease-in-out
+        const ease = (p) => p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+        let scale, phaseLabel;
+        if (t < 2) { scale = 0.85 + 0.3 * ease(t / 2); phaseLabel = 'breathe in'; }
+        else if (t < 3) { scale = 1.15; phaseLabel = 'hold'; }
+        else if (t < 5) { scale = 1.15 - 0.3 * ease((t - 3) / 2); phaseLabel = 'breathe out'; }
+        else { scale = 0.85; phaseLabel = 'hold'; }
+
+        // Gentle music energy (RMS), heavily damped
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) sum += frequencyData[i];
+        const energy = Math.min((sum / (bufferLength * 255)) * 0.6, 0.3);
+
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const base = Math.min(cx, cy) * 0.42;
+        const r = base * scale;
+
+        // Calm ground
+        const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        bg.addColorStop(0, '#151B22');
+        bg.addColorStop(1, '#1B2530');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Music halo — a whisper, not a meter
+        const halo = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, r * (1.5 + energy));
+        halo.addColorStop(0, `rgba(148, 190, 182, ${0.10 + energy * 0.25})`);
+        halo.addColorStop(1, 'rgba(148, 190, 182, 0)');
+        ctx.fillStyle = halo;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // The orb
+        const orb = ctx.createRadialGradient(cx - r * 0.25, cy - r * 0.3, r * 0.1, cx, cy, r);
+        orb.addColorStop(0, '#E9F1EE');
+        orb.addColorStop(0.65, '#BFD3CE');
+        orb.addColorStop(1, '#93AFA9');
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = orb;
+        ctx.fill();
+
+        // Phase word, whisper-level
+        ctx.font = '500 13px "Avenir Next", Avenir, Seravek, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(200, 216, 212, 0.55)';
+        ctx.fillText(phaseLabel, cx, cy + r + 30);
+    };
+
+    /**
+     * Draw the Orbit visualizer — a top-down head with the sound source
+     * circling it, driven by the REAL spatial state from the rotation loop
+     * (options.spatialState: { angle, panPosition, depthMultiplier, rotationHz }).
+     * Falls back to a slow idle orbit when nothing is playing.
+     */
+    const drawOrbit = (ctx, canvas, frequencyData, options) => {
+        const { bufferLength, spatialState } = options;
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const R = Math.min(cx, cy) * 0.62;
+
+        // Void ground with a faint center vignette
+        ctx.fillStyle = '#0B0D16';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const vig = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.9);
+        vig.addColorStop(0, 'rgba(38, 43, 69, 0.35)');
+        vig.addColorStop(1, 'rgba(38, 43, 69, 0)');
+        ctx.fillStyle = vig;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Music-reactive radial ticks hugging the ring (quiet circular analyser)
+        const ticks = 72;
+        for (let i = 0; i < ticks; i++) {
+            const fi = Math.floor(i * bufferLength / ticks);
+            const amp = (frequencyData[fi] / 255);
+            const a = (i / ticks) * Math.PI * 2;
+            const inner = R * 1.06;
+            const outer = inner + amp * R * 0.22;
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+            ctx.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+            ctx.strokeStyle = `rgba(116, 220, 230, ${0.10 + amp * 0.25})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // Orbit ring + inner dashed guide
+        ctx.beginPath();
+        ctx.arc(cx, cy, R, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(70, 78, 120, 0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.setLineDash([3, 7]);
+        ctx.beginPath();
+        ctx.arc(cx, cy, R * 0.72, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(45, 51, 84, 0.6)';
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Head silhouette (top-down: skull + ears + nose notch pointing up)
+        const hw = R * 0.30;
+        ctx.fillStyle = '#1B2036';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, hw, hw * 1.18, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath(); // ears
+        ctx.ellipse(cx - hw * 1.08, cy, hw * 0.16, hw * 0.34, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx + hw * 1.08, cy, hw * 0.16, hw * 0.34, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath(); // nose notch = "you face up"
+        ctx.moveTo(cx - hw * 0.16, cy - hw * 1.12);
+        ctx.lineTo(cx, cy - hw * 1.34);
+        ctx.lineTo(cx + hw * 0.16, cy - hw * 1.12);
+        ctx.fillStyle = '#232948';
+        ctx.fill();
+
+        // Source position: live engine state, or a slow idle orbit
+        const idleAngle = (Date.now() * 0.001 * (Math.PI * 2)) / 16; // 16s idle rev
+        const angle = spatialState ? spatialState.angle : idleAngle;
+        const depth = spatialState ? spatialState.depthMultiplier : 1;
+        // angle 0 = front (top of screen), increasing clockwise
+        const sx = cx + Math.sin(angle) * R;
+        const sy = cy - Math.cos(angle) * R * (0.9 + depth * 0.1);
+
+        // Bass makes the source pulse
+        let bassSum = 0;
+        for (let i = 0; i < 8; i++) bassSum += frequencyData[i];
+        const bass = bassSum / (8 * 255);
+        const dotR = (5 + bass * 6) * (0.7 + depth * 0.3);
+
+        const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, dotR * 4);
+        glow.addColorStop(0, `rgba(116, 220, 230, ${0.5 * depth + 0.2})`);
+        glow.addColorStop(1, 'rgba(116, 220, 230, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(sx, sy, dotR * 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(sx, sy, dotR, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(200, 245, 250, ${0.55 + depth * 0.45})`;
+        ctx.fill();
+    };
+
+    /**
      * Main draw function - routes to appropriate visualizer
      * @param {CanvasRenderingContext2D} ctx - Canvas context
      * @param {HTMLCanvasElement} canvas - Canvas element
@@ -324,7 +477,8 @@
             visualGain = 1,
             darkMode = true,
             bufferLength,
-            maxParticles = 100
+            maxParticles = 100,
+            spatialState = null
         } = options;
 
         const bgColor = darkMode ? '#1a2332' : '#0a0a0a';
@@ -333,7 +487,7 @@
         ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const drawOptions = { visualGain, bufferLength, maxParticles };
+        const drawOptions = { visualGain, bufferLength, maxParticles, spatialState };
 
         switch (visType) {
             case 'bars':
@@ -354,6 +508,12 @@
             case 'fire':
                 particles = drawFire(ctx, canvas, frequencyData, particles, drawOptions);
                 break;
+            case 'breathe':
+                drawBreathe(ctx, canvas, frequencyData, drawOptions);
+                break;
+            case 'orbit':
+                drawOrbit(ctx, canvas, frequencyData, drawOptions);
+                break;
             default:
                 drawBars(ctx, canvas, frequencyData, drawOptions);
         }
@@ -368,6 +528,8 @@
         drawCircular,
         drawMirrored,
         drawParticles,
-        drawFire
+        drawFire,
+        drawBreathe,
+        drawOrbit
     };
 });

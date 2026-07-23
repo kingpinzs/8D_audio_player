@@ -5940,6 +5940,8 @@ function App() {
             // set by applyPreset, consumed by the rotation loop
             const spatialParamsRef = useRef(null);
             const reverbRef = useRef(null);
+            // Latest rotation state, published each tick for the Orbit visualizer
+            const rotationStateRef = useRef(null);
 
             // Dual Track refs
             const dualTrackEnabledRef = useRef(dualTrackEnabled);
@@ -7385,6 +7387,7 @@ function App() {
                         variableSpeed: dualTrackEnabledRef.current && dualTrackVariableSpeedRef.current,
                         spatial: spatialParamsRef.current
                     });
+                    rotationStateRef.current = rotationState;
                     
                     const { applyGainRamp, applyDelayRamp, applyFilterRamp } = SpatialProcessor;
                     const RAMP_MS = 100; // 100ms exponential ramp: perceptible movement, no clicks
@@ -7457,7 +7460,8 @@ function App() {
                         visualGain,
                         darkMode,
                         bufferLength,
-                        maxParticles
+                        maxParticles,
+                        spatialState: rotationStateRef.current
                     });
                 };
 
@@ -10878,7 +10882,9 @@ return (
                                                 { id: 'circular', icon: '🔘', label: 'Circular' },
                                                 { id: 'mirrored', icon: '🪞', label: 'Mirror' },
                                                 { id: 'particles', icon: '✨', label: 'Particles' },
-                                                { id: 'fire', icon: '🔥', label: 'Fire' }
+                                                { id: 'fire', icon: '🔥', label: 'Fire' },
+                                                { id: 'breathe', icon: '🫧', label: 'Breathe' },
+                                                { id: 'orbit', icon: '🪐', label: 'Orbit' }
                                             ].map(vis => (
                                                 <button
                                                     key={vis.id}
@@ -11899,7 +11905,9 @@ return (
                                             visualizerType === 'bars' ? '📊' :
                                             visualizerType === 'waveform' ? '〰️' :
                                             visualizerType === 'circular' ? '◎' :
-                                            visualizerType === 'mirrored' ? '⫼' : '✨'
+                                            visualizerType === 'mirrored' ? '⫼' :
+                                            visualizerType === 'breathe' ? '🫧' :
+                                            visualizerType === 'orbit' ? '🪐' : '✨'
                                         }</span>
                                         <span style={{
                                             display: 'flex',
@@ -11976,7 +11984,9 @@ return (
                                                     { id: 'circular', icon: '◎', label: 'Circle' },
                                                     { id: 'mirrored', icon: '⫼', label: 'Mirror' },
                                                     { id: 'particles', icon: '✨', label: 'Particles' },
-                                                    { id: 'fire', icon: '🔥', label: 'Fire' }
+                                                    { id: 'fire', icon: '🔥', label: 'Fire' },
+                                                    { id: 'breathe', icon: '🫧', label: 'Breathe' },
+                                                    { id: 'orbit', icon: '🪐', label: 'Orbit' }
                                                 ].map(type => (
                                                     <button
                                                         key={type.id}
