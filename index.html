@@ -7479,6 +7479,19 @@ function App() {
                 /* Visualizer rendering - delegates to Visualizers module */
                 const drawOnCanvas = (canvas, particles) => {
                     if (!canvas) return particles;
+                    // Render at devicePixelRatio: canvases were drawing at CSS size
+                    // and getting upscaled (blurry on HiDPI). Draw code is
+                    // proportional to canvas.width/height, so a denser backing
+                    // store just means crisper output.
+                    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                    const cssW = canvas.clientWidth || canvas.width;
+                    const cssH = canvas.clientHeight || canvas.height;
+                    const targetW = Math.round(cssW * dpr);
+                    const targetH = Math.round(cssH * dpr);
+                    if (canvas.width !== targetW || canvas.height !== targetH) {
+                        canvas.width = targetW;
+                        canvas.height = targetH;
+                    }
                     const ctx = canvas.getContext('2d');
                     const visType = visualizerTypeRef.current;
                     const visualGain = Math.max(0.1, Math.min(visualWaveGainRef.current / 0.5, 1));

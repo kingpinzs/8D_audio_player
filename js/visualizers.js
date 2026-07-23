@@ -140,38 +140,150 @@
         }
     };
 
+    // Per-canvas engine state for the particle system (beat detection history)
+    const particleEngineState = new WeakMap();
+
     /**
-     * Draw particles visualizer
+     * Draw particles visualizer — a proper particle engine:
+     * emitters (bottom fountain + beat bursts from center), physics (gravity,
+     * drag, audio-driven turbulence), velocity streaks, additive glow sprites,
+     * pop-in/fade-out life curves, treble sparkles, theme-palette colors.
      */
     const drawParticles = (ctx, canvas, frequencyData, particles, options) => {
-        const { bufferLength, maxParticles, palette } = options;
-        const avgFreq = frequencyData.reduce((a, b) => a + b, 0) / bufferLength;
+        const { bufferLength, maxParticles, palette, visualGain = 1 } = options;
+        const W = canvas.width;
+        const H = canvas.height;
+        const S = Math.max(W, H) / 600; // resolution scale so sprites keep proportion
 
-        if (avgFreq > 50 && particles.length < maxParticles) {
+        // ---- audio analysis: bass / mid / treble + beat detection ----
+        const band = (from, to) => {
+            const end = Math.min(to, bufferLength);
+            let sum = 0;
+            for (let i = from; i < end; i++) sum += frequencyData[i];
+            return end > from ? (sum / (end - from)) / 255 : 0;
+        };
+        const bass = band(0, 8) * visualGain;
+        const mid = band(8, 64) * visualGain;
+        const treble = band(64, 256) * visualGain;
+
+        let st = particleEngineState.get(canvas);
+        if (!st) {
+            st = { bassAvg: 0.1, beatCooldown: 0 };
+            particleEngineState.set(canvas, st);
+        }
+        st.bassAvg = st.bassAvg * 0.95 + bass * 0.05; // rolling energy floor
+        st.beatCooldown = Math.max(0, st.beatCooldown - 1);
+        const isBeat = bass > st.bassAvg * 1.35 + 0.04 && st.beatCooldown === 0;
+        if (isBeat) st.beatCooldown = 8; // ~130ms between beats at 60fps
+
+        const cap = maxParticles * 3;
+        const hueFor = () => palette
+            ? palette.hueBase + Math.random() * Math.max(palette.hueRange, 14)
+            : Math.random() * 360;
+
+        // ---- emitter 1: bottom fountain, rate follows the mids ----
+        const fountainRate = Math.round(1 + mid * 6);
+        for (let i = 0; i < fountainRate && particles.length < cap; i++) {
             particles.push({
-                x: Math.random() * canvas.width,
-                y: canvas.height,
-                vx: (Math.random() - 0.5) * 4,
-                vy: -Math.random() * 5 - 2,
+                x: Math.random() * W,
+                y: H + 4 * S,
+                vx: (Math.random() - 0.5) * 1.6 * S,
+                vy: (-2.2 - Math.random() * 3.2 - bass * 4) * S,
                 life: 1,
-                hue: palette
-                    ? palette.hueBase + Math.random() * Math.max(palette.hueRange, 12)
-                    : Math.random() * 360,
-                size: Math.random() * 4 + 2
+                decay: 0.008 + Math.random() * 0.012,
+                size: (1.5 + Math.random() * 3) * S,
+                hue: hueFor(),
+                spark: false
             });
         }
 
+        // ---- emitter 2: beat burst — radial explosion from the lower center ----
+        if (isBeat) {
+            const bx = W / 2 + (Math.random() - 0.5) * W * 0.3;
+            const by = H * (0.55 + Math.random() * 0.25);
+            const count = Math.min(cap - particles.length, 14 + Math.round(bass * 18));
+            const burstHue = hueFor();
+            for (let i = 0; i < count; i++) {
+                const a = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+                const speed = (2 + Math.random() * 4 + bass * 5) * S;
+                particles.push({
+                    x: bx,
+                    y: by,
+                    vx: Math.cos(a) * speed,
+                    vy: Math.sin(a) * speed * 0.8 - 1.2 * S,
+                    life: 1,
+                    decay: 0.015 + Math.random() * 0.02,
+                    size: (1.2 + Math.random() * 2.4) * S,
+                    hue: burstHue + (Math.random() - 0.5) * 24,
+                    spark: true
+                });
+            }
+        }
+
+        // ---- emitter 3: treble sparkles — brief twinkles in the upper field ----
+        if (treble > 0.18) {
+            const n = Math.min(cap - particles.length, Math.round(treble * 4));
+            for (let i = 0; i < n; i++) {
+                particles.push({
+                    x: Math.random() * W,
+                    y: Math.random() * H * 0.5,
+                    vx: 0,
+                    vy: 0.2 * S,
+                    life: 0.5,
+                    decay: 0.06 + Math.random() * 0.05,
+                    size: (0.8 + Math.random() * 1.4) * S,
+                    hue: hueFor(),
+                    spark: true
+                });
+            }
+        }
+
+        // ---- physics + render (additive blending for video-game glow) ----
+        const t = Date.now() * 0.001;
+        ctx.globalCompositeOperation = 'lighter';
         particles = particles.filter(p => p.life > 0);
         particles.forEach(p => {
+            // turbulence field driven by the mids, gravity, drag
+            p.vx += Math.sin(p.y * 0.013 + t * 1.7) * 0.05 * S * (0.4 + mid);
+            p.vy += 0.045 * S;
+            p.vx *= 0.985;
+            p.vy *= 0.985;
             p.x += p.vx;
             p.y += p.vy;
-            p.vy += 0.05;
-            p.life -= 0.015;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-            ctx.fillStyle = `hsla(${p.hue}, 80%, 60%, ${p.life})`;
-            ctx.fill();
+            p.life -= p.decay;
+            if (p.life <= 0) return;
+
+            // life curves: quick pop-in, eased fade-out
+            const popIn = Math.min(1, (1 - p.life) * 8);
+            const alpha = p.life * p.life * popIn;
+            const r = Math.max(0.4, p.size * (0.55 + 0.45 * p.life) * popIn);
+
+            if (p.spark) {
+                // spark: streak along velocity + hot core
+                const streak = 3.2;
+                ctx.strokeStyle = `hsla(${p.hue}, 90%, 68%, ${alpha * 0.7})`;
+                ctx.lineWidth = Math.max(1, r * 0.7);
+                ctx.beginPath();
+                ctx.moveTo(p.x - p.vx * streak, p.y - p.vy * streak);
+                ctx.lineTo(p.x, p.y);
+                ctx.stroke();
+                ctx.fillStyle = `hsla(${p.hue}, 60%, 85%, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r * 0.8, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                // glow sprite: soft halo + core (two-pass, cheap)
+                ctx.fillStyle = `hsla(${p.hue}, 85%, 58%, ${alpha * 0.22})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r * 2.4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = `hsla(${p.hue}, 80%, 66%, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
         });
+        ctx.globalCompositeOperation = 'source-over';
 
         return particles;
     };
