@@ -1113,21 +1113,27 @@
         const { bufferLength, visualGain = 1, palette } = options;
         const W = canvas.width, H = canvas.height, S = Math.max(W, H) / 600;
         const a = audioBands(frequencyData, bufferLength, visualGain);
-        const fontSize = Math.max(10, Math.round(13 * S));
+        // Cap the font scale so big canvases get MORE columns, not giant glyphs,
+        // and scale drops-per-column with the canvas height — fullscreen keeps
+        // the same wall density as the strip view.
+        const fontSize = Math.max(10, Math.round(13 * Math.min(S, 1.6)));
         const nCols = Math.ceil(W / fontSize);
-        const st = getSceneState(canvas, 'matrix', () => ({ drops: null, env: null, surge: 0, nCols: 0 }));
+        const nRows = Math.ceil(H / fontSize);
+        const dropsPerCol = Math.max(2, Math.round(nRows / 4));
+        const st = getSceneState(canvas, 'matrix', () => ({ drops: null, env: null, surge: 0, sig: 0 }));
         const beat = detectSceneBeat(st, a.bass);
         const draining = trackSilence(st, a.energy);
         if (beat) st.surge = 1; else st.surge *= 0.88;
 
-        if (st.nCols !== nCols) {
-            st.nCols = nCols;
+        const sig = nCols * 1000 + dropsPerCol;
+        if (st.sig !== sig) {
+            st.sig = sig;
             st.env = new Float32Array(nCols);
-            // two interleaved drops per column make the wall read as chaos
             st.drops = [];
             for (let c = 0; c < nCols; c++) {
-                st.drops.push({ c, y: Math.random() * H, sp: 0.8 + Math.random() * 0.7 });
-                st.drops.push({ c, y: Math.random() * H - H, sp: 0.8 + Math.random() * 0.7 });
+                for (let k = 0; k < dropsPerCol; k++) {
+                    st.drops.push({ c, y: Math.random() * H * 2 - H, sp: 0.8 + Math.random() * 0.7 });
+                }
             }
         }
 
