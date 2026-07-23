@@ -277,151 +277,169 @@
     };
 
     /**
-     * Draw fire visualizer with beat reactivity
+     * Fire palette: heat 0-255 -> black / deep red / orange / yellow / white.
+     * Alpha rises with heat so the empty sky above the flames stays transparent.
+     */
+    const FIRE_PALETTE = (() => {
+        const stops = [
+            [0,   [10, 6, 4, 0]],
+            [40,  [40, 8, 2, 90]],
+            [90,  [120, 18, 4, 220]],
+            [140, [200, 60, 8, 255]],
+            [190, [242, 130, 20, 255]],
+            [225, [252, 200, 60, 255]],
+            [255, [255, 250, 225, 255]]
+        ];
+        const pal = new Uint8ClampedArray(256 * 4);
+        for (let i = 0; i < 256; i++) {
+            let lo = stops[0];
+            let hi = stops[stops.length - 1];
+            for (let k = 0; k < stops.length - 1; k++) {
+                if (i >= stops[k][0] && i <= stops[k + 1][0]) { lo = stops[k]; hi = stops[k + 1]; break; }
+            }
+            const span = Math.max(1, hi[0] - lo[0]);
+            const f = (i - lo[0]) / span;
+            for (let c = 0; c < 4; c++) {
+                pal[i * 4 + c] = lo[1][c] + (hi[1][c] - lo[1][c]) * f;
+            }
+        }
+        return pal;
+    })();
+
+    // Per-canvas heat grid state for the fire simulation
+    const fireState = new WeakMap();
+
+    /**
+     * Draw fire visualizer — classic fire-propagation simulation (Doom fire):
+     * a heat grid seeded at the bottom by the bass, rising with random decay
+     * and wind, rendered through a fire palette. Beats flash the seed row;
+     * pixel embers ride the updraft.
      */
     const drawFire = (ctx, canvas, frequencyData, particles, options) => {
-        const { visualGain, maxParticles } = options;
-        const time = Date.now() * 0.001;
+        const { visualGain = 1, maxParticles } = options;
+        const W = canvas.width;
+        const H = canvas.height;
 
-        // Audio analysis - STRONG beat response
-        const bassSum = frequencyData.slice(0, 8).reduce((a, b) => a + b, 0);
-        const bass = Math.pow(bassSum / (8 * 255), 0.7) * visualGain * 1.5;
+        // ---- audio ----
+        let bassSum = 0;
+        for (let i = 0; i < 8; i++) bassSum += frequencyData[i];
+        const bass = Math.pow(bassSum / (8 * 255), 0.8) * visualGain * 1.4;
+        let trebSum = 0;
+        for (let i = 64; i < Math.min(160, frequencyData.length); i++) trebSum += frequencyData[i];
+        const treble = (trebSum / (96 * 255)) * visualGain;
 
-        // Heat glow background - pulses with beat
-        const bgGlow = ctx.createLinearGradient(0, canvas.height, 0, 0);
-        bgGlow.addColorStop(0, `rgba(255, 80, 0, ${0.5 + bass * 0.5})`);
-        bgGlow.addColorStop(0.4, `rgba(180, 40, 0, ${0.2 + bass * 0.3})`);
-        bgGlow.addColorStop(0.7, `rgba(60, 10, 0, ${0.1 + bass * 0.1})`);
-        bgGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = bgGlow;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // ---- heat grid (rebuilt when the canvas aspect changes) ----
+        // Cells stay ~square whatever the canvas shape, so flames rise as
+        // vertical tongues instead of smearing sideways on wide canvases
+        const gridW = Math.min(256, Math.max(48, Math.round(W / 3)));
+        const gridH = Math.min(160, Math.max(40, Math.round(gridW * (H / Math.max(1, W)))));
+        let st = fireState.get(canvas);
+        if (!st || st.gridW !== gridW || st.gridH !== gridH) {
+            const off = document.createElement('canvas');
+            off.width = gridW;
+            off.height = gridH;
+            const offCtx = off.getContext('2d');
+            st = {
+                gridW, gridH, off, offCtx,
+                heat: new Float32Array(gridW * gridH),
+                img: offCtx.createImageData(gridW, gridH),
+                bassAvg: 0.1,
+                beatCooldown: 0
+            };
+            fireState.set(canvas, st);
+        }
+        st.bassAvg = st.bassAvg * 0.95 + bass * 0.05;
+        st.beatCooldown = Math.max(0, st.beatCooldown - 1);
+        const isBeat = bass > st.bassAvg * 1.3 + 0.04 && st.beatCooldown === 0;
+        if (isBeat) st.beatCooldown = 7;
 
-        // Draw fire using canvas compositing for glow
+        const heat = st.heat;
+        const gw = st.gridW;
+        const gh = st.gridH;
+        const t = Date.now() * 0.001;
+
+        // ---- seed the base: per-column flicker, bass = fuel, beats = flash ----
+        for (let x = 0; x < gw; x++) {
+            const flicker =
+                0.62 +
+                0.20 * Math.sin(x * 0.35 + t * 9) +
+                0.12 * Math.sin(x * 0.9 - t * 13) +
+                Math.random() * 0.22;
+            let hVal = (135 + bass * 130) * flicker;
+            if (isBeat) hVal += 80;
+            hVal = Math.min(255, hVal);
+            heat[(gh - 1) * gw + x] = hVal;
+            heat[(gh - 2) * gw + x] = Math.min(255, hVal * 0.97);
+        }
+
+        // ---- propagate upward: each cell pulls from below with random decay
+        //      and lateral jitter; slow wind leans the flames ----
+        const wind = Math.sin(t * 0.6) * 0.9 + Math.sin(t * 1.7) * 0.3;
+        // Decay normalized by grid height: flames reach ~75% of the canvas
+        // at moderate levels regardless of resolution, taller on heavy bass
+        const decayBase = (280 - Math.min(bass, 1) * 120) / gh;
+        for (let y = 0; y < gh - 2; y++) {
+            const rowOff = y * gw;
+            const srcRow = (y + 1) * gw;
+            for (let x = 0; x < gw; x++) {
+                let srcX = x + ((Math.random() * 3) | 0) - 1;
+                if (Math.random() < Math.abs(wind) * 0.4) srcX += wind > 0 ? 1 : -1;
+                if (srcX < 0) srcX = 0; else if (srcX >= gw) srcX = gw - 1;
+                const src = heat[srcRow + srcX];
+                const d = Math.random() * decayBase;
+                heat[rowOff + x] = src > d ? src - d : 0;
+            }
+        }
+
+        // ---- render: heat -> palette -> ImageData -> stretched to canvas ----
+        const data = st.img.data;
+        const cells = gw * gh;
+        for (let i = 0; i < cells; i++) {
+            const hVal = heat[i] > 255 ? 255 : heat[i] | 0;
+            const p4 = hVal * 4;
+            const i4 = i * 4;
+            data[i4] = FIRE_PALETTE[p4];
+            data[i4 + 1] = FIRE_PALETTE[p4 + 1];
+            data[i4 + 2] = FIRE_PALETTE[p4 + 2];
+            data[i4 + 3] = FIRE_PALETTE[p4 + 3];
+        }
+        st.offCtx.putImageData(st.img, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(st.off, 0, 0, W, H);
+
+        // ---- pixel embers riding the updraft ----
+        const S = Math.max(W, H) / 600;
+        const px = Math.max(1, Math.round(S));
+        const cap = maxParticles;
+        const emberRate = (isBeat ? 6 : 0) + (bass > 0.3 ? 2 : 0) + (treble > 0.2 ? 1 : 0);
+        for (let i = 0; i < emberRate && particles.length < cap; i++) {
+            particles.push({
+                x: Math.random() * W,
+                y: H - Math.random() * H * 0.25,
+                vx: (Math.random() - 0.5) * 1.2 * S,
+                vy: (-1.6 - Math.random() * 2.6 - bass * 2.5) * S,
+                life: 1,
+                decay: 0.010 + Math.random() * 0.016,
+                size: px,
+                hue: 22 + Math.random() * 26,
+                phase: Math.random() * Math.PI * 2
+            });
+        }
         ctx.globalCompositeOperation = 'lighter';
-
-        const flameCount = 35;
-        for (let layer = 0; layer < 3; layer++) {
-            const layerAlpha = [0.3, 0.5, 0.8][layer];
-            const layerOffset = [12, 6, 0][layer];
-
-            for (let i = 0; i < flameCount; i++) {
-                const x = (i + 0.5) * (canvas.width / flameCount);
-
-                // Frequency-based height
-                const fi = Math.floor((i / flameCount) * 24);
-                const freq = frequencyData[fi] / 255;
-
-                // Multiple wave layers for organic movement
-                const t = time + layer * 0.3;
-                const w1 = Math.sin(t * 3 + i * 0.5) * 0.2;
-                const w2 = Math.sin(t * 5 + i * 0.3) * 0.15;
-                const w3 = Math.cos(t * 2 + i * 0.7) * 0.1;
-                const wobble = w1 + w2 + w3;
-
-                // Height = base + beat boost + frequency + wobble
-                const baseH = canvas.height * 0.2;
-                const beatH = bass * canvas.height * 0.5;
-                const freqH = freq * canvas.height * 0.3;
-                const height = (baseH + beatH + freqH) * (1 + wobble);
-
-                // X wobble
-                const xOff = Math.sin(t * 4 + i) * 15 + Math.cos(t * 6 + i * 0.5) * 10;
-
-                // Flame width
-                const w = (canvas.width / flameCount) * 2;
-
-                // Draw organic flame shape
-                const gradient = ctx.createLinearGradient(
-                    x, canvas.height + layerOffset,
-                    x, canvas.height + layerOffset - height
-                );
-
-                const a = layerAlpha * (0.5 + bass * 0.5);
-                gradient.addColorStop(0, `rgba(255, 255, 200, ${a})`);
-                gradient.addColorStop(0.15, `rgba(255, 200, 50, ${a})`);
-                gradient.addColorStop(0.35, `rgba(255, 120, 20, ${a * 0.85})`);
-                gradient.addColorStop(0.55, `rgba(255, 60, 5, ${a * 0.65})`);
-                gradient.addColorStop(0.75, `rgba(180, 20, 0, ${a * 0.4})`);
-                gradient.addColorStop(1, 'rgba(80, 10, 0, 0)');
-
-                ctx.beginPath();
-                ctx.moveTo(x - w/2 + xOff, canvas.height + layerOffset);
-
-                // Curved flame shape with bezier
-                const midY = canvas.height + layerOffset - height * 0.5;
-                const topY = canvas.height + layerOffset - height;
-
-                // Left side up
-                ctx.bezierCurveTo(
-                    x - w/2 + xOff + Math.sin(t * 5 + i) * 8, midY + height * 0.2,
-                    x - w/4 + xOff + Math.sin(t * 7 + i) * 12, midY - height * 0.1,
-                    x + xOff + Math.sin(t * 3 + i) * 5, topY
-                );
-
-                // Right side down
-                ctx.bezierCurveTo(
-                    x + w/4 + xOff + Math.cos(t * 7 + i) * 12, midY - height * 0.1,
-                    x + w/2 + xOff + Math.cos(t * 5 + i) * 8, midY + height * 0.2,
-                    x + w/2 + xOff, canvas.height + layerOffset
-                );
-
-                ctx.closePath();
-                ctx.fillStyle = gradient;
-                ctx.fill();
-            }
-        }
-
-        ctx.globalCompositeOperation = 'source-over';
-
-        // Embers on beat
-        if (bass > 0.25 && particles.length < maxParticles * 2) {
-            const n = Math.floor(bass * 12) + 2;
-            for (let i = 0; i < n; i++) {
-                particles.push({
-                    x: Math.random() * canvas.width,
-                    y: canvas.height - Math.random() * canvas.height * 0.35,
-                    vx: (Math.random() - 0.5) * 4,
-                    vy: -Math.random() * 5 - 2,
-                    life: 1,
-                    hue: 20 + Math.random() * 40,
-                    size: Math.random() * 5 + 2,
-                    phase: Math.random() * Math.PI * 2
-                });
-            }
-        }
-
-        // Update embers
         particles = particles.filter(p => p.life > 0);
-        ctx.globalCompositeOperation = 'lighter';
         particles.forEach(p => {
-            // Foreign particles (from the pixel-particles mode sharing this
-            // array) have no size/phase — retire them instead of drawing NaNs
-            if (!(p.size > 0)) {
-                p.life = 0;
-                return;
-            }
-            p.phase = (p.phase || 0) + 0.15;
-            p.x += p.vx + Math.sin(p.phase) * 2;
+            if (!(p.size > 0) || !(p.decay > 0)) { p.life = 0; return; }
+            p.phase += 0.2;
+            p.x += p.vx + Math.sin(p.phase) * 0.6 * S + wind * 0.4 * S;
             p.y += p.vy;
-            p.vy *= 0.97;
-            p.life -= 0.018;
-            if (p.life <= 0) return; // died this frame — a negative radius throws in arc()
-
+            p.vy *= 0.985;
+            p.life -= p.decay;
+            if (p.life <= 0) return;
             const flicker = 0.6 + Math.sin(p.phase * 2) * 0.4;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, Math.max(0.1, p.size * p.life), 0, Math.PI * 2);
-            ctx.fillStyle = `hsla(${p.hue}, 100%, ${55 + flicker * 25}%, ${p.life * flicker})`;
-            ctx.fill();
+            ctx.fillStyle = `hsla(${p.hue}, 100%, ${58 + flicker * 25}%, ${p.life * flicker})`;
+            ctx.fillRect(p.x | 0, p.y | 0, p.size, p.size);
         });
         ctx.globalCompositeOperation = 'source-over';
-
-        // Base glow pulsing with beat
-        const baseGlow = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - 60);
-        baseGlow.addColorStop(0, `rgba(255, 200, 100, ${0.6 + bass * 0.4})`);
-        baseGlow.addColorStop(0.4, `rgba(255, 120, 30, ${0.3 + bass * 0.3})`);
-        baseGlow.addColorStop(1, 'rgba(255, 60, 0, 0)');
-        ctx.fillStyle = baseGlow;
-        ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
 
         return particles;
     };
