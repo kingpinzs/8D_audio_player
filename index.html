@@ -215,7 +215,7 @@
             // Calibration wizard state
             const [showCalibration, setShowCalibration] = React.useState(false);
             const [calibrationStep, setCalibrationStep] = React.useState(0);
-            const [calibrationDelayMs, setCalibrationDelayMs] = React.useState(10); // Start at 10ms for testing
+            const [calibrationDelayMs, setCalibrationDelayMs] = React.useState(50); // Start clearly audible; user slides DOWN to find threshold
             const [calibrationTimingActive, setCalibrationTimingActive] = React.useState(false); // Prevents useEffect from overwriting ITD delays
             const [calibrationResults, setCalibrationResults] = React.useState({
                 canHearLeftRight: null,      // Can perceive L/R panning
@@ -228,6 +228,30 @@
                 timingThresholdRight: null,  // Personal timing threshold (ms) for right ear
                 preferredVolume: 0.5         // Their optimal volume
             });
+
+            // Auto-alternate the test sound for steps 1 (L/R) and 2 (front/back)
+            // so the user just listens — no manual clicking required
+            const [autoTestSide, setAutoTestSide] = React.useState(null);
+            React.useEffect(() => {
+                if (!isOpen || !showCalibration || (calibrationStep !== 1 && calibrationStep !== 2)) {
+                    setAutoTestSide(null);
+                    return undefined;
+                }
+                let flip = false;
+                const apply = () => {
+                    if (calibrationStep === 1) {
+                        setOrbPosition(flip ? { x: 80, y: 0 } : { x: -80, y: 0 });
+                        setAutoTestSide(flip ? 'right' : 'left');
+                    } else {
+                        setOrbPosition(flip ? { x: 0, y: 80 } : { x: 0, y: -80 });
+                        setAutoTestSide(flip ? 'back' : 'front');
+                    }
+                    flip = !flip;
+                };
+                apply();
+                const id = setInterval(apply, 2000);
+                return () => clearInterval(id);
+            }, [isOpen, showCalibration, calibrationStep]);
 
             // Helper: Reset spatial settings to defaults for clean calibration tests
             const resetToDefaults = React.useCallback(() => {
@@ -284,7 +308,7 @@
                 if (showCalibration) {
                     setShowCalibration(false);
                     setCalibrationStep(0);
-                    setCalibrationDelayMs(10);
+                    setCalibrationDelayMs(50);
                     resetToDefaults();
                     applySavedCalibration();
                 }
@@ -592,7 +616,7 @@
                             <button
                                 onClick={() => {
                                     resetToDefaults(); // Start fresh
-                                    setCalibrationDelayMs(10);
+                                    setCalibrationDelayMs(50);
                                     setCalibrationResults({
                                         canHearLeftRight: null,
                                         leftRightIntensity: 2.0,
@@ -717,48 +741,44 @@
                                             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>1 of 5</span>
                                         </div>
                                         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                                            I'll move the sound to the <strong>LEFT</strong> then <strong>RIGHT</strong>.
-                                            Listen carefully - can you tell the difference?
+                                            The sound is automatically switching between <strong>LEFT</strong> and <strong>RIGHT</strong> every
+                                            2 seconds. Just listen — can you tell which side it's on?
                                         </p>
 
-                                        {/* Test buttons to move sound */}
-                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                                            <button
-                                                onClick={() => {
-                                                    setOrbPosition({ x: -80, y: 0 });
-                                                }}
+                                        {/* Live indicator: which side is sounding right now */}
+                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }} aria-live="polite">
+                                            <div
                                                 style={{
                                                     flex: 1,
                                                     padding: '16px',
-                                                    background: 'rgba(59, 130, 246, 0.2)',
-                                                    color: '#60a5fa',
-                                                    border: '2px solid #60a5fa',
+                                                    textAlign: 'center',
+                                                    background: autoTestSide === 'left' ? 'rgba(59, 130, 246, 0.45)' : 'rgba(59, 130, 246, 0.08)',
+                                                    color: autoTestSide === 'left' ? '#fff' : '#60a5fa',
+                                                    border: autoTestSide === 'left' ? '2px solid #93c5fd' : '2px solid rgba(96, 165, 250, 0.35)',
                                                     borderRadius: '8px',
-                                                    cursor: 'pointer',
-                                                    fontWeight: '600',
-                                                    fontSize: '1.1rem'
+                                                    fontWeight: '700',
+                                                    fontSize: '1.1rem',
+                                                    transition: 'all 0.25s ease'
                                                 }}
                                             >
-                                                👈 LEFT
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setOrbPosition({ x: 80, y: 0 });
-                                                }}
+                                                👈 LEFT {autoTestSide === 'left' ? '· sounding now' : ''}
+                                            </div>
+                                            <div
                                                 style={{
                                                     flex: 1,
                                                     padding: '16px',
-                                                    background: 'rgba(34, 197, 94, 0.2)',
-                                                    color: '#4ade80',
-                                                    border: '2px solid #4ade80',
+                                                    textAlign: 'center',
+                                                    background: autoTestSide === 'right' ? 'rgba(34, 197, 94, 0.45)' : 'rgba(34, 197, 94, 0.08)',
+                                                    color: autoTestSide === 'right' ? '#fff' : '#4ade80',
+                                                    border: autoTestSide === 'right' ? '2px solid #86efac' : '2px solid rgba(74, 222, 128, 0.35)',
                                                     borderRadius: '8px',
-                                                    cursor: 'pointer',
-                                                    fontWeight: '600',
-                                                    fontSize: '1.1rem'
+                                                    fontWeight: '700',
+                                                    fontSize: '1.1rem',
+                                                    transition: 'all 0.25s ease'
                                                 }}
                                             >
-                                                RIGHT 👉
-                                            </button>
+                                                {autoTestSide === 'right' ? 'sounding now · ' : ''}RIGHT 👉
+                                            </div>
                                         </div>
 
                                         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
@@ -806,47 +826,43 @@
                                             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>2 of 5</span>
                                         </div>
                                         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                                            I'll move the sound to the <strong>FRONT</strong> (bright/clear) then <strong>BACK</strong> (muffled/darker).
-                                            This tests if you can hear the tone change.
+                                            The sound is automatically switching between <strong>FRONT</strong> (bright/clear) and
+                                            <strong> BACK</strong> (muffled/darker) every 2 seconds. Just listen for the tone change.
                                         </p>
 
-                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                                            <button
-                                                onClick={() => {
-                                                    setOrbPosition({ x: 0, y: -80 });
-                                                }}
+                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }} aria-live="polite">
+                                            <div
                                                 style={{
                                                     flex: 1,
                                                     padding: '16px',
-                                                    background: 'rgba(251, 191, 36, 0.2)',
-                                                    color: '#fbbf24',
-                                                    border: '2px solid #fbbf24',
+                                                    textAlign: 'center',
+                                                    background: autoTestSide === 'front' ? 'rgba(251, 191, 36, 0.45)' : 'rgba(251, 191, 36, 0.08)',
+                                                    color: autoTestSide === 'front' ? '#fff' : '#fbbf24',
+                                                    border: autoTestSide === 'front' ? '2px solid #fde68a' : '2px solid rgba(251, 191, 36, 0.35)',
                                                     borderRadius: '8px',
-                                                    cursor: 'pointer',
-                                                    fontWeight: '600',
-                                                    fontSize: '1rem'
+                                                    fontWeight: '700',
+                                                    fontSize: '1rem',
+                                                    transition: 'all 0.25s ease'
                                                 }}
                                             >
-                                                🔆 FRONT (Clear)
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setOrbPosition({ x: 0, y: 80 });
-                                                }}
+                                                🔆 FRONT (Clear) {autoTestSide === 'front' ? '· sounding now' : ''}
+                                            </div>
+                                            <div
                                                 style={{
                                                     flex: 1,
                                                     padding: '16px',
-                                                    background: 'rgba(107, 114, 128, 0.3)',
-                                                    color: '#9ca3af',
-                                                    border: '2px solid #6b7280',
+                                                    textAlign: 'center',
+                                                    background: autoTestSide === 'back' ? 'rgba(107, 114, 128, 0.55)' : 'rgba(107, 114, 128, 0.12)',
+                                                    color: autoTestSide === 'back' ? '#fff' : '#9ca3af',
+                                                    border: autoTestSide === 'back' ? '2px solid #d1d5db' : '2px solid rgba(107, 114, 128, 0.4)',
                                                     borderRadius: '8px',
-                                                    cursor: 'pointer',
-                                                    fontWeight: '600',
-                                                    fontSize: '1rem'
+                                                    fontWeight: '700',
+                                                    fontSize: '1rem',
+                                                    transition: 'all 0.25s ease'
                                                 }}
                                             >
-                                                🔅 BACK (Muffled)
-                                            </button>
+                                                🔅 BACK (Muffled) {autoTestSide === 'back' ? '· sounding now' : ''}
+                                            </div>
                                         </div>
 
                                         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
@@ -857,7 +873,7 @@
                                                 onClick={() => {
                                                     setCalibrationResults(prev => ({ ...prev, canHearFrontBack: 'clear', frontBackIntensity: 0.5 }));
                                                     resetToDefaults(); // Reset for timing test
-                                                    setCalibrationDelayMs(10); // Start timing test at 10ms
+                                                    setCalibrationDelayMs(50); // Start timing test clearly audible
                                                     setCalibrationTimingActive(true); // Prevent useEffect from overwriting ITD
                                                     setCalibrationStep(3);
                                                 }}
@@ -869,7 +885,7 @@
                                                 onClick={() => {
                                                     setCalibrationResults(prev => ({ ...prev, canHearFrontBack: 'subtle', frontBackIntensity: 0.8 }));
                                                     resetToDefaults(); // Reset for timing test
-                                                    setCalibrationDelayMs(10);
+                                                    setCalibrationDelayMs(50);
                                                     setCalibrationTimingActive(true); // Prevent useEffect from overwriting ITD
                                                     setCalibrationStep(3);
                                                 }}
@@ -881,7 +897,7 @@
                                                 onClick={() => {
                                                     setCalibrationResults(prev => ({ ...prev, canHearFrontBack: 'no', frontBackIntensity: 1.0 }));
                                                     resetToDefaults(); // Reset for timing test
-                                                    setCalibrationDelayMs(10);
+                                                    setCalibrationDelayMs(50);
                                                     setCalibrationTimingActive(true); // Prevent useEffect from overwriting ITD
                                                     setCalibrationStep(3);
                                                 }}
@@ -952,7 +968,7 @@
                                                     setOrbPosition({ x: 0, y: 0 }); // Center position
                                                     // Equal gains (0.5 each) + 0.5 crossbleed = mono mix to both ears
                                                     // Only difference: right ear delayed (itdRightDelay = delaySeconds)
-                                                    onApplyGains(0.5, 0.5, 0.5, 0, delaySeconds, 20000, 20000);
+                                                    onApplyGains(0.5, 0.5, 0.5, 0, delaySeconds, 20000, 20000, true);
                                                 }}
                                                 style={{
                                                     flex: 1,
@@ -976,7 +992,7 @@
                                                     setCrossBleed(0.5); // High cross-bleed = mono mix
                                                     setPanCurve(1.0);
                                                     setOrbPosition({ x: 0, y: 0 });
-                                                    onApplyGains(0.5, 0.5, 0.5, 0, 0, 20000, 20000);
+                                                    onApplyGains(0.5, 0.5, 0.5, 0, 0, 20000, 20000, true);
                                                 }}
                                                 style={{
                                                     flex: 1,
@@ -1001,7 +1017,7 @@
                                                 onClick={() => {
                                                     setCalibrationResults(prev => ({ ...prev, canHearTimingLeft: 'yes', timingThresholdLeft: calibrationDelayMs }));
                                                     resetToDefaults(); // Reset for right ear test
-                                                    setCalibrationDelayMs(10); // Reset delay slider for right ear test
+                                                    setCalibrationDelayMs(50); // Reset delay slider for right ear test
                                                     setCalibrationStep(4);
                                                 }}
                                                 style={{ flex: 1, padding: '10px', background: '#4ade80', color: 'black', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
@@ -1012,7 +1028,7 @@
                                                 onClick={() => {
                                                     setCalibrationResults(prev => ({ ...prev, canHearTimingLeft: 'no', timingThresholdLeft: null }));
                                                     resetToDefaults(); // Reset for right ear test
-                                                    setCalibrationDelayMs(10);
+                                                    setCalibrationDelayMs(50);
                                                     setCalibrationStep(4);
                                                 }}
                                                 style={{ flex: 1, padding: '10px', background: '#f87171', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
@@ -1081,7 +1097,7 @@
                                                     // Equal gains + 0.5 cross-bleed = mono mix to both ears
                                                     // Only difference: left ear delayed
                                                     const delaySeconds = calibrationDelayMs / 1000;
-                                                    onApplyGains(0.5, 0.5, 0.5, delaySeconds, 0, 20000, 20000);
+                                                    onApplyGains(0.5, 0.5, 0.5, delaySeconds, 0, 20000, 20000, true);
                                                 }}
                                                 style={{
                                                     flex: 1,
@@ -1104,7 +1120,7 @@
                                                     setCrossBleed(0.5); // High cross-bleed = mono mix
                                                     setPanCurve(1.0);
                                                     setOrbPosition({ x: 0, y: 0 });
-                                                    onApplyGains(0.5, 0.5, 0.5, 0, 0, 20000, 20000);
+                                                    onApplyGains(0.5, 0.5, 0.5, 0, 0, 20000, 20000, true);
                                                 }}
                                                 style={{
                                                     flex: 1,
@@ -1305,7 +1321,7 @@
                                                     setShowCalibration(false);
                                                     setOrbPosition({ x: 0, y: -80 }); // Reset to front
                                                     // Reset calibration delay for next time
-                                                    setCalibrationDelayMs(10);
+                                                    setCalibrationDelayMs(50);
                                                 }}
                                                 style={{
                                                     flex: 1,
@@ -1323,7 +1339,7 @@
                                             <button
                                                 onClick={() => {
                                                     resetToDefaults(); // Start fresh
-                                                    setCalibrationDelayMs(10);
+                                                    setCalibrationDelayMs(50);
                                                     setCalibrationResults({
                                                         canHearLeftRight: null,
                                                         leftRightIntensity: 2.0,
@@ -6655,7 +6671,18 @@ function App() {
             useEffect(() => { intensityRef.current = intensity; }, [intensity]);
             useEffect(() => { spatialDepthRef.current = spatialDepth; }, [spatialDepth]);
             useEffect(() => { movementPatternRef.current = movementPattern; }, [movementPattern]);
-            useEffect(() => { spatialTunerActiveRef.current = showSpatialTuner; }, [showSpatialTuner]);
+            useEffect(() => {
+                spatialTunerActiveRef.current = showSpatialTuner;
+                if (!showSpatialTuner && tunerLayerMuteRef.current) {
+                    // Tuner closed mid-test: put the ambient layers back
+                    const ctx = audioContextRef.current;
+                    const now = ctx ? ctx.currentTime : 0;
+                    const savedLayers = tunerLayerMuteRef.current;
+                    if (binauralNodesRef.current && savedLayers.binaural !== null) binauralNodesRef.current.gain.gain.setValueAtTime(savedLayers.binaural, now);
+                    if (noiseNodesRef.current && savedLayers.noise !== null) noiseNodesRef.current.gain.gain.setValueAtTime(savedLayers.noise, now);
+                    tunerLayerMuteRef.current = null;
+                }
+            }, [showSpatialTuner]);
 
             // Dual Track ref syncs
             useEffect(() => { dualTrackEnabledRef.current = dualTrackEnabled; }, [dualTrackEnabled]);
@@ -7311,6 +7338,10 @@ function App() {
             };
 
             // Apply gains directly from Spatial Tuner (bypasses rotation interval)
+            // While the tuner runs precision tests, ambient layers (reverb wet,
+            // binaural tone, noise bed) must not mask the cue under test —
+            // their pre-mute levels are saved here and restored afterwards
+            const tunerLayerMuteRef = useRef(null);
             const applyTunerGains = React.useCallback((leftGain, rightGain, crossGain, itdLeftDelay = 0, itdRightDelay = 0, leftFilterFreq = 20000, rightFilterFreq = 20000, forceHardPan = false) => {
                 const nodes = rotationNodesRef.current;
                 const ctx = audioContextRef.current;
@@ -7377,6 +7408,30 @@ function App() {
                 const parallelPathGain = needsHardPan ? 0.0001 : 0.05; // Mute when testing ITD or calibrating
                 // Cross-delay paths (left→right, right→left) - ALWAYS mute during hard pan for clean separation
                 const crossPathGain = needsHardPan ? 0.0001 : 0.03;
+
+                // The reverb wet path reaches both ears undelayed and correlated —
+                // it smears timing cues. Mute it during ITD tests; keep it modest
+                // during normal tuner use (the rotation loop restores it on close).
+                if (nodes.reverbSendGain) {
+                    nodes.reverbSendGain.gain.cancelScheduledValues(now);
+                    nodes.reverbSendGain.gain.setValueAtTime(needsHardPan ? 0.0001 : 0.2, now);
+                }
+                // Same for the binaural tone and noise bed (saved + restored)
+                if (needsHardPan) {
+                    if (!tunerLayerMuteRef.current) {
+                        tunerLayerMuteRef.current = {
+                            binaural: binauralNodesRef.current ? binauralNodesRef.current.gain.gain.value : null,
+                            noise: noiseNodesRef.current ? noiseNodesRef.current.gain.gain.value : null
+                        };
+                    }
+                    if (binauralNodesRef.current) binauralNodesRef.current.gain.gain.setValueAtTime(0.0001, now);
+                    if (noiseNodesRef.current) noiseNodesRef.current.gain.gain.setValueAtTime(0.0001, now);
+                } else if (tunerLayerMuteRef.current) {
+                    const savedLayers = tunerLayerMuteRef.current;
+                    if (binauralNodesRef.current && savedLayers.binaural !== null) binauralNodesRef.current.gain.gain.setValueAtTime(savedLayers.binaural, now);
+                    if (noiseNodesRef.current && savedLayers.noise !== null) noiseNodesRef.current.gain.gain.setValueAtTime(savedLayers.noise, now);
+                    tunerLayerMuteRef.current = null;
+                }
 
                 if (nodes.delayGainLeft) {
                     nodes.delayGainLeft.gain.cancelScheduledValues(now);
