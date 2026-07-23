@@ -193,7 +193,9 @@
             onEqMidChange,
             onEqTrebleChange,
             onEqClarityChange,
-            onCalibrationComplete // Called when calibration is saved
+            onCalibrationComplete, // Called when calibration is saved
+            audioActive = false, // Is anything actually playing right now?
+            onEnsureAudio // Ask the app to start audio for calibration tests
         }) => {
             const [orbPosition, setOrbPosition] = React.useState({ x: 0, y: -80 }); // Start at "front"
             const [isDragging, setIsDragging] = React.useState(false);
@@ -239,26 +241,55 @@
                 setOrbPosition({ x: 0, y: -80 }); // Front center
             }, []);
 
-            // Load saved calibration settings on mount
-            React.useEffect(() => {
+            // Load saved calibration settings (mount + recovery after aborted wizard)
+            const applySavedCalibration = React.useCallback(() => {
                 try {
                     const saved = localStorage.getItem('mp3_8d_calibration');
-                    if (saved) {
-                        const data = JSON.parse(saved);
-                        console.log('[Calibration] Loading saved settings:', data);
-                        if (data.itdAmount !== undefined) setItdAmount(data.itdAmount);
-                        if (data.headShadow !== undefined) setHeadShadow(data.headShadow);
-                        if (data.panCurve !== undefined) setPanCurve(data.panCurve);
-                        if (data.directionalDepth !== undefined) setDirectionalDepth(data.directionalDepth);
-                        if (data.crossBleed !== undefined) setCrossBleed(data.crossBleed);
-                        if (data.backDepth !== undefined) setBackDepth(data.backDepth);
-                        if (data.hardPanThreshold !== undefined) setHardPanThreshold(data.hardPanThreshold);
-                        if (data.results) setCalibrationResults(data.results);
+                    if (!saved) return false;
+                    const data = JSON.parse(saved);
+                    console.log('[Calibration] Loading saved settings:', data);
+                    if (data.itdAmount !== undefined) setItdAmount(data.itdAmount);
+                    if (data.headShadow !== undefined) setHeadShadow(data.headShadow);
+                    if (data.panCurve !== undefined) setPanCurve(data.panCurve);
+                    if (data.directionalDepth !== undefined) setDirectionalDepth(data.directionalDepth);
+                    if (data.crossBleed !== undefined) setCrossBleed(data.crossBleed);
+                    if (data.backDepth !== undefined) setBackDepth(data.backDepth);
+                    if (data.hardPanThreshold !== undefined) setHardPanThreshold(data.hardPanThreshold);
+                    if (data.results) setCalibrationResults(data.results);
+                    // EQ was saved with the calibration — restore it too
+                    if (data.eq) {
+                        if (onEqBassChange && data.eq.bass !== undefined) onEqBassChange(data.eq.bass);
+                        if (onEqMidChange && data.eq.mid !== undefined) onEqMidChange(data.eq.mid);
+                        if (onEqTrebleChange && data.eq.treble !== undefined) onEqTrebleChange(data.eq.treble);
+                        if (onEqClarityChange && data.eq.clarity !== undefined) onEqClarityChange(data.eq.clarity);
                     }
+                    return true;
                 } catch (err) {
                     console.error('[Calibration] Failed to load saved settings:', err);
+                    return false;
                 }
+            }, [onEqBassChange, onEqMidChange, onEqTrebleChange, onEqClarityChange]);
+
+            React.useEffect(() => {
+                applySavedCalibration();
+                // eslint-disable-next-line react-hooks/exhaustive-deps
             }, []); // Only run on mount
+
+            // Closing the tuner mid-wizard must not wedge it: clear the timing
+            // flag (which blocks the gains effect) and undo test-corrupted
+            // settings (mono cross-bleed etc.) by restoring saved/default values
+            React.useEffect(() => {
+                if (isOpen) return;
+                if (calibrationTimingActive) setCalibrationTimingActive(false);
+                if (showCalibration) {
+                    setShowCalibration(false);
+                    setCalibrationStep(0);
+                    setCalibrationDelayMs(10);
+                    resetToDefaults();
+                    applySavedCalibration();
+                }
+                // eslint-disable-next-line react-hooks/exhaustive-deps
+            }, [isOpen]);
 
             // Calculate audio parameters from orb position
             const radius = 80; // Head radius
@@ -626,10 +657,27 @@
                                         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
                                             <strong>Requirements:</strong> Music playing + headphones on
                                         </p>
+                                        {!audioActive && (
+                                            <div style={{ background: 'rgba(248, 113, 113, 0.12)', border: '1px solid rgba(248, 113, 113, 0.5)', padding: '12px', borderRadius: '8px', marginBottom: '12px' }}>
+                                                <p style={{ margin: '0 0 10px', fontSize: '0.85rem', color: '#f87171', fontWeight: '600' }}>
+                                                    ⚠ Nothing is playing — every test would be silent.
+                                                </p>
+                                                <button
+                                                    onClick={() => onEnsureAudio && onEnsureAudio()}
+                                                    style={{ width: '100%', padding: '10px', background: '#4ade80', color: 'black', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+                                                >
+                                                    ▶ Start music for calibration
+                                                </button>
+                                            </div>
+                                        )}
                                         <div style={{ display: 'flex', gap: '8px' }}>
                                             <button
+                                                disabled={!audioActive}
                                                 onClick={() => setCalibrationStep(1)}
+                                                title={audioActive ? undefined : 'Start music first — the tests need audio you can hear'}
                                                 style={{
+                                                    opacity: audioActive ? 1 : 0.45,
+                                                    cursor: audioActive ? 'pointer' : 'not-allowed',
                                                     flex: 1,
                                                     padding: '10px',
                                                     background: '#8b5cf6',
@@ -1196,17 +1244,24 @@
                                                         finalItdAmount = 0;
                                                         setItdAmount(0);
                                                     } else {
-                                                        // Use their personal threshold to calculate ITD multiplier
-                                                        // Normal ITD is 0.7ms, so multiplier = threshold / 0.7
-                                                        const leftThreshold = calibrationResults.timingThresholdLeft || 50;
-                                                        const rightThreshold = calibrationResults.timingThresholdRight || 50;
-                                                        const avgThreshold = (leftThreshold + rightThreshold) / 2;
-                                                        // Calculate multiplier: their threshold / normal (0.7ms)
-                                                        // Cap at 70 (which gives ~50ms max delay)
+                                                        // Use their personal threshold to calculate ITD multiplier.
+                                                        // Only ears that actually heard timing count — an ear that
+                                                        // heard nothing must not drag in an invented 50ms average.
+                                                        const heard = [];
+                                                        if (calibrationResults.canHearTimingLeft === 'yes' && calibrationResults.timingThresholdLeft) {
+                                                            heard.push(calibrationResults.timingThresholdLeft);
+                                                        }
+                                                        if (calibrationResults.canHearTimingRight === 'yes' && calibrationResults.timingThresholdRight) {
+                                                            heard.push(calibrationResults.timingThresholdRight);
+                                                        }
+                                                        const avgThreshold = heard.length
+                                                            ? heard.reduce((sum, t) => sum + t, 0) / heard.length
+                                                            : 50;
+                                                        // Normal ITD is 0.7ms; cap at 70 (~50ms max delay)
                                                         const multiplier = Math.min(70, avgThreshold / 0.7);
                                                         finalItdAmount = multiplier;
                                                         setItdAmount(multiplier);
-                                                        console.log(`[Calibration] Set ITD multiplier to ${multiplier.toFixed(1)} (threshold: ${avgThreshold}ms)`);
+                                                        console.log(`[Calibration] Set ITD multiplier to ${multiplier.toFixed(1)} (threshold: ${avgThreshold}ms from ${heard.length} ear(s))`);
                                                     }
                                                     // Restore other settings
                                                     const finalHeadShadow = calibrationResults.frontBackIntensity || 0.5;
@@ -5955,6 +6010,38 @@ function App() {
             // Per-preset spatial profile (itdAmount/headShadow/backDepth/hardPanThreshold);
             // set by applyPreset, consumed by the rotation loop
             const spatialParamsRef = useRef(null);
+            // The user's saved hearing calibration overrides the preset profile —
+            // this is what makes the APD calibration actually personalize playback
+            const presetSpatialRef = useRef(null);
+            const readCalibrationProfile = () => {
+                try {
+                    const saved = localStorage.getItem('mp3_8d_calibration');
+                    if (!saved) return null;
+                    const data = JSON.parse(saved);
+                    const keys = ['itdAmount', 'headShadow', 'panCurve', 'directionalDepth', 'crossBleed', 'backDepth', 'hardPanThreshold'];
+                    const profile = {};
+                    let any = false;
+                    keys.forEach((k) => {
+                        if (typeof data[k] === 'number') { profile[k] = data[k]; any = true; }
+                    });
+                    return any ? profile : null;
+                } catch (e) {
+                    return null;
+                }
+            };
+            const calibrationProfileRef = useRef(readCalibrationProfile());
+            const resolveSpatialProfile = () => {
+                const base = presetSpatialRef.current;
+                const cal = calibrationProfileRef.current;
+                if (!cal) return base || null;
+                return { ...(base || {}), ...cal };
+            };
+            // Personal calibration applies from the first note, not just after
+            // the first preset click
+            useEffect(() => {
+                spatialParamsRef.current = resolveSpatialProfile();
+                // eslint-disable-next-line react-hooks/exhaustive-deps
+            }, []);
             const reverbRef = useRef(null);
             // Latest rotation state, published each tick for the Orbit visualizer
             const rotationStateRef = useRef(null);
@@ -9715,6 +9802,17 @@ function App() {
             // Drives the Demo button toggle (load vs unload)
             const hasDemoTracks = playlist.some(track => track.source === 'demo');
 
+            // Calibration needs audible audio: start something if nothing plays
+            const ensureAudioForCalibration = () => {
+                if (isPlaying) return;
+                const list = playlistRef.current || playlist;
+                if (list.length === 0) {
+                    loadDemoPlaylist(true);
+                } else {
+                    playTrack(typeof currentTrackIndex === 'number' ? currentTrackIndex : 0, { ritualUsed: false });
+                }
+            };
+
             // ==================== END PLAYLIST FUNCTIONS ====================
 
             // Loop mode toggle: off -> track -> playlist -> off
@@ -10012,7 +10110,8 @@ function App() {
                 // (itdAmount/headShadow/backDepth/hardPanThreshold — consumed by
                 // SpatialProcessor.calculateRotationState each tick). The
                 // SpatialAudioTuner keeps its own independent state for manual tuning.
-                spatialParamsRef.current = preset.spatial || null;
+                presetSpatialRef.current = preset.spatial || null;
+                spatialParamsRef.current = resolveSpatialProfile();
 
                 // Apply dual track settings if present
                 if (preset.dualTrack) {
@@ -13028,6 +13127,8 @@ return (
                         onClose={() => setShowSpatialTuner(false)}
                         onApplyGains={applyTunerGains}
                         onApplyEQ={applyEQ}
+                        audioActive={isPlaying}
+                        onEnsureAudio={ensureAudioForCalibration}
                         currentVolume={volume}
                         onVolumeChange={setVolume}
                         eqBass={eqBass}
@@ -13038,7 +13139,12 @@ return (
                         onEqMidChange={setEqMid}
                         onEqTrebleChange={setEqTreble}
                         onEqClarityChange={setEqClarity}
-                        onCalibrationComplete={() => setHasRunCalibration(true)}
+                        onCalibrationComplete={() => {
+                            setHasRunCalibration(true);
+                            // Apply the fresh calibration to live playback immediately
+                            calibrationProfileRef.current = readCalibrationProfile();
+                            spatialParamsRef.current = resolveSpatialProfile();
+                        }}
                     />
 
                     {/* Saved Playlists Modal */}
