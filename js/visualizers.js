@@ -1162,9 +1162,9 @@
             const env = st.env[d.c];
             // Lit region is a spectral ribbon along a line (like the mirror
             // visual's center line, one-sided): bars rise from the baseline,
-            // peaking at ~35% of the canvas height
-            const baseline = H * 0.62;
-            const barH = env * H * 0.35 * (1 + st.surge * 0.2);
+            // peaking at ~50% of the canvas height
+            const baseline = H * 0.7;
+            const barH = env * H * 0.5 * (1 + st.surge * 0.2);
             const inLight = env > 0.04 && d.y <= baseline && d.y >= baseline - barH;
             const ch = MATRIX_GLYPHS[(Math.random() * MATRIX_GLYPHS.length) | 0];
 
