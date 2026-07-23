@@ -9617,6 +9617,46 @@ function App() {
                 }
             };
 
+            // Remove all demo tracks, keeping any user-added local/stream tracks.
+            // Stops playback first if the current track is a demo track.
+            const unloadDemoPlaylist = async () => {
+                const currentList = playlistRef.current || playlist;
+                const remaining = currentList.filter(track => track.source !== 'demo');
+                if (remaining.length === currentList.length) return;
+
+                const prevIndex = currentTrackIndex;
+                const currentTrack = typeof prevIndex === 'number' ? currentList[prevIndex] : null;
+                const currentWasDemo = currentTrack ? currentTrack.source === 'demo' : false;
+
+                if (currentWasDemo) {
+                    await endSession(true);
+                    teardownAudioElement();
+                    disposeAudioGraph();
+                    setIsPlaying(false);
+                }
+
+                setPlaylist(remaining);
+                playlistRef.current = remaining;
+
+                let nextIndex = null;
+                if (currentTrack && !currentWasDemo) {
+                    const found = remaining.findIndex(t => t.id === currentTrack.id);
+                    nextIndex = found === -1 ? null : found;
+                }
+                currentTrackIndexRef.current = nextIndex;
+                setCurrentTrackIndex(nextIndex);
+
+                showToast(
+                    remaining.length > 0
+                        ? `Demo tracks unloaded — ${remaining.length} of your tracks kept`
+                        : 'Demo tracks unloaded',
+                    'info'
+                );
+            };
+
+            // Drives the Demo button toggle (load vs unload)
+            const hasDemoTracks = playlist.some(track => track.source === 'demo');
+
             // ==================== END PLAYLIST FUNCTIONS ====================
 
             // Loop mode toggle: off -> track -> playlist -> off
@@ -10708,11 +10748,11 @@ return (
                                     </div>
                                     <button
                                         className="demo-playlist-btn"
-                                        onClick={() => loadDemoPlaylist(true)}
-                                        title="Load demo tracks"
+                                        onClick={() => hasDemoTracks ? unloadDemoPlaylist() : loadDemoPlaylist(true)}
+                                        title={hasDemoTracks ? 'Unload demo tracks' : 'Load demo tracks'}
                                         style={{
-                                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                            border: 'none',
+                                            background: hasDemoTracks ? 'rgba(255,255,255,0.12)' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                            border: hasDemoTracks ? '1px solid rgba(255,255,255,0.25)' : 'none',
                                             borderRadius: '20px',
                                             padding: '6px 14px',
                                             color: 'white',
@@ -10724,7 +10764,7 @@ return (
                                             gap: '4px'
                                         }}
                                     >
-                                        🎵 Demo
+                                        {hasDemoTracks ? '⏏ Unload Demo' : '🎵 Demo'}
                                     </button>
                                     <span className="status-pill" style={{ borderColor: selectedMode.accent }}>
                                         {selectedMode.label}
@@ -11644,11 +11684,11 @@ return (
                                 </div>
                                 <button
                                     className="demo-playlist-btn"
-                                    onClick={() => loadDemoPlaylist(true)}
-                                    title="Load demo tracks"
+                                    onClick={() => hasDemoTracks ? unloadDemoPlaylist() : loadDemoPlaylist(true)}
+                                    title={hasDemoTracks ? 'Unload demo tracks' : 'Load demo tracks'}
                                     style={{
-                                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                        border: 'none',
+                                        background: hasDemoTracks ? 'rgba(255,255,255,0.12)' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                        border: hasDemoTracks ? '1px solid rgba(255,255,255,0.25)' : 'none',
                                         borderRadius: '20px',
                                         padding: '6px 14px',
                                         color: 'white',
@@ -11660,7 +11700,7 @@ return (
                                         gap: '4px'
                                     }}
                                 >
-                                    🎵 Demo
+                                    {hasDemoTracks ? '⏏ Unload Demo' : '🎵 Demo'}
                                 </button>
                                 <span className="status-pill" style={{ borderColor: selectedMode.accent }}>
                                     {selectedMode.label}
