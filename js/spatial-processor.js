@@ -106,7 +106,13 @@
                 break;
 
             case PATTERNS.FRONT_BACK:
-                panPosition = Math.cos(angle) * 0.5;
+                // True front<->back motion: the sound stays centered while the
+                // positional depth cues (volume, head-shadow darkening, room
+                // send) carry the movement. angle 0 = front, angle PI = back.
+                // (Was cos(angle)*0.5 — a quarter-turn-shifted L/R pan that
+                // contradicted both the name and the Orbit stage.)
+                panPosition = 0;
+                depthMultiplier = 1 - (1 - backDepth) * (0.5 - 0.5 * Math.cos(angle));
                 break;
 
             case PATTERNS.RANDOM:
@@ -116,17 +122,21 @@
                 break;
 
             case PATTERNS.QUADRANT: {
-                // 360-degree circular: Right -> Back(quiet) -> Left -> Front
+                // 360-degree circular: Front -> Right -> Back(quiet) -> Left.
+                // Phase convention shared with the Orbit stage and drag-to-place:
+                // angle 0 = front, PI/2 = right, PI = back, 3PI/2 = left.
+                // (Anchors previously started at Right, putting the audio a
+                // quarter turn ahead of the visual.)
                 const fullCycle = (angle / (2 * Math.PI));
                 const cyclePos = fullCycle - Math.floor(fullCycle);
                 const segment = Math.floor(cyclePos * 4);
                 const segmentPhase = (cyclePos * 4) - segment;
 
-                const panAnchors = [1, 0, -1, 0];
+                const panAnchors = [0, 1, 0, -1];
                 const panA = panAnchors[segment];
                 const panB = panAnchors[(segment + 1) % panAnchors.length];
 
-                const depthAnchors = [1.0, backDepth, 1.0, 1.0];
+                const depthAnchors = [1.0, 1.0, backDepth, 1.0];
                 const depthA = depthAnchors[segment];
                 const depthB = depthAnchors[(segment + 1) % depthAnchors.length];
 
@@ -435,7 +445,9 @@
             depthMultiplier,
             angle,
             autoAngle,
-            rotationHz
+            rotationHz,
+            movement,
+            isPlaced
         };
     };
 

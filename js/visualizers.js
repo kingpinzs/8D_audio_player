@@ -445,13 +445,27 @@
         ctx.fillStyle = '#232948';
         ctx.fill();
 
-        // Source position: live engine state, or a slow idle orbit
+        // Source position: live engine state, or a slow idle orbit.
+        // Convention shared with the audio engine: angle 0 = front (top of
+        // screen), PI/2 = right, PI = back, 3PI/2 = left.
         const idleAngle = (Date.now() * 0.001 * (Math.PI * 2)) / 16; // 16s idle rev
         const angle = spatialState ? spatialState.angle : idleAngle;
         const depth = spatialState ? spatialState.depthMultiplier : 1;
-        // angle 0 = front (top of screen), increasing clockwise
-        const sx = cx + Math.sin(angle) * R;
-        const sy = cy - Math.cos(angle) * R * (0.9 + depth * 0.1);
+        let sx, sy;
+        if (spatialState && spatialState.movement === 'frontback' && !spatialState.isPlaced) {
+            // Front/back pattern: the sound travels the front-back axis, centered
+            sx = cx;
+            sy = cy - Math.cos(angle) * R * 0.85;
+        } else if (spatialState && spatialState.movement === 'random' && !spatialState.isPlaced) {
+            // Random pattern: the sound teleports and holds — show it where it
+            // actually IS (from pan), on the front arc, not a fake orbit
+            const px = Math.max(-1, Math.min(1, spatialState.panPosition));
+            sx = cx + px * R;
+            sy = cy - Math.sqrt(Math.max(0, 1 - px * px)) * R;
+        } else {
+            sx = cx + Math.sin(angle) * R;
+            sy = cy - Math.cos(angle) * R * (0.9 + depth * 0.1);
+        }
 
         // Bass makes the source pulse
         let bassSum = 0;
