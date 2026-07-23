@@ -25,6 +25,19 @@
     --glow-2: rgba(255, 175, 123, 0.22);
     --font-app: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     --font-data: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+    --font-label: var(--font-app);
+    --label-tracking: 0.2em;
+    --radius-panel: 24px;
+    --radius-card: 16px;
+    --radius-chip: 18px;
+    --radius-pill: 999px;
+    --panel-border-width: 1px;
+    --panel-shadow: var(--shadow-soft);
+    --btn-bg: linear-gradient(120deg, var(--accent-focus), #9f9bff);
+    --btn-color: #fff;
+    --btn-shadow: 0 20px 40px rgba(109, 139, 255, 0.35);
+    --chip-selected-bg: linear-gradient(135deg, var(--chip-accent), rgba(255, 255, 255, 0.1));
+    --chip-selected-color: #fff;
 }
 
 body.dark-mode {
@@ -59,6 +72,19 @@ body.theme-focus {
     --shadow-soft: 0 24px 60px rgba(0, 0, 0, 0.5);
     --accent-default: #e8a33d;
     --chip-accent: #e8a33d;
+    --grid-gap: 14px;
+    --font-label: var(--font-data);
+    --label-tracking: 0.12em;
+    --radius-panel: 8px;
+    --radius-card: 5px;
+    --radius-chip: 5px;
+    --radius-pill: 5px;
+    --panel-shadow: none;
+    --btn-bg: #e8a33d;
+    --btn-color: #17191d;
+    --btn-shadow: none;
+    --chip-selected-bg: rgba(232, 163, 61, 0.15);
+    --chip-selected-color: #e8a33d;
 }
 
 /* Calm — "Still Air": light mist, sea accent, whisper contrast */
@@ -75,6 +101,14 @@ body.theme-calm {
     --shadow-soft: 0 18px 50px rgba(90, 110, 105, 0.14);
     --accent-default: #5e8c87;
     --chip-accent: #5e8c87;
+    --label-tracking: 0.28em;
+    --radius-panel: 22px;
+    --panel-border-width: 0px;
+    --panel-shadow: 0 14px 44px rgba(90, 110, 105, 0.10);
+    --btn-bg: #5e8c87;
+    --btn-shadow: 0 8px 24px rgba(94, 140, 135, 0.25);
+    --chip-selected-bg: rgba(94, 140, 135, 0.13);
+    --chip-selected-color: #2a2c2e;
 }
 
 /* Energize — "Orbit": deep void, cyan source glow */
@@ -91,6 +125,15 @@ body.theme-energize {
     --shadow-soft: 0 30px 80px rgba(0, 0, 0, 0.6);
     --accent-default: #74dce6;
     --chip-accent: #74dce6;
+    --label-tracking: 0.24em;
+    --radius-panel: 18px;
+    --radius-card: 12px;
+    --radius-chip: 12px;
+    --btn-bg: #74dce6;
+    --btn-color: #0b0d16;
+    --btn-shadow: 0 0 26px rgba(116, 220, 230, 0.4);
+    --chip-selected-bg: rgba(116, 220, 230, 0.14);
+    --chip-selected-color: #74dce6;
 }
 
 /* APD Friendly — "Ledger": white ground, ink and cobalt, maximum clarity */
@@ -107,6 +150,17 @@ body.theme-apd {
     --shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.10);
     --accent-default: #2244cc;
     --chip-accent: #2244cc;
+    --label-tracking: 0.1em;
+    --radius-panel: 2px;
+    --radius-card: 2px;
+    --radius-chip: 2px;
+    --radius-pill: 3px;
+    --panel-border-width: 2px;
+    --panel-shadow: none;
+    --btn-bg: #2244cc;
+    --btn-shadow: none;
+    --chip-selected-bg: #2244cc;
+    --chip-selected-color: #ffffff;
 }
 
 /* High-contrast mode: WCAG AA compliant (≥4.5:1 normal text, ≥3:1 large text) */
@@ -213,7 +267,8 @@ button, input, select, textarea {
 
 .eyebrow {
     text-transform: uppercase;
-    letter-spacing: 0.2em;
+    letter-spacing: var(--label-tracking);
+    font-family: var(--font-label);
     font-size: 0.75rem;
     color: var(--text-secondary);
 }
@@ -225,7 +280,7 @@ button, input, select, textarea {
 
 .header-actions button {
     min-height: 48px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     padding: 0 20px;
     border: 1px solid var(--card-border);
     background: var(--surface);
@@ -240,10 +295,11 @@ button, input, select, textarea {
 }
 
 .primary-btn {
-    background: linear-gradient(120deg, var(--accent-focus), #9f9bff);
-    color: #fff;
+    background: var(--btn-bg);
+    color: var(--btn-color);
     border: none;
-    box-shadow: 0 20px 40px rgba(109, 139, 255, 0.35);
+    border-radius: var(--radius-pill);
+    box-shadow: var(--btn-shadow);
 }
 
 .ghost-btn {
@@ -267,10 +323,10 @@ button, input, select, textarea {
 
 .panel {
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 24px;
+    border: var(--panel-border-width) solid var(--card-border);
+    border-radius: var(--radius-panel);
     padding: 24px;
-    box-shadow: var(--shadow-soft);
+    box-shadow: var(--panel-shadow);
 }
 
 /* Design spec §3: Mode tabs (Focus/Calm/Energize) with roving tabindex */
@@ -283,7 +339,7 @@ button, input, select, textarea {
 .mode-chip {
     flex: 1 1 140px;
     min-height: 56px;
-    border-radius: 18px;
+    border-radius: var(--radius-chip);
     border: 1px solid var(--card-border);
     padding: 12px 16px;
     background: var(--surface);
@@ -296,8 +352,8 @@ button, input, select, textarea {
 .mode-chip[data-selected="true"] {
     border-color: var(--chip-accent);
     box-shadow: 0 10px 30px rgba(109, 139, 255, 0.25);
-    background: linear-gradient(135deg, var(--chip-accent), rgba(255,255,255,0.1));
-    color: #fff;
+    background: var(--chip-selected-bg);
+    color: var(--chip-selected-color);
 }
 
 .mode-chip span {
@@ -665,7 +721,7 @@ button, input, select, textarea {
 }
 
 .preset-card {
-    border-radius: 16px;
+    border-radius: var(--radius-card);
     border: 1px solid var(--card-border);
     padding: 14px;
     background: var(--surface);
@@ -831,7 +887,7 @@ button, input, select, textarea {
     text-align: center;
     padding: 16px;
     background: rgba(0, 0, 0, 0.2);
-    border-radius: 12px;
+    border-radius: var(--radius-card);
     margin-bottom: 12px;
 }
 
@@ -1288,7 +1344,8 @@ button, input, select, textarea {
     align-items: center;
     gap: 6px;
     padding: 4px 12px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
+    font-family: var(--font-label);
     font-size: 0.8rem;
     border: 1px solid var(--card-border);
 }
@@ -3832,4 +3889,63 @@ body.viz-fullscreen {
 .telemetry-strip b {
     color: var(--accent-default);
     font-weight: 600;
+}
+
+/* ============================================================
+   Theme worlds — beyond tokens, each mode restructures the page.
+   The DOM never changes; each world lays it out and edits it down
+   with CSS alone (hidden panels return when the mode changes).
+   ============================================================ */
+
+/* Still Air (Calm): one quiet centered column. Insights and density
+   don't exist in this world; the ritual lives below the player. */
+body.theme-calm .main-grid {
+    grid-template-columns: minmax(0, 660px);
+    justify-content: center;
+}
+body.theme-calm .main-grid > .insights-column { display: none; }
+body.theme-calm .main-grid > section[aria-label="Ritual selection"] { order: 2; }
+body.theme-calm h1, body.theme-calm h2, body.theme-calm h3 { font-weight: 500; letter-spacing: -0.01em; }
+body.theme-calm .panel { border: none; }
+body.theme-calm .app-header { justify-content: center; text-align: center; flex-direction: column; gap: 10px; }
+
+/* Console (Focus): a dense instrument — tight flat racks, mono data */
+body.theme-focus .panel { padding: 16px; }
+body.theme-focus .value-display,
+body.theme-focus .timer-time,
+body.theme-focus .hero-countdown__value {
+    font-family: var(--font-data);
+    font-variant-numeric: tabular-nums;
+}
+body.theme-focus .app-header {
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 12px;
+}
+
+/* Orbit (Energize): the stage dominates; side racks recede */
+@media (min-width: 1280px) {
+    body.theme-energize .main-grid {
+        grid-template-columns: minmax(240px, 300px) minmax(460px, 1.7fr) minmax(220px, 260px);
+    }
+}
+body.theme-energize .panel {
+    box-shadow: 0 0 46px rgba(116, 220, 230, 0.05), var(--shadow-soft);
+}
+body.theme-energize .mode-chip[data-selected="true"] {
+    box-shadow: 0 0 22px rgba(116, 220, 230, 0.28);
+}
+
+/* Ledger (APD): a linear document — player, then modes, then insights,
+   in one readable column with hard rules and no ornament */
+body.theme-apd .main-grid {
+    grid-template-columns: minmax(0, 880px);
+    justify-content: center;
+}
+body.theme-apd .main-grid > section[aria-label="Ritual selection"] { order: 2; }
+body.theme-apd .main-grid > .insights-column { order: 3; }
+body.theme-apd h1, body.theme-apd h2, body.theme-apd h3 { font-weight: 700; letter-spacing: -0.02em; }
+body.theme-apd .ghost-btn { border-style: solid; }
+body.theme-apd .app-header {
+    border-bottom: 3px solid var(--text-primary);
+    padding-bottom: 14px;
 }
