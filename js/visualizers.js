@@ -176,113 +176,101 @@
         const isBeat = bass > st.bassAvg * 1.35 + 0.04 && st.beatCooldown === 0;
         if (isBeat) st.beatCooldown = 8; // ~130ms between beats at 60fps
 
-        const cap = maxParticles * 3;
+        // Pixel particles: each particle renders as a single device pixel.
+        // Density does the work — thousands of points, with motion trails
+        // coming from the translucent frame fade (see draw()).
+        const cap = maxParticles * 25;
         const hueFor = () => palette
             ? palette.hueBase + Math.random() * Math.max(palette.hueRange, 14)
             : Math.random() * 360;
 
         // ---- emitter 1: bottom fountain, rate follows the mids ----
-        const fountainRate = Math.round(1 + mid * 6);
+        const fountainRate = Math.round((6 + mid * 40) * S);
         for (let i = 0; i < fountainRate && particles.length < cap; i++) {
             particles.push({
                 x: Math.random() * W,
-                y: H + 4 * S,
+                y: H + 2,
                 vx: (Math.random() - 0.5) * 1.6 * S,
-                vy: (-2.2 - Math.random() * 3.2 - bass * 4) * S,
+                vy: (-1.6 - Math.random() * 3.0 - bass * 4) * S,
                 life: 1,
-                decay: 0.008 + Math.random() * 0.012,
-                size: (1.5 + Math.random() * 3) * S,
+                decay: 0.006 + Math.random() * 0.010,
                 hue: hueFor(),
-                spark: false
+                hot: false
             });
         }
 
-        // ---- emitter 2: beat burst — radial explosion from the lower center ----
+        // ---- emitter 2: beat burst — radial pixel explosion ----
         if (isBeat) {
             const bx = W / 2 + (Math.random() - 0.5) * W * 0.3;
-            const by = H * (0.55 + Math.random() * 0.25);
-            const count = Math.min(cap - particles.length, 14 + Math.round(bass * 18));
+            const by = H * (0.45 + Math.random() * 0.3);
+            const count = Math.min(cap - particles.length, 90 + Math.round(bass * 160));
             const burstHue = hueFor();
             for (let i = 0; i < count; i++) {
-                const a = (i / count) * Math.PI * 2 + Math.random() * 0.4;
-                const speed = (2 + Math.random() * 4 + bass * 5) * S;
+                const a = Math.random() * Math.PI * 2;
+                const speed = (1 + Math.random() * Math.random() * 6 + bass * 4) * S;
                 particles.push({
                     x: bx,
                     y: by,
                     vx: Math.cos(a) * speed,
-                    vy: Math.sin(a) * speed * 0.8 - 1.2 * S,
+                    vy: Math.sin(a) * speed * 0.85 - 0.8 * S,
                     life: 1,
-                    decay: 0.015 + Math.random() * 0.02,
-                    size: (1.2 + Math.random() * 2.4) * S,
+                    decay: 0.010 + Math.random() * 0.022,
                     hue: burstHue + (Math.random() - 0.5) * 24,
-                    spark: true
+                    hot: Math.random() < 0.35
                 });
             }
         }
 
-        // ---- emitter 3: treble sparkles — brief twinkles in the upper field ----
-        if (treble > 0.18) {
-            const n = Math.min(cap - particles.length, Math.round(treble * 4));
+        // ---- emitter 3: treble sparkles — brief pixel twinkles up top ----
+        if (treble > 0.15) {
+            const n = Math.min(cap - particles.length, Math.round(treble * 20));
             for (let i = 0; i < n; i++) {
                 particles.push({
                     x: Math.random() * W,
                     y: Math.random() * H * 0.5,
-                    vx: 0,
-                    vy: 0.2 * S,
+                    vx: (Math.random() - 0.5) * 0.4 * S,
+                    vy: 0.3 * S,
                     life: 0.5,
-                    decay: 0.06 + Math.random() * 0.05,
-                    size: (0.8 + Math.random() * 1.4) * S,
+                    decay: 0.05 + Math.random() * 0.06,
                     hue: hueFor(),
-                    spark: true
+                    hot: true
                 });
             }
         }
 
-        // ---- physics + render (additive blending for video-game glow) ----
+        // ---- physics + single-pixel render ----
         const t = Date.now() * 0.001;
+        const px = Math.max(1, Math.round(S)); // 1 device pixel (2 on retina backing)
         ctx.globalCompositeOperation = 'lighter';
         particles = particles.filter(p => p.life > 0);
-        particles.forEach(p => {
+        for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
+            // Foreign particles (fire embers sharing this array) lack decay —
+            // retire them rather than feeding NaN into the physics
+            if (!(p.decay > 0)) {
+                p.life = 0;
+                continue;
+            }
             // turbulence field driven by the mids, gravity, drag
-            p.vx += Math.sin(p.y * 0.013 + t * 1.7) * 0.05 * S * (0.4 + mid);
-            p.vy += 0.045 * S;
-            p.vx *= 0.985;
-            p.vy *= 0.985;
+            p.vx += Math.sin(p.y * 0.02 + t * 1.7) * 0.06 * S * (0.3 + mid)
+                  + Math.sin(p.x * 0.011 - t * 1.1) * 0.03 * S * mid;
+            p.vy += 0.05 * S;
+            p.vx *= 0.99;
+            p.vy *= 0.99;
             p.x += p.vx;
             p.y += p.vy;
             p.life -= p.decay;
-            if (p.life <= 0) return;
-
-            // life curves: quick pop-in, eased fade-out
-            const popIn = Math.min(1, (1 - p.life) * 8);
-            const alpha = p.life * p.life * popIn;
-            const r = Math.max(0.4, p.size * (0.55 + 0.45 * p.life) * popIn);
-
-            if (p.spark) {
-                // spark: streak along velocity + hot core
-                const streak = 3.2;
-                ctx.strokeStyle = `hsla(${p.hue}, 90%, 68%, ${alpha * 0.7})`;
-                ctx.lineWidth = Math.max(1, r * 0.7);
-                ctx.beginPath();
-                ctx.moveTo(p.x - p.vx * streak, p.y - p.vy * streak);
-                ctx.lineTo(p.x, p.y);
-                ctx.stroke();
-                ctx.fillStyle = `hsla(${p.hue}, 60%, 85%, ${alpha})`;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, r * 0.8, 0, Math.PI * 2);
-                ctx.fill();
-            } else {
-                // glow sprite: soft halo + core (two-pass, cheap)
-                ctx.fillStyle = `hsla(${p.hue}, 85%, 58%, ${alpha * 0.22})`;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, r * 2.4, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = `hsla(${p.hue}, 80%, 66%, ${alpha})`;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-                ctx.fill();
+            if (p.life <= 0 || p.x < 0 || p.x >= W || p.y < 0 || p.y >= H) {
+                p.life = 0;
+                continue;
             }
-        });
+
+            const alpha = p.life * p.life;
+            ctx.fillStyle = p.hot
+                ? `hsla(${p.hue}, 45%, 88%, ${alpha})`
+                : `hsla(${p.hue}, 85%, 62%, ${alpha})`;
+            ctx.fillRect(p.x | 0, p.y | 0, px, px);
+        }
         ctx.globalCompositeOperation = 'source-over';
 
         return particles;
@@ -406,15 +394,22 @@
         particles = particles.filter(p => p.life > 0);
         ctx.globalCompositeOperation = 'lighter';
         particles.forEach(p => {
-            p.phase += 0.15;
+            // Foreign particles (from the pixel-particles mode sharing this
+            // array) have no size/phase — retire them instead of drawing NaNs
+            if (!(p.size > 0)) {
+                p.life = 0;
+                return;
+            }
+            p.phase = (p.phase || 0) + 0.15;
             p.x += p.vx + Math.sin(p.phase) * 2;
             p.y += p.vy;
             p.vy *= 0.97;
             p.life -= 0.018;
+            if (p.life <= 0) return; // died this frame — a negative radius throws in arc()
 
             const flicker = 0.6 + Math.sin(p.phase * 2) * 0.4;
             ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+            ctx.arc(p.x, p.y, Math.max(0.1, p.size * p.life), 0, Math.PI * 2);
             ctx.fillStyle = `hsla(${p.hue}, 100%, ${55 + flicker * 25}%, ${p.life * flicker})`;
             ctx.fill();
         });
@@ -621,8 +616,14 @@
 
         const bgColor = darkMode ? '#1a2332' : '#0a0a0a';
 
-        // Clear canvas
-        ctx.fillStyle = bgColor;
+        // Clear canvas. Particles mode fades instead of wiping — the translucent
+        // clear leaves each pixel's previous positions as a decaying motion trail
+        // (the classic particle-engine accumulation buffer).
+        if (visType === 'particles') {
+            ctx.fillStyle = darkMode ? 'rgba(26, 35, 50, 0.28)' : 'rgba(10, 10, 10, 0.28)';
+        } else {
+            ctx.fillStyle = bgColor;
+        }
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         const drawOptions = { visualGain, bufferLength, maxParticles, spatialState, palette };
