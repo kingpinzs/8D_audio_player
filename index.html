@@ -11,6 +11,7 @@
     <!-- Core modules (load before React) -->
     <script src="./js/constants.js"></script>
     <script src="./js/utils.js"></script>
+    <script src="./js/themes.js"></script>
     <script src="./js/audio-engine.js"></script>
     <script src="./js/spatial-processor.js"></script>
     <script src="./js/visualizers.js"></script>
@@ -5698,6 +5699,18 @@ function App() {
                 setSafetyNoticeAck(true);
                 try { localStorage.setItem('mp3_8d_safety_notice_ack', 'true'); } catch (e) { /* storage unavailable */ }
             };
+            // Engine telemetry strip (the "Console" tinkerer surface)
+            const [showTelemetry, setShowTelemetry] = useState(() => {
+                try { return localStorage.getItem('mp3_8d_show_telemetry') === 'true'; } catch { return false; }
+            });
+            const [telemetry, setTelemetry] = useState(null);
+            const toggleTelemetry = () => {
+                setShowTelemetry(prev => {
+                    const next = !prev;
+                    try { localStorage.setItem('mp3_8d_show_telemetry', String(next)); } catch (e) { /* storage unavailable */ }
+                    return next;
+                });
+            };
             const [heroMessage, setHeroMessage] = useState('Select a ritual to begin');
             const [a11yAnnouncement, setA11yAnnouncement] = useState('');
             const [needsAudio, setNeedsAudio] = useState(false);
@@ -5942,6 +5955,8 @@ function App() {
             const reverbRef = useRef(null);
             // Latest rotation state, published each tick for the Orbit visualizer
             const rotationStateRef = useRef(null);
+            // Active theme's visualizer palette (kept in a ref for the rAF draw loop)
+            const vizPaletteRef = useRef(null);
 
             // Dual Track refs
             const dualTrackEnabledRef = useRef(dualTrackEnabled);
@@ -7461,7 +7476,8 @@ function App() {
                         darkMode,
                         bufferLength,
                         maxParticles,
-                        spatialState: rotationStateRef.current
+                        spatialState: rotationStateRef.current,
+                        palette: vizPaletteRef.current
                     });
                 };
 
@@ -10030,6 +10046,41 @@ function App() {
                 visualizerTypeRef.current = visualizerType;
             }, [visualizerType]);
 
+            // Mode themes: the active preset commits the whole app to its visual
+            // world (body token class + visualizer palette). Skin only — layout
+            // and control positions never change with mode.
+            useEffect(() => {
+                const theme = AppThemes.applyTheme(activePresetId);
+                vizPaletteRef.current = theme ? theme.viz : null;
+            }, [activePresetId]);
+
+            // Sample live engine state for the telemetry strip (4x/s while visible)
+            useEffect(() => {
+                if (!showTelemetry) {
+                    setTelemetry(null);
+                    return undefined;
+                }
+                const id = setInterval(() => {
+                    const s = rotationStateRef.current;
+                    const n = rotationNodesRef.current;
+                    if (!s || !n) {
+                        setTelemetry(null);
+                        return;
+                    }
+                    setTelemetry({
+                        hz: s.rotationHz,
+                        pan: s.panPosition,
+                        depth: s.depthMultiplier,
+                        itdL: n.itdDelayLeft ? n.itdDelayLeft.delayTime.value * 1000 : 0,
+                        itdR: n.itdDelayRight ? n.itdDelayRight.delayTime.value * 1000 : 0,
+                        lpL: n.lpFilterLeft ? n.lpFilterLeft.frequency.value : 20000,
+                        lpR: n.lpFilterRight ? n.lpFilterRight.frequency.value : 20000,
+                        send: n.reverbSendGain ? n.reverbSendGain.gain.value : 0
+                    });
+                }, 250);
+                return () => clearInterval(id);
+            }, [showTelemetry]);
+
             useEffect(() => {
                 if (gainChainRef.current) {
                     gainChainRef.current.setVolume(volume);
@@ -10363,6 +10414,9 @@ return (
                             <button type="button" onClick={toggleLargeText} aria-pressed={a11yEffectiveSettings.largeText} aria-label="Toggle large text" title={a11yEffectiveSettings.largeText ? 'Large text' : 'Normal text'}>
                                 {a11yEffectiveSettings.largeText ? 'Aa+' : 'Aa'}
                             </button>
+                            <button type="button" onClick={toggleTelemetry} aria-pressed={showTelemetry} aria-label="Toggle engine telemetry" title={showTelemetry ? 'Hide engine telemetry' : 'Show engine telemetry'} style={{ fontFamily: 'var(--font-data)', fontSize: '0.72rem', letterSpacing: '0.04em' }}>
+                                Hz
+                            </button>
                             <div style={{ height: '20px', width: '1px', background: 'var(--card-border)' }}></div>
                             <span style={{ fontSize: '0.75rem', color: hasRunCalibration ? '#4ade80' : 'var(--text-secondary)' }}>
                                 {hasRunCalibration ? '✓ Calibrated' : '⚠'}
@@ -10384,6 +10438,24 @@ return (
                             </button>
                         </div>
                     </header>
+
+                    {/* Engine telemetry strip — live DSP readout (Console toggle) */}
+                    {showTelemetry && (
+                        <div className="telemetry-strip" role="status" aria-label="Engine telemetry">
+                            {telemetry ? (
+                                <>
+                                    <span>ROT <b>{telemetry.hz.toFixed(2)} Hz</b></span>
+                                    <span>PAN <b>{telemetry.pan >= 0 ? '+' : ''}{telemetry.pan.toFixed(2)}</b></span>
+                                    <span>ITD <b>{telemetry.itdL.toFixed(2)} / {telemetry.itdR.toFixed(2)} ms</b></span>
+                                    <span>LP <b>{(telemetry.lpL / 1000).toFixed(1)} / {(telemetry.lpR / 1000).toFixed(1)} k</b></span>
+                                    <span>ROOM <b>{telemetry.send.toFixed(2)}</b></span>
+                                    <span>DEPTH <b>{telemetry.depth.toFixed(2)}</b></span>
+                                </>
+                            ) : (
+                                <span>engine idle — play a track to see live spatial telemetry</span>
+                            )}
+                        </div>
+                    )}
 
                     {/* Accessibility announcements for screen readers */}
                     <div 

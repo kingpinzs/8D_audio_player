@@ -17,13 +17,17 @@
      * Draw bars visualizer
      */
     const drawBars = (ctx, canvas, frequencyData, options) => {
-        const { visualGain, bufferLength } = options;
+        const { visualGain, bufferLength, palette } = options;
         const barWidth = (canvas.width / bufferLength) * 2.5;
         let x = 0;
         for (let i = 0; i < bufferLength; i++) {
             const barHeight = ((frequencyData[i] / 255) * canvas.height) * visualGain;
-            const hue = (i / bufferLength) * 360;
-            ctx.fillStyle = `hsl(${hue}, 70%, 60%)`;
+            const hue = palette
+                ? palette.hueBase + (i / bufferLength) * palette.hueRange
+                : (i / bufferLength) * 360;
+            const sat = palette ? palette.saturation : 70;
+            const lig = palette ? palette.lightness : 60;
+            ctx.fillStyle = `hsl(${hue}, ${sat}%, ${lig}%)`;
             ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
             x += barWidth + 1;
         }
@@ -33,9 +37,10 @@
      * Draw waveform visualizer
      */
     const drawWaveform = (ctx, canvas, waveformData, options) => {
-        const { visualGain, bufferLength } = options;
+        const { visualGain, bufferLength, palette } = options;
+        const stroke = palette ? palette.accent : '#4ade80';
         ctx.lineWidth = 2;
-        ctx.strokeStyle = '#4ade80';
+        ctx.strokeStyle = stroke;
         ctx.beginPath();
         const sliceWidth = canvas.width / bufferLength;
         let x = 0;
@@ -49,7 +54,7 @@
         ctx.lineTo(canvas.width, canvas.height / 2);
         ctx.stroke();
         ctx.shadowBlur = 15;
-        ctx.shadowColor = '#4ade80';
+        ctx.shadowColor = stroke;
         ctx.stroke();
         ctx.shadowBlur = 0;
     };
@@ -58,7 +63,7 @@
      * Draw circular visualizer
      */
     const drawCircular = (ctx, canvas, frequencyData, options) => {
-        const { visualGain, bufferLength } = options;
+        const { visualGain, bufferLength, palette } = options;
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
         const radius = Math.min(centerX, centerY) * 0.6;
@@ -69,11 +74,15 @@
             const angle = (i / bars) * Math.PI * 2;
             const innerR = radius * 0.3;
             const outerR = radius + (amplitude * radius * 0.8);
-            const hue = (i / bars) * 360;
+            const hue = palette
+                ? palette.hueBase + (i / bars) * palette.hueRange
+                : (i / bars) * 360;
+            const sat = palette ? palette.saturation : 80;
+            const lig = palette ? palette.lightness : 60;
             ctx.beginPath();
             ctx.moveTo(centerX + Math.cos(angle) * innerR, centerY + Math.sin(angle) * innerR);
             ctx.lineTo(centerX + Math.cos(angle) * outerR, centerY + Math.sin(angle) * outerR);
-            ctx.strokeStyle = `hsl(${hue}, 80%, 60%)`;
+            ctx.strokeStyle = `hsl(${hue}, ${sat}%, ${lig}%)`;
             ctx.lineWidth = 3;
             ctx.stroke();
         }
@@ -135,7 +144,7 @@
      * Draw particles visualizer
      */
     const drawParticles = (ctx, canvas, frequencyData, particles, options) => {
-        const { bufferLength, maxParticles } = options;
+        const { bufferLength, maxParticles, palette } = options;
         const avgFreq = frequencyData.reduce((a, b) => a + b, 0) / bufferLength;
 
         if (avgFreq > 50 && particles.length < maxParticles) {
@@ -145,7 +154,9 @@
                 vx: (Math.random() - 0.5) * 4,
                 vy: -Math.random() * 5 - 2,
                 life: 1,
-                hue: Math.random() * 360,
+                hue: palette
+                    ? palette.hueBase + Math.random() * Math.max(palette.hueRange, 12)
+                    : Math.random() * 360,
                 size: Math.random() * 4 + 2
             });
         }
@@ -478,7 +489,8 @@
             darkMode = true,
             bufferLength,
             maxParticles = 100,
-            spatialState = null
+            spatialState = null,
+            palette = null
         } = options;
 
         const bgColor = darkMode ? '#1a2332' : '#0a0a0a';
@@ -487,7 +499,7 @@
         ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const drawOptions = { visualGain, bufferLength, maxParticles, spatialState };
+        const drawOptions = { visualGain, bufferLength, maxParticles, spatialState, palette };
 
         switch (visType) {
             case 'bars':
