@@ -144,134 +144,116 @@
     const particleEngineState = new WeakMap();
 
     /**
-     * Draw particles visualizer — a proper particle engine:
-     * emitters (bottom fountain + beat bursts from center), physics (gravity,
-     * drag, audio-driven turbulence), velocity streaks, additive glow sprites,
-     * pop-in/fade-out life curves, treble sparkles, theme-palette colors.
+     * Draw particles visualizer — cymatics sand: single-pixel grains resting
+     * on a "speaker cone" floor. Bass hits kick them airborne, they arc under
+     * gravity, bounce, and settle between hits. Silence -> the sand drains
+     * away and the canvas goes dark.
      */
     const drawParticles = (ctx, canvas, frequencyData, particles, options) => {
         const { bufferLength, maxParticles, palette, visualGain = 1 } = options;
         const W = canvas.width;
         const H = canvas.height;
-        const S = Math.max(W, H) / 600; // resolution scale so sprites keep proportion
+        const S = Math.max(W, H) / 600;
 
-        // ---- audio analysis: bass / mid / treble + beat detection ----
+        // ---- audio analysis ----
         const band = (from, to) => {
             const end = Math.min(to, bufferLength);
             let sum = 0;
             for (let i = from; i < end; i++) sum += frequencyData[i];
             return end > from ? (sum / (end - from)) / 255 : 0;
         };
-        const bass = band(0, 8) * visualGain;
-        const mid = band(8, 64) * visualGain;
-        const treble = band(64, 256) * visualGain;
+        // visualGain acts as a sensitivity trim (0.6x-1.4x), not a raw
+        // multiplier — a low intensity slider must not kill the physics
+        const trim = 0.6 + Math.min(visualGain, 1) * 0.8;
+        const bass = band(0, 8) * trim;
+        const mid = band(8, 64) * trim;
+        const treble = band(64, 256) * trim;
+        const energy = bass * 0.5 + mid * 0.35 + treble * 0.15;
 
         let st = particleEngineState.get(canvas);
         if (!st) {
-            st = { bassAvg: 0.1, beatCooldown: 0 };
+            st = { bassAvg: 0.1, beatCooldown: 0, silentFrames: 0 };
             particleEngineState.set(canvas, st);
         }
-        st.bassAvg = st.bassAvg * 0.95 + bass * 0.05; // rolling energy floor
+        st.bassAvg = st.bassAvg * 0.95 + bass * 0.05;
         st.beatCooldown = Math.max(0, st.beatCooldown - 1);
         const isBeat = bass > st.bassAvg * 1.35 + 0.04 && st.beatCooldown === 0;
-        if (isBeat) st.beatCooldown = 8; // ~130ms between beats at 60fps
+        if (isBeat) st.beatCooldown = 8;
 
-        // Pixel particles: each particle renders as a single device pixel.
-        // Density does the work — thousands of points, with motion trails
-        // coming from the translucent frame fade (see draw()).
+        const silent = energy < 0.04;
+        st.silentFrames = silent ? st.silentFrames + 1 : 0;
+        const draining = st.silentFrames > 20; // no music -> sand drains away
+
         const cap = maxParticles * 25;
+        const floorY = H - 1;
+        const px = Math.max(1, Math.round(S));
         const hueFor = () => palette
             ? palette.hueBase + Math.random() * Math.max(palette.hueRange, 14)
-            : Math.random() * 360;
+            : 30 + Math.random() * 30;
 
-        // ---- emitter 1: bottom fountain, rate follows the mids ----
-        const fountainRate = Math.round((6 + mid * 40) * S);
-        for (let i = 0; i < fountainRate && particles.length < cap; i++) {
-            particles.push({
-                x: Math.random() * W,
-                y: H + 2,
-                vx: (Math.random() - 0.5) * 1.6 * S,
-                vy: (-1.6 - Math.random() * 3.0 - bass * 4) * S,
-                life: 1,
-                decay: 0.006 + Math.random() * 0.010,
-                hue: hueFor(),
-                hot: false
-            });
-        }
-
-        // ---- emitter 2: beat burst — radial pixel explosion ----
-        if (isBeat) {
-            const bx = W / 2 + (Math.random() - 0.5) * W * 0.3;
-            const by = H * (0.45 + Math.random() * 0.3);
-            const count = Math.min(cap - particles.length, 90 + Math.round(bass * 160));
-            const burstHue = hueFor();
-            for (let i = 0; i < count; i++) {
-                const a = Math.random() * Math.PI * 2;
-                const speed = (1 + Math.random() * Math.random() * 6 + bass * 4) * S;
-                particles.push({
-                    x: bx,
-                    y: by,
-                    vx: Math.cos(a) * speed,
-                    vy: Math.sin(a) * speed * 0.85 - 0.8 * S,
-                    life: 1,
-                    decay: 0.010 + Math.random() * 0.022,
-                    hue: burstHue + (Math.random() - 0.5) * 24,
-                    hot: Math.random() < 0.35
-                });
-            }
-        }
-
-        // ---- emitter 3: treble sparkles — brief pixel twinkles up top ----
-        if (treble > 0.15) {
-            const n = Math.min(cap - particles.length, Math.round(treble * 20));
-            for (let i = 0; i < n; i++) {
+        // ---- pour sand while the music plays ----
+        if (!draining) {
+            const target = Math.min(cap, Math.round(W * 1.1));
+            const pour = Math.min(24, target - particles.length);
+            for (let i = 0; i < pour; i++) {
                 particles.push({
                     x: Math.random() * W,
-                    y: Math.random() * H * 0.5,
-                    vx: (Math.random() - 0.5) * 0.4 * S,
-                    vy: 0.3 * S,
-                    life: 0.5,
-                    decay: 0.05 + Math.random() * 0.06,
+                    y: floorY - Math.random() * 3 * S,
+                    vx: 0,
+                    vy: 0,
+                    life: 1,
                     hue: hueFor(),
-                    hot: true
+                    rest: true
                 });
             }
         }
 
-        // ---- physics + single-pixel render ----
-        const t = Date.now() * 0.001;
-        const px = Math.max(1, Math.round(S)); // 1 device pixel (2 on retina backing)
-        ctx.globalCompositeOperation = 'lighter';
+        // ---- physics: kicks, gravity, bounce, settle ----
+        const gravity = 0.16 * S;
+        const kickChance = isBeat ? 0.45 + bass * 0.5 : bass * 0.10 + treble * 0.03;
         particles = particles.filter(p => p.life > 0);
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
-            // Foreign particles (fire embers sharing this array) lack decay —
-            // retire them rather than feeding NaN into the physics
-            if (!(p.decay > 0)) {
-                p.life = 0;
-                continue;
-            }
-            // turbulence field driven by the mids, gravity, drag
-            p.vx += Math.sin(p.y * 0.02 + t * 1.7) * 0.06 * S * (0.3 + mid)
-                  + Math.sin(p.x * 0.011 - t * 1.1) * 0.03 * S * mid;
-            p.vy += 0.05 * S;
-            p.vx *= 0.99;
-            p.vy *= 0.99;
-            p.x += p.vx;
-            p.y += p.vy;
-            p.life -= p.decay;
-            if (p.life <= 0 || p.x < 0 || p.x >= W || p.y < 0 || p.y >= H) {
-                p.life = 0;
-                continue;
+            // foreign particles from the fire mode's shared array
+            if (p.decay !== undefined || p.size !== undefined) { p.life = 0; continue; }
+
+            if (draining) p.life -= 0.04; // silence: sand fades out where it lies
+
+            if (p.rest) {
+                // grain sitting on the cone: speaker motion kicks it up
+                if (!draining && Math.random() < kickChance) {
+                    p.rest = false;
+                    p.vy = -(1.2 + Math.random() * 2.2 + bass * 9 + (isBeat ? bass * 4 : 0)) * S;
+                    p.vx = (Math.random() - 0.5) * (1.2 + mid * 3.5) * S;
+                }
+            } else {
+                p.vy += gravity;
+                p.vx *= 0.995;
+                p.x += p.vx;
+                p.y += p.vy;
+                if (p.x < 0) { p.x = 0; p.vx = -p.vx * 0.5; }
+                else if (p.x >= W) { p.x = W - 1; p.vx = -p.vx * 0.5; }
+                if (p.y >= floorY) {
+                    // landing: bounce with damping, then settle
+                    p.y = floorY - Math.random() * 2 * S;
+                    if (Math.abs(p.vy) > 0.9 * S) {
+                        p.vy = -p.vy * 0.35;
+                        p.vx *= 0.7;
+                    } else {
+                        p.vy = 0;
+                        p.vx = 0;
+                        p.rest = true;
+                    }
+                }
             }
 
-            const alpha = p.life * p.life;
-            ctx.fillStyle = p.hot
-                ? `hsla(${p.hue}, 45%, 88%, ${alpha})`
-                : `hsla(${p.hue}, 85%, 62%, ${alpha})`;
+            const airborne = !p.rest;
+            const alpha = p.life * (airborne ? 1 : 0.75);
+            ctx.fillStyle = palette
+                ? `hsla(${p.hue}, ${airborne ? 85 : 55}%, ${airborne ? 68 : 52}%, ${alpha})`
+                : `hsla(${p.hue}, ${airborne ? 80 : 50}%, ${airborne ? 70 : 55}%, ${alpha})`;
             ctx.fillRect(p.x | 0, p.y | 0, px, px);
         }
-        ctx.globalCompositeOperation = 'source-over';
 
         return particles;
     };
@@ -316,17 +298,20 @@
      * pixel embers ride the updraft.
      */
     const drawFire = (ctx, canvas, frequencyData, particles, options) => {
-        const { visualGain = 1, maxParticles } = options;
+        const { visualGain = 1, maxParticles, bufferLength = frequencyData.length } = options;
         const W = canvas.width;
         const H = canvas.height;
 
         // ---- audio ----
+        // visualGain acts as a sensitivity trim (0.6x-1.4x), not a raw
+        // multiplier — a low intensity slider must not extinguish the fire
+        const trim = 0.6 + Math.min(visualGain, 1) * 0.8;
         let bassSum = 0;
         for (let i = 0; i < 8; i++) bassSum += frequencyData[i];
-        const bass = Math.pow(bassSum / (8 * 255), 0.8) * visualGain * 1.4;
+        const bass = Math.pow(bassSum / (8 * 255), 0.8) * trim * 1.4;
         let trebSum = 0;
         for (let i = 64; i < Math.min(160, frequencyData.length); i++) trebSum += frequencyData[i];
-        const treble = (trebSum / (96 * 255)) * visualGain;
+        const treble = (trebSum / (96 * 255)) * trim;
 
         // ---- heat grid (rebuilt when the canvas aspect changes) ----
         // Cells stay ~square whatever the canvas shape, so flames rise as
@@ -342,6 +327,7 @@
             st = {
                 gridW, gridH, off, offCtx,
                 heat: new Float32Array(gridW * gridH),
+                env: new Float32Array(gridW),
                 img: offCtx.createImageData(gridW, gridH),
                 bassAvg: 0.1,
                 beatCooldown: 0
@@ -358,18 +344,27 @@
         const gh = st.gridH;
         const t = Date.now() * 0.001;
 
-        // ---- seed the base: per-column flicker, bass = fuel, beats = flash ----
+        // ---- seed the base like a Rubens' tube: each column is a gas jet
+        //      whose flame height follows its slice of the spectrum.
+        //      Silence -> zero seed -> the fire goes out. ----
+        const env = st.env;
+        const bins = Math.max(16, Math.min(96, bufferLength));
         for (let x = 0; x < gw; x++) {
+            const fi = Math.floor((x / gw) * bins);
+            const raw = ((frequencyData[fi] + (frequencyData[fi + 1] || 0)) / 510) * trim;
+            // perceptual shaping: compress dynamics upward and tilt toward the
+            // treble so quiet-but-present bins still light their jets
+            const level = Math.pow(raw, 0.6) * (0.75 + 0.55 * (fi / bins));
+            // fast attack, slow release — flames leap on transients, sink after
+            env[x] = Math.max(level, env[x] * 0.90);
             const flicker =
-                0.62 +
-                0.20 * Math.sin(x * 0.35 + t * 9) +
-                0.12 * Math.sin(x * 0.9 - t * 13) +
-                Math.random() * 0.22;
-            let hVal = (135 + bass * 130) * flicker;
-            if (isBeat) hVal += 80;
-            hVal = Math.min(255, hVal);
-            heat[(gh - 1) * gw + x] = hVal;
-            heat[(gh - 2) * gw + x] = Math.min(255, hVal * 0.97);
+                0.78 +
+                0.14 * Math.sin(x * 0.5 + t * 11) +
+                Math.random() * 0.18;
+            let hVal = env[x] * 285 * flicker;
+            if (isBeat) hVal += bass * 60;
+            heat[(gh - 1) * gw + x] = hVal > 255 ? 255 : hVal;
+            heat[(gh - 2) * gw + x] = hVal > 255 ? 248 : hVal * 0.97;
         }
 
         // ---- propagate upward: each cell pulls from below with random decay
@@ -638,7 +633,7 @@
         // clear leaves each pixel's previous positions as a decaying motion trail
         // (the classic particle-engine accumulation buffer).
         if (visType === 'particles') {
-            ctx.fillStyle = darkMode ? 'rgba(26, 35, 50, 0.28)' : 'rgba(10, 10, 10, 0.28)';
+            ctx.fillStyle = darkMode ? 'rgba(26, 35, 50, 0.45)' : 'rgba(10, 10, 10, 0.45)';
         } else {
             ctx.fillStyle = bgColor;
         }
