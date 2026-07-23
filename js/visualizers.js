@@ -1109,11 +1109,15 @@
         const fontSize = Math.max(10, Math.round(13 * S));
         const colW = fontSize;
         const nCols = Math.ceil(W / colW);
-        const st = getSceneState(canvas, 'matrix', () => ({ cols: [] }));
+        const st = getSceneState(canvas, 'matrix', () => ({ cols: [], surge: 0 }));
         const beat = detectSceneBeat(st, a.bass);
         const draining = trackSilence(st, a.energy);
 
-        while (st.cols.length < nCols) st.cols.push({ y: Math.random() * -H, active: false });
+        // The beat drives everything: each kick launches a curtain of columns
+        // and lurches the whole wall downward; between kicks, barely a trickle.
+        if (beat) st.surge = 1; else st.surge *= 0.90;
+
+        while (st.cols.length < nCols) st.cols.push({ y: Math.random() * -H, active: false, hot: false });
         const hue = palette ? palette.hueBase : 130;
         ctx.font = `${fontSize}px ui-monospace, monospace`;
 
@@ -1124,22 +1128,26 @@
             const level = (frequencyData[fi] / 255) * a.trim;
 
             if (!col.active) {
-                if (!draining && level > 0.12 && Math.random() < 0.06 + level * 0.2) {
+                // beats fire curtains weighted by each column's band level;
+                // between beats only the loudest bins drip occasionally
+                const launchP = beat ? 0.30 + level * 0.6 : level * 0.012;
+                if (!draining && Math.random() < launchP) {
                     col.active = true;
                     col.y = -fontSize;
+                    col.hot = beat; // beat-born streams keep white-hot heads
                 }
                 continue;
             }
-            col.y += (2.5 + level * 9) * S;
+            col.y += (1.4 + level * 4 + st.surge * 8) * S;
             if (col.y > H + fontSize * 2) {
                 col.active = false;
+                col.hot = false;
                 continue;
             }
             const ch = MATRIX_GLYPHS[(Math.random() * MATRIX_GLYPHS.length) | 0];
-            const bright = beat && level > 0.25;
-            ctx.fillStyle = bright
-                ? `hsla(${hue}, 30%, 95%, 1)`
-                : `hsla(${hue}, ${palette ? palette.saturation : 80}%, ${45 + level * 30}%, 0.9)`;
+            ctx.fillStyle = col.hot
+                ? `hsla(${hue}, 25%, ${88 + st.surge * 10}%, 1)`
+                : `hsla(${hue}, ${palette ? palette.saturation : 80}%, ${40 + level * 35 + st.surge * 12}%, 0.9)`;
             ctx.fillText(ch, c * colW, col.y);
         }
     };
