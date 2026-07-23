@@ -1160,8 +1160,12 @@
             if (d.y < -fontSize) continue;
 
             const env = st.env[d.c];
-            const litTop = H - env * H * (1 + st.surge * 0.12);
-            const inLight = d.y >= litTop && env > 0.04;
+            // Lit region is a spectral ribbon along a line (like the mirror
+            // visual's center line, one-sided): bars rise from the baseline,
+            // peaking at ~15% of the canvas height
+            const baseline = H * 0.55;
+            const barH = env * H * 0.15 * (1 + st.surge * 0.2);
+            const inLight = env > 0.04 && d.y <= baseline && d.y >= baseline - barH;
             const ch = MATRIX_GLYPHS[(Math.random() * MATRIX_GLYPHS.length) | 0];
 
             if (inLight) {
