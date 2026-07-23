@@ -243,6 +243,16 @@
                         setOrbPosition(flip ? { x: 80, y: 0 } : { x: -80, y: 0 });
                         setAutoTestSide(flip ? 'right' : 'left');
                     } else {
+                        // Front/back over headphones IS the tone change — drive a
+                        // maximal, slider-independent A/B: BACK = notably quieter
+                        // and heavily muffled; FRONT = full and bright.
+                        if (onApplyGains) {
+                            if (flip) {
+                                onApplyGains(0.3, 0.3, 0.5, 0, 0, 2200, 2200, true);
+                            } else {
+                                onApplyGains(0.5, 0.5, 0.5, 0, 0, 20000, 20000, true);
+                            }
+                        }
                         setOrbPosition(flip ? { x: 0, y: 80 } : { x: 0, y: -80 });
                         setAutoTestSide(flip ? 'back' : 'front');
                     }
@@ -826,8 +836,10 @@
                                             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>2 of 5</span>
                                         </div>
                                         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                                            The sound is automatically switching between <strong>FRONT</strong> (bright/clear) and
-                                            <strong> BACK</strong> (muffled/darker) every 2 seconds. Just listen for the tone change.
+                                            Headphones can't truly place sound behind you — no headphones can, that's physics,
+                                            not your hearing. Instead, "behind" is simulated with a <strong>darker, quieter</strong> tone.
+                                            The sound is alternating every 2 seconds: <strong>FRONT</strong> = bright and full,
+                                            <strong> BACK</strong> = muffled and quieter. Can you hear that change?
                                         </p>
 
                                         <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }} aria-live="polite">
