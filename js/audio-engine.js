@@ -53,11 +53,22 @@
         const analyser = context.createAnalyser();
         analyser.fftSize = fftSize;
 
+        // Per-channel taps for stereo-aware visualizers (e.g. Lissajous scope).
+        // Parallel sinks off the limiter — they don't affect the audio path.
+        const stereoSplitter = context.createChannelSplitter(2);
+        const analyserLeft = context.createAnalyser();
+        const analyserRight = context.createAnalyser();
+        analyserLeft.fftSize = fftSize;
+        analyserRight.fftSize = fftSize;
+
         sourceNode.connect(mainGain);
         mainGain.connect(compressor);
         compressor.connect(limiter);
         limiter.connect(analyser);
         analyser.connect(destination);
+        limiter.connect(stereoSplitter);
+        stereoSplitter.connect(analyserLeft, 0);
+        stereoSplitter.connect(analyserRight, 1);
 
         return {
             sourceNode,
@@ -65,6 +76,8 @@
             compressor,
             limiter,
             analyser,
+            analyserLeft,
+            analyserRight,
             headroom,
             setVolume(nextVolume) {
                 const safeVolume = typeof nextVolume === 'number' ? nextVolume : volume;
@@ -93,6 +106,11 @@
                 }
                 try {
                     analyser.disconnect();
+                } catch (error) {
+                    identity(error);
+                }
+                try {
+                    stereoSplitter.disconnect();
                 } catch (error) {
                     identity(error);
                 }

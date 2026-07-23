@@ -94,6 +94,9 @@ class MockContext {
     createAnalyser() {
         return new MockAnalyser('analyser');
     }
+    createChannelSplitter() {
+        return new MockNode('splitter');
+    }
     createOscillator() {
         return new MockOscillator('oscillator');
     }

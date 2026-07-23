@@ -7469,6 +7469,11 @@ function App() {
                 const bufferLength = analyser.frequencyBinCount;
                 const frequencyData = new Uint8Array(bufferLength);
                 const waveformData = new Uint8Array(bufferLength);
+                // Per-channel taps for stereo-aware scenes (Lissajous)
+                const stereoChain = gainChainRef.current;
+                const hasStereo = !!(stereoChain && stereoChain.analyserLeft);
+                const stereoLeftData = hasStereo ? new Uint8Array(bufferLength) : null;
+                const stereoRightData = hasStereo ? new Uint8Array(bufferLength) : null;
 
                 // Particles state for particle visualizer (per canvas)
                 let particlesDesktop = [];
@@ -7504,7 +7509,9 @@ function App() {
                         bufferLength,
                         maxParticles,
                         spatialState: rotationStateRef.current,
-                        palette: vizPaletteRef.current
+                        palette: vizPaletteRef.current,
+                        stereoLeft: stereoLeftData,
+                        stereoRight: stereoRightData
                     });
                 };
 
@@ -7771,6 +7778,10 @@ function App() {
                     // Get audio data once
                     analyser.getByteFrequencyData(frequencyData);
                     analyser.getByteTimeDomainData(waveformData);
+                    if (hasStereo) {
+                        stereoChain.analyserLeft.getByteTimeDomainData(stereoLeftData);
+                        stereoChain.analyserRight.getByteTimeDomainData(stereoRightData);
+                    }
 
                     // Draw on all available canvases
                     if (canvasRef.current) {
@@ -11023,36 +11034,28 @@ return (
                                 />
                                 {showVisualizer && (
                                     <>
-                                        <div style={{ display: 'flex', gap: '4px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                                            {[
-                                                { id: 'bars', icon: '📊', label: 'Bars' },
-                                                { id: 'waveform', icon: '〰️', label: 'Wave' },
-                                                { id: 'circular', icon: '🔘', label: 'Circular' },
-                                                { id: 'mirrored', icon: '🪞', label: 'Mirror' },
-                                                { id: 'particles', icon: '✨', label: 'Particles' },
-                                                { id: 'fire', icon: '🔥', label: 'Fire' },
-                                                { id: 'breathe', icon: '🫧', label: 'Breathe' },
-                                                { id: 'orbit', icon: '🪐', label: 'Orbit' }
-                                            ].map(vis => (
-                                                <button
-                                                    key={vis.id}
-                                                    onClick={() => setVisualizerType(vis.id)}
-                                                    style={{
-                                                        padding: '6px 10px',
-                                                        background: visualizerType === vis.id ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
-                                                        color: visualizerType === vis.id ? 'black' : 'var(--text-primary)',
-                                                        border: 'none',
-                                                        borderRadius: '6px',
-                                                        cursor: 'pointer',
-                                                        fontSize: '0.75rem',
-                                                        fontWeight: visualizerType === vis.id ? '600' : '400',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                    title={vis.label}
-                                                >
-                                                    {vis.icon} {vis.label}
-                                                </button>
-                                            ))}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                            <label htmlFor="viz-select" className="eyebrow" style={{ fontSize: '0.7rem' }}>Scene</label>
+                                            <select
+                                                id="viz-select"
+                                                value={visualizerType}
+                                                onChange={(e) => setVisualizerType(e.target.value)}
+                                                aria-label="Visualizer scene"
+                                                style={{
+                                                    background: 'var(--surface)',
+                                                    color: 'var(--text-primary)',
+                                                    border: '1px solid var(--card-border)',
+                                                    borderRadius: 'var(--radius-card)',
+                                                    padding: '7px 12px',
+                                                    fontSize: '0.85rem',
+                                                    cursor: 'pointer',
+                                                    minWidth: '180px'
+                                                }}
+                                            >
+                                                {Visualizers.LIST.map(vis => (
+                                                    <option key={vis.id} value={vis.id}>{vis.icon} {vis.label}</option>
+                                                ))}
+                                            </select>
                                         </div>
                                         <canvas
                                             ref={canvasRef}
@@ -12059,12 +12062,7 @@ return (
                                         }}
                                     >
                                         <span>{
-                                            visualizerType === 'bars' ? '📊' :
-                                            visualizerType === 'waveform' ? '〰️' :
-                                            visualizerType === 'circular' ? '◎' :
-                                            visualizerType === 'mirrored' ? '⫼' :
-                                            visualizerType === 'breathe' ? '🫧' :
-                                            visualizerType === 'orbit' ? '🪐' : '✨'
+                                            (Visualizers.LIST.find(v => v.id === visualizerType) || {}).icon || '✨'
                                         }</span>
                                         <span style={{
                                             display: 'flex',
@@ -12134,43 +12132,28 @@ return (
                                             </button>
 
                                             {/* Menu items */}
-                                            <div style={{ display: 'flex', gap: '6px', paddingTop: '4px' }}>
-                                                {[
-                                                    { id: 'bars', icon: '📊', label: 'Bars' },
-                                                    { id: 'waveform', icon: '〰️', label: 'Wave' },
-                                                    { id: 'circular', icon: '◎', label: 'Circle' },
-                                                    { id: 'mirrored', icon: '⫼', label: 'Mirror' },
-                                                    { id: 'particles', icon: '✨', label: 'Particles' },
-                                                    { id: 'fire', icon: '🔥', label: 'Fire' },
-                                                    { id: 'breathe', icon: '🫧', label: 'Breathe' },
-                                                    { id: 'orbit', icon: '🪐', label: 'Orbit' }
-                                                ].map(type => (
-                                                    <button
-                                                        key={type.id}
-                                                        onClick={() => {
-                                                            setVisualizerType(type.id);
-                                                            setVizMenuOpen(false);
-                                                        }}
-                                                        style={{
-                                                            padding: '8px 10px',
-                                                            background: visualizerType === type.id ? selectedMode.accent : 'rgba(255,255,255,0.1)',
-                                                            border: 'none',
-                                                            borderRadius: '8px',
-                                                            color: 'white',
-                                                            fontSize: '0.8rem',
-                                                            cursor: 'pointer',
-                                                            display: 'flex',
-                                                            flexDirection: 'column',
-                                                            alignItems: 'center',
-                                                            gap: '2px',
-                                                            minWidth: '50px',
-                                                            transition: 'transform 0.15s ease'
-                                                        }}
-                                                    >
-                                                        <span style={{ fontSize: '1.1rem' }}>{type.icon}</span>
-                                                        <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{type.label}</span>
-                                                    </button>
-                                                ))}
+                                            <div style={{ paddingTop: '4px' }}>
+                                                <select
+                                                    value={visualizerType}
+                                                    onChange={(e) => {
+                                                        setVisualizerType(e.target.value);
+                                                        setVizMenuOpen(false);
+                                                    }}
+                                                    aria-label="Visualizer scene"
+                                                    style={{
+                                                        width: '100%',
+                                                        background: 'var(--surface)',
+                                                        color: 'var(--text-primary)',
+                                                        border: '1px solid var(--card-border)',
+                                                        borderRadius: '8px',
+                                                        padding: '10px 12px',
+                                                        fontSize: '0.9rem'
+                                                    }}
+                                                >
+                                                    {Visualizers.LIST.map(vis => (
+                                                        <option key={vis.id} value={vis.id}>{vis.icon} {vis.label}</option>
+                                                    ))}
+                                                </select>
                                             </div>
                                         </div>
                                     )}
@@ -12941,33 +12924,23 @@ return (
                                             ✕
                                         </button>
 
-                                        {[
-                                            { id: 'bars', icon: '📊' },
-                                            { id: 'waveform', icon: '〰️' },
-                                            { id: 'circular', icon: '◎' },
-                                            { id: 'mirrored', icon: '⫼' },
-                                            { id: 'particles', icon: '✨' }
-                                        ].map(type => (
-                                            <button
-                                                key={type.id}
-                                                onClick={() => {
-                                                    setVisualizerType(type.id);
-                                                    setVizMenuOpen(false);
-                                                }}
-                                                style={{
-                                                    padding: '10px 14px',
-                                                    background: visualizerType === type.id ? 'var(--accent-focus)' : 'rgba(255,255,255,0.1)',
-                                                    border: 'none',
-                                                    borderRadius: '8px',
-                                                    color: 'white',
-                                                    fontSize: '1.2rem',
-                                                    cursor: 'pointer'
-                                                }}
-                                                title={type.id}
-                                            >
-                                                {type.icon}
-                                            </button>
-                                        ))}
+                                        <select
+                                            value={visualizerType}
+                                            onChange={(e) => setVisualizerType(e.target.value)}
+                                            aria-label="Visualizer scene"
+                                            style={{
+                                                background: 'rgba(20, 24, 40, 0.85)',
+                                                color: 'white',
+                                                border: '1px solid rgba(255,255,255,0.25)',
+                                                borderRadius: '8px',
+                                                padding: '10px 14px',
+                                                fontSize: '1rem'
+                                            }}
+                                        >
+                                            {Visualizers.LIST.map(vis => (
+                                                <option key={vis.id} value={vis.id}>{vis.icon} {vis.label}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                 )}
                             </div>

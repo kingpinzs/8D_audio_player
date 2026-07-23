@@ -608,6 +608,542 @@
         ctx.fill();
     };
 
+    // ==================== Extended scene visualizers ====================
+    // Shared toolkit: per-canvas-per-scene state, band analysis, beat
+    // detection, and silence tracking (silence -> every scene goes dark).
+
+    const sceneStateMap = new WeakMap();
+    const getSceneState = (canvas, key, init) => {
+        let all = sceneStateMap.get(canvas);
+        if (!all) { all = {}; sceneStateMap.set(canvas, all); }
+        if (!all[key]) all[key] = init();
+        return all[key];
+    };
+
+    const audioBands = (frequencyData, bufferLength, visualGain) => {
+        const trim = 0.6 + Math.min(visualGain, 1) * 0.8;
+        const band = (from, to) => {
+            const end = Math.min(to, bufferLength);
+            let sum = 0;
+            for (let i = from; i < end; i++) sum += frequencyData[i];
+            return end > from ? ((sum / (end - from)) / 255) * trim : 0;
+        };
+        const bass = band(0, 8);
+        const mid = band(8, 64);
+        const treble = band(64, 256);
+        return { bass, mid, treble, trim, energy: bass * 0.5 + mid * 0.35 + treble * 0.15 };
+    };
+
+    const detectSceneBeat = (st, bass) => {
+        st.bassAvg = (st.bassAvg === undefined ? 0.1 : st.bassAvg) * 0.95 + bass * 0.05;
+        st.beatCooldown = Math.max(0, (st.beatCooldown || 0) - 1);
+        if (bass > st.bassAvg * 1.35 + 0.04 && st.beatCooldown === 0) {
+            st.beatCooldown = 8;
+            return true;
+        }
+        return false;
+    };
+
+    const trackSilence = (st, energy) => {
+        st.silentFrames = energy < 0.04 ? (st.silentFrames || 0) + 1 : 0;
+        return st.silentFrames > 25;
+    };
+
+    const sceneHue = (palette, fallback) => palette
+        ? palette.hueBase + Math.random() * Math.max(palette.hueRange, 14)
+        : fallback + Math.random() * 30;
+
+    /**
+     * Pond — top-down water around the head; the spatial engine's source
+     * position drips ripples as it orbits, beats drop heavy stones.
+     */
+    const drawPond = (ctx, canvas, frequencyData, options) => {
+        const { bufferLength, visualGain = 1, palette, spatialState } = options;
+        const W = canvas.width, H = canvas.height, S = Math.max(W, H) / 600;
+        const a = audioBands(frequencyData, bufferLength, visualGain);
+        const st = getSceneState(canvas, 'pond', () => ({ ripples: [], frame: 0 }));
+        const beat = detectSceneBeat(st, a.bass);
+        const draining = trackSilence(st, a.energy);
+        const cx = W / 2, cy = H / 2, R = Math.min(cx, cy) * 0.6;
+        const baseHue = palette ? palette.hueBase : 195;
+
+        // head silhouette
+        const hw = R * 0.28;
+        ctx.fillStyle = 'rgba(20, 26, 44, 0.9)';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, hw, hw * 1.18, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        const angle = spatialState ? spatialState.angle : (Date.now() * 0.001 * Math.PI * 2) / 16;
+        const sx = cx + Math.sin(angle) * R;
+        const sy = cy - Math.cos(angle) * R;
+        st.frame++;
+
+        if (!draining) {
+            if (st.frame % 6 === 0) {
+                st.ripples.push({ x: sx, y: sy, r: 2 * S, vr: (0.7 + a.energy * 1.6) * S, alpha: 0.35 + a.mid * 0.4, lw: 1, hue: baseHue });
+            }
+            if (beat) {
+                st.ripples.push({ x: sx, y: sy, r: 3 * S, vr: (1.5 + a.bass * 2.2) * S, alpha: 0.9, lw: 2, hue: baseHue + 15 });
+            }
+        }
+
+        st.ripples = st.ripples.filter(r => r.alpha > 0.02);
+        for (const r of st.ripples) {
+            r.r += r.vr;
+            r.alpha *= 0.964;
+            ctx.beginPath();
+            ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+            ctx.strokeStyle = `hsla(${r.hue}, ${palette ? palette.saturation : 60}%, 62%, ${r.alpha})`;
+            ctx.lineWidth = r.lw * S;
+            ctx.stroke();
+        }
+
+        if (!draining) {
+            ctx.fillStyle = `hsla(${baseHue}, 70%, 75%, 0.9)`;
+            ctx.beginPath();
+            ctx.arc(sx, sy, (3 + a.bass * 4) * S, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    };
+
+    /**
+     * Lissajous scope — left channel vs right channel as an X/Y figure.
+     * The 8D rotation visibly tilts and spins the figure.
+     */
+    const drawLissajous = (ctx, canvas, waveformData, options) => {
+        const { stereoLeft, stereoRight, palette } = options;
+        const L = stereoLeft || waveformData;
+        const R2 = stereoRight || waveformData;
+        const W = canvas.width, H = canvas.height;
+        const cx = W / 2, cy = H / 2;
+        const scale = Math.min(cx, cy) * 0.85;
+
+        let dev = 0;
+        for (let i = 0; i < L.length; i += 8) dev += Math.abs(L[i] - 128);
+        dev /= (L.length / 8) * 128;
+        if (dev < 0.01) return; // silence -> the fade clear empties the canvas
+
+        const stroke = palette ? palette.accent : '#4ade80';
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        const n = Math.min(L.length, R2.length);
+        for (let i = 0; i < n; i += 2) {
+            const x = cx + ((L[i] - 128) / 128) * scale;
+            const y = cy - ((R2[i] - 128) / 128) * scale;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.globalCompositeOperation = 'source-over';
+    };
+
+    /**
+     * Fireworks — beats launch pixel rockets that burst into spark showers.
+     */
+    const drawFireworks = (ctx, canvas, frequencyData, options) => {
+        const { bufferLength, visualGain = 1, palette } = options;
+        const W = canvas.width, H = canvas.height, S = Math.max(W, H) / 600;
+        const a = audioBands(frequencyData, bufferLength, visualGain);
+        const st = getSceneState(canvas, 'fireworks', () => ({ rockets: [], sparks: [] }));
+        const beat = detectSceneBeat(st, a.bass);
+        const draining = trackSilence(st, a.energy);
+        const px = Math.max(1, Math.round(S));
+
+        if (beat && !draining) {
+            const n = 1 + (a.bass > 0.5 ? 1 : 0);
+            for (let i = 0; i < n; i++) {
+                st.rockets.push({
+                    x: W * (0.15 + Math.random() * 0.7),
+                    y: H,
+                    vx: (Math.random() - 0.5) * 1.2 * S,
+                    vy: -(4.5 + Math.random() * 2 + a.bass * 3) * S,
+                    hue: sceneHue(palette, 10 + Math.random() * 340),
+                    size: Math.round(40 + a.bass * 140)
+                });
+            }
+        }
+
+        ctx.globalCompositeOperation = 'lighter';
+        st.rockets = st.rockets.filter(r => r.vy < -0.8 * S && r.y > 0);
+        for (const r of st.rockets) {
+            r.x += r.vx;
+            r.y += r.vy;
+            r.vy += 0.06 * S;
+            ctx.fillStyle = `hsla(${r.hue}, 60%, 85%, 0.9)`;
+            ctx.fillRect(r.x | 0, r.y | 0, px, px);
+            if (r.vy >= -0.9 * S) {
+                for (let i = 0; i < r.size; i++) {
+                    const ang = Math.random() * Math.PI * 2;
+                    const sp = Math.random() * Math.random() * 5 * S;
+                    st.sparks.push({
+                        x: r.x, y: r.y,
+                        vx: Math.cos(ang) * sp,
+                        vy: Math.sin(ang) * sp,
+                        life: 1,
+                        decay: 0.012 + Math.random() * 0.02,
+                        hue: r.hue + (Math.random() - 0.5) * 30
+                    });
+                }
+            }
+        }
+
+        st.sparks = st.sparks.filter(p => p.life > 0);
+        for (const p of st.sparks) {
+            p.vy += 0.035 * S;
+            p.vx *= 0.985;
+            p.vy *= 0.985;
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life -= p.decay;
+            if (p.life <= 0) continue;
+            const alpha = p.life * p.life * (Math.random() < 0.85 ? 1 : 0.3);
+            ctx.fillStyle = `hsla(${p.hue}, 90%, ${55 + p.life * 25}%, ${alpha})`;
+            ctx.fillRect(p.x | 0, p.y | 0, px, px);
+        }
+        ctx.globalCompositeOperation = 'source-over';
+    };
+
+    /**
+     * Storm — beats strike branching lightning; bass rumbles the cloud glow.
+     */
+    const drawLightning = (ctx, canvas, frequencyData, options) => {
+        const { bufferLength, visualGain = 1, palette } = options;
+        const W = canvas.width, H = canvas.height, S = Math.max(W, H) / 600;
+        const a = audioBands(frequencyData, bufferLength, visualGain);
+        const st = getSceneState(canvas, 'storm', () => ({ bolts: [] }));
+        const beat = detectSceneBeat(st, a.bass);
+        const draining = trackSilence(st, a.energy);
+
+        // cloud glow follows the bass rumble
+        if (!draining && a.bass > 0.05) {
+            const glow = ctx.createLinearGradient(0, 0, 0, H * 0.45);
+            glow.addColorStop(0, `rgba(120, 130, 190, ${0.10 + a.bass * 0.25})`);
+            glow.addColorStop(1, 'rgba(120, 130, 190, 0)');
+            ctx.fillStyle = glow;
+            ctx.fillRect(0, 0, W, H * 0.45);
+        }
+
+        const genBolt = (x0, y0, x1, y1, jag) => {
+            const pts = [[x0, y0]];
+            const segs = 14;
+            for (let i = 1; i < segs; i++) {
+                const f = i / segs;
+                pts.push([
+                    x0 + (x1 - x0) * f + (Math.random() - 0.5) * jag * (1 - f * 0.4),
+                    y0 + (y1 - y0) * f + (Math.random() - 0.5) * jag * 0.25
+                ]);
+            }
+            pts.push([x1, y1]);
+            return pts;
+        };
+
+        if (beat && !draining) {
+            const x = W * (0.1 + Math.random() * 0.8);
+            const main = genBolt(x, 0, x + (Math.random() - 0.5) * W * 0.25, H * (0.65 + Math.random() * 0.3), W * 0.06);
+            const branches = [];
+            for (let b = 0; b < 2 + Math.round(a.bass * 2); b++) {
+                const at = main[2 + ((Math.random() * (main.length - 4)) | 0)];
+                branches.push(genBolt(at[0], at[1], at[0] + (Math.random() - 0.5) * W * 0.2, at[1] + H * 0.25, W * 0.04));
+            }
+            st.bolts.push({ main, branches, life: 1 });
+        }
+
+        st.bolts = st.bolts.filter(b => b.life > 0);
+        const hue = palette ? palette.hueBase : 225;
+        for (const bolt of st.bolts) {
+            bolt.life -= 0.12;
+            const drawPath = (pts, wMul) => {
+                ctx.beginPath();
+                for (let i = 0; i < pts.length; i++) {
+                    if (i === 0) ctx.moveTo(pts[i][0], pts[i][1]); else ctx.lineTo(pts[i][0], pts[i][1]);
+                }
+                ctx.lineWidth = 3.5 * S * wMul * bolt.life;
+                ctx.strokeStyle = `hsla(${hue}, 60%, 75%, ${bolt.life * 0.35})`;
+                ctx.stroke();
+                ctx.lineWidth = 1.2 * S * wMul;
+                ctx.strokeStyle = `hsla(${hue}, 30%, 96%, ${bolt.life})`;
+                ctx.stroke();
+            };
+            drawPath(bolt.main, 1);
+            for (const br of bolt.branches) drawPath(br, 0.5);
+        }
+    };
+
+    /**
+     * Spectro — scrolling waterfall spectrogram: time x frequency x heat.
+     * Kicks read as bright stripes marching upward.
+     */
+    const drawWaterfall = (ctx, canvas, frequencyData, options) => {
+        const { bufferLength, visualGain = 1, palette } = options;
+        const W = canvas.width, H = canvas.height;
+        const gw = 128, gh = 128;
+        const st = getSceneState(canvas, 'waterfall', () => {
+            const off = document.createElement('canvas');
+            off.width = gw; off.height = gh;
+            const offCtx = off.getContext('2d');
+            return { off, offCtx, img: offCtx.createImageData(gw, gh) };
+        });
+        const trim = 0.6 + Math.min(visualGain, 1) * 0.8;
+
+        // scroll history up one row, write the newest spectrum at the bottom
+        const data = st.img.data;
+        data.copyWithin(0, gw * 4);
+        const rowStart = (gh - 1) * gw * 4;
+        const bins = Math.min(96, bufferLength);
+        for (let x = 0; x < gw; x++) {
+            const fi = Math.floor((x / gw) * bins);
+            const level = Math.pow((frequencyData[fi] / 255) * trim, 0.75);
+            const i4 = rowStart + x * 4;
+            if (palette) {
+                const hue = palette.hueBase + level * Math.max(palette.hueRange, 20);
+                // hsl -> quick approximation via canvas is costly; use simple ramp
+                const l = level * 255;
+                data[i4] = l * 0.9; data[i4 + 1] = l * 0.75; data[i4 + 2] = Math.min(255, 40 + l);
+            } else {
+                const l = level * 255;
+                data[i4] = l; data[i4 + 1] = l * 0.45; data[i4 + 2] = Math.max(0, l - 120);
+            }
+            data[i4 + 3] = level > 0.02 ? 255 : 0;
+        }
+        st.offCtx.putImageData(st.img, 0, 0);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(st.off, 0, 0, W, H);
+    };
+
+    /**
+     * Ferro — a ferrofluid blob spiking with the bass, like fluid on a
+     * subwoofer magnet. Silence collapses it to nothing.
+     */
+    const drawFerrofluid = (ctx, canvas, frequencyData, options) => {
+        const { bufferLength, visualGain = 1, palette } = options;
+        const W = canvas.width, H = canvas.height;
+        const cx = W / 2, cy = H / 2, R = Math.min(cx, cy);
+        const a = audioBands(frequencyData, bufferLength, visualGain);
+        const N = 96;
+        const st = getSceneState(canvas, 'ferro', () => ({ r: new Float32Array(N) }));
+        detectSceneBeat(st, a.bass);
+        const draining = trackSilence(st, a.energy);
+
+        const bins = Math.min(64, bufferLength);
+        for (let i = 0; i < N; i++) {
+            const mirrored = i < N / 2 ? i : N - i;
+            const fi = Math.floor((mirrored / (N / 2)) * bins);
+            const level = (frequencyData[fi] / 255) * a.trim;
+            const spike = Math.pow(level, 2.2) * R * 0.55;
+            const base = draining ? 0 : R * (0.16 + a.bass * 0.22);
+            const target = base + spike;
+            st.r[i] += (target - st.r[i]) * 0.35;
+        }
+        // neighbor smoothing keeps the blob liquid
+        for (let pass = 0; pass < 2; pass++) {
+            for (let i = 0; i < N; i++) {
+                st.r[i] = (st.r[(i - 1 + N) % N] + st.r[i] * 2 + st.r[(i + 1) % N]) / 4;
+            }
+        }
+
+        let maxR = 0;
+        for (let i = 0; i < N; i++) maxR = Math.max(maxR, st.r[i]);
+        if (maxR < 1) return;
+
+        const accent = palette ? palette.accent : '#8899ff';
+        ctx.beginPath();
+        for (let i = 0; i <= N; i++) {
+            const idx = i % N;
+            const ang = (i / N) * Math.PI * 2 - Math.PI / 2;
+            const x = cx + Math.cos(ang) * st.r[idx];
+            const y = cy + Math.sin(ang) * st.r[idx];
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = '#07070c';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = accent;
+        ctx.globalAlpha = 0.85;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+    };
+
+    /**
+     * String — a plucked string under tension; beats pluck it, mids shimmer.
+     */
+    const drawString = (ctx, canvas, frequencyData, options) => {
+        const { bufferLength, visualGain = 1, palette } = options;
+        const W = canvas.width, H = canvas.height, S = Math.max(W, H) / 600;
+        const a = audioBands(frequencyData, bufferLength, visualGain);
+        const N = 72;
+        const st = getSceneState(canvas, 'string', () => ({ y: new Float32Array(N), v: new Float32Array(N) }));
+        const beat = detectSceneBeat(st, a.bass);
+        const draining = trackSilence(st, a.energy);
+
+        if (beat && !draining) {
+            const at = 8 + ((Math.random() * (N - 16)) | 0);
+            const dir = Math.random() < 0.5 ? -1 : 1;
+            st.v[at] += dir * a.bass * H * 0.09;
+            st.v[Math.max(0, at - 1)] += dir * a.bass * H * 0.05;
+            st.v[Math.min(N - 1, at + 1)] += dir * a.bass * H * 0.05;
+        }
+        if (!draining && a.mid > 0.1) {
+            for (let k = 0; k < 3; k++) {
+                st.v[1 + ((Math.random() * (N - 2)) | 0)] += (Math.random() - 0.5) * a.mid * H * 0.004;
+            }
+        }
+
+        for (let i = 1; i < N - 1; i++) {
+            st.v[i] += (st.y[i - 1] + st.y[i + 1] - 2 * st.y[i]) * 0.42;
+            st.v[i] *= 0.994;
+        }
+        let maxAmp = 0;
+        for (let i = 1; i < N - 1; i++) {
+            st.y[i] += st.v[i];
+            maxAmp = Math.max(maxAmp, Math.abs(st.y[i]));
+        }
+        if (draining && maxAmp < 0.6 * S) return;
+
+        const midY = H / 2;
+        const stroke = palette ? palette.accent : '#e0c46a';
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 2 * S;
+        ctx.beginPath();
+        for (let i = 0; i < N; i++) {
+            const x = (i / (N - 1)) * W;
+            if (i === 0) ctx.moveTo(x, midY + st.y[i]); else ctx.lineTo(x, midY + st.y[i]);
+        }
+        ctx.stroke();
+    };
+
+    /**
+     * Ocean — rolling swell layers; bass is the swell, treble is the foam.
+     */
+    const drawOcean = (ctx, canvas, frequencyData, options) => {
+        const { bufferLength, visualGain = 1, palette } = options;
+        const W = canvas.width, H = canvas.height, S = Math.max(W, H) / 600;
+        const a = audioBands(frequencyData, bufferLength, visualGain);
+        const st = getSceneState(canvas, 'ocean', () => ({ env: [0, 0, 0, 0] }));
+        trackSilence(st, a.energy);
+        const t = Date.now() * 0.001;
+        const drive = [a.bass, (a.bass + a.mid) / 2, a.mid, a.treble];
+        const baseHue = palette ? palette.hueBase : 205;
+        const sat = palette ? palette.saturation : 65;
+
+        let any = false;
+        for (let l = 0; l < 4; l++) {
+            st.env[l] = Math.max(drive[l], st.env[l] * 0.975);
+            if (st.env[l] > 0.02) any = true;
+        }
+        if (!any) return;
+
+        for (let l = 0; l < 4; l++) {
+            const amp = st.env[l] * H * 0.16 * (1 - l * 0.12);
+            const baseY = H * (0.42 + l * 0.16);
+            const k1 = 0.011 - l * 0.0016, k2 = 0.023 + l * 0.003;
+            const s1 = 0.7 + l * 0.25, s2 = 1.3 - l * 0.2;
+            ctx.beginPath();
+            ctx.moveTo(0, H);
+            for (let x = 0; x <= W; x += 4) {
+                const y = baseY + Math.sin(x * k1 + t * s1) * amp * 0.6 + Math.sin(x * k2 - t * s2) * amp * 0.4;
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(W, H);
+            ctx.closePath();
+            ctx.fillStyle = `hsla(${baseHue + l * 6}, ${sat}%, ${16 + l * 9}%, 0.85)`;
+            ctx.fill();
+
+            // foam pixels at the crests of the front layer
+            if (l === 3 && a.treble > 0.12) {
+                ctx.fillStyle = `hsla(${baseHue}, 30%, 92%, 0.8)`;
+                for (let i = 0; i < a.treble * 30; i++) {
+                    const x = Math.random() * W;
+                    const y = baseY + Math.sin(x * k1 + t * s1) * amp * 0.6 + Math.sin(x * k2 - t * s2) * amp * 0.4;
+                    ctx.fillRect(x | 0, (y - 1) | 0, Math.max(1, S | 0), Math.max(1, S | 0));
+                }
+            }
+        }
+    };
+
+    /**
+     * Aurora — slow light curtains waving with the mids. Calm's natural fit.
+     */
+    const drawAurora = (ctx, canvas, frequencyData, options) => {
+        const { bufferLength, visualGain = 1, palette } = options;
+        const W = canvas.width, H = canvas.height;
+        const a = audioBands(frequencyData, bufferLength, visualGain);
+        const st = getSceneState(canvas, 'aurora', () => ({ env: 0 }));
+        trackSilence(st, a.energy);
+        st.env = Math.max((a.mid + a.treble) / 2, st.env * 0.985);
+        if (st.env < 0.02) return;
+        const t = Date.now() * 0.0004;
+        const baseHue = palette ? palette.hueBase : 140;
+        const range = palette ? Math.max(palette.hueRange, 30) : 80;
+
+        ctx.globalCompositeOperation = 'lighter';
+        const step = Math.max(3, Math.round(W / 220));
+        for (let x = 0; x < W; x += step) {
+            const wave =
+                Math.sin(x * 0.008 + t * 9) * 0.5 +
+                Math.sin(x * 0.019 - t * 6) * 0.3 +
+                Math.sin(x * 0.004 + t * 3.4) * 0.2;
+            const hgt = H * (0.22 + 0.32 * Math.abs(wave)) * st.env * 1.6;
+            const y0 = H * 0.12 + wave * H * 0.09;
+            const hue = baseHue + (x / W) * range + Math.sin(t * 5) * 12;
+            const grad = ctx.createLinearGradient(0, y0, 0, y0 + hgt);
+            grad.addColorStop(0, `hsla(${hue}, 80%, 62%, ${0.16 * st.env * 2})`);
+            grad.addColorStop(1, `hsla(${hue + 25}, 80%, 45%, 0)`);
+            ctx.fillStyle = grad;
+            ctx.fillRect(x, y0, step, hgt);
+        }
+        ctx.globalCompositeOperation = 'source-over';
+    };
+
+    /**
+     * Matrix — falling glyph rain; column speed and density ride the bands,
+     * beats flash bright heads. Trails come from the fade clear.
+     */
+    const MATRIX_GLYPHS = 'アィウェオカキクケコサシスセソタチツテトナニヌネノABCDEF0123456789';
+    const drawMatrix = (ctx, canvas, frequencyData, options) => {
+        const { bufferLength, visualGain = 1, palette } = options;
+        const W = canvas.width, H = canvas.height, S = Math.max(W, H) / 600;
+        const a = audioBands(frequencyData, bufferLength, visualGain);
+        const fontSize = Math.max(10, Math.round(13 * S));
+        const colW = fontSize;
+        const nCols = Math.ceil(W / colW);
+        const st = getSceneState(canvas, 'matrix', () => ({ cols: [] }));
+        const beat = detectSceneBeat(st, a.bass);
+        const draining = trackSilence(st, a.energy);
+
+        while (st.cols.length < nCols) st.cols.push({ y: Math.random() * -H, active: false });
+        const hue = palette ? palette.hueBase : 130;
+        ctx.font = `${fontSize}px ui-monospace, monospace`;
+
+        const bins = Math.min(96, bufferLength);
+        for (let c = 0; c < nCols; c++) {
+            const col = st.cols[c];
+            const fi = Math.floor((c / nCols) * bins);
+            const level = (frequencyData[fi] / 255) * a.trim;
+
+            if (!col.active) {
+                if (!draining && level > 0.12 && Math.random() < 0.06 + level * 0.2) {
+                    col.active = true;
+                    col.y = -fontSize;
+                }
+                continue;
+            }
+            col.y += (2.5 + level * 9) * S;
+            if (col.y > H + fontSize * 2) {
+                col.active = false;
+                continue;
+            }
+            const ch = MATRIX_GLYPHS[(Math.random() * MATRIX_GLYPHS.length) | 0];
+            const bright = beat && level > 0.25;
+            ctx.fillStyle = bright
+                ? `hsla(${hue}, 30%, 95%, 1)`
+                : `hsla(${hue}, ${palette ? palette.saturation : 80}%, ${45 + level * 30}%, 0.9)`;
+            ctx.fillText(ch, c * colW, col.y);
+        }
+    };
+
     /**
      * Main draw function - routes to appropriate visualizer
      * @param {CanvasRenderingContext2D} ctx - Canvas context
@@ -626,22 +1162,26 @@
             bufferLength,
             maxParticles = 100,
             spatialState = null,
-            palette = null
+            palette = null,
+            stereoLeft = null,
+            stereoRight = null
         } = options;
 
         const bgColor = darkMode ? '#1a2332' : '#0a0a0a';
 
-        // Clear canvas. Particles mode fades instead of wiping — the translucent
-        // clear leaves each pixel's previous positions as a decaying motion trail
-        // (the classic particle-engine accumulation buffer).
-        if (visType === 'particles') {
-            ctx.fillStyle = darkMode ? 'rgba(26, 35, 50, 0.45)' : 'rgba(10, 10, 10, 0.45)';
+        // Clear canvas. Trail-based scenes fade instead of wiping — the
+        // translucent clear leaves previous frames as decaying motion trails
+        // (the classic accumulation buffer). Alpha tunes each scene's tail.
+        const FADE_ALPHA = { particles: 0.45, lissajous: 0.3, fireworks: 0.32, matrix: 0.14, pond: 0.5 };
+        const fade = FADE_ALPHA[visType];
+        if (fade !== undefined) {
+            ctx.fillStyle = darkMode ? `rgba(26, 35, 50, ${fade})` : `rgba(10, 10, 10, ${fade})`;
         } else {
             ctx.fillStyle = bgColor;
         }
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const drawOptions = { visualGain, bufferLength, maxParticles, spatialState, palette };
+        const drawOptions = { visualGain, bufferLength, maxParticles, spatialState, palette, stereoLeft, stereoRight };
 
         switch (visType) {
             case 'bars':
@@ -668,6 +1208,36 @@
             case 'orbit':
                 drawOrbit(ctx, canvas, frequencyData, drawOptions);
                 break;
+            case 'pond':
+                drawPond(ctx, canvas, frequencyData, drawOptions);
+                break;
+            case 'lissajous':
+                drawLissajous(ctx, canvas, waveformData, drawOptions);
+                break;
+            case 'fireworks':
+                drawFireworks(ctx, canvas, frequencyData, drawOptions);
+                break;
+            case 'lightning':
+                drawLightning(ctx, canvas, frequencyData, drawOptions);
+                break;
+            case 'waterfall':
+                drawWaterfall(ctx, canvas, frequencyData, drawOptions);
+                break;
+            case 'ferrofluid':
+                drawFerrofluid(ctx, canvas, frequencyData, drawOptions);
+                break;
+            case 'string':
+                drawString(ctx, canvas, frequencyData, drawOptions);
+                break;
+            case 'ocean':
+                drawOcean(ctx, canvas, frequencyData, drawOptions);
+                break;
+            case 'aurora':
+                drawAurora(ctx, canvas, frequencyData, drawOptions);
+                break;
+            case 'matrix':
+                drawMatrix(ctx, canvas, frequencyData, drawOptions);
+                break;
             default:
                 drawBars(ctx, canvas, frequencyData, drawOptions);
         }
@@ -675,8 +1245,31 @@
         return particles;
     };
 
+    // Scene catalog — drives the app's visualizer dropdown and icon lookups
+    const LIST = [
+        { id: 'bars', icon: '📊', label: 'Bars' },
+        { id: 'waveform', icon: '〰️', label: 'Wave' },
+        { id: 'circular', icon: '🔘', label: 'Circular' },
+        { id: 'mirrored', icon: '🪞', label: 'Mirror' },
+        { id: 'particles', icon: '⏳', label: 'Sand' },
+        { id: 'fire', icon: '🔥', label: 'Fire' },
+        { id: 'breathe', icon: '🫧', label: 'Breathe' },
+        { id: 'orbit', icon: '🪐', label: 'Orbit' },
+        { id: 'pond', icon: '💧', label: 'Pond' },
+        { id: 'lissajous', icon: '♾️', label: 'Scope' },
+        { id: 'fireworks', icon: '🎆', label: 'Fireworks' },
+        { id: 'lightning', icon: '⚡', label: 'Storm' },
+        { id: 'waterfall', icon: '🌫️', label: 'Spectro' },
+        { id: 'ferrofluid', icon: '🧲', label: 'Ferro' },
+        { id: 'string', icon: '🎸', label: 'String' },
+        { id: 'ocean', icon: '🌊', label: 'Ocean' },
+        { id: 'aurora', icon: '🌌', label: 'Aurora' },
+        { id: 'matrix', icon: '🟩', label: 'Matrix' }
+    ];
+
     return {
         draw,
+        LIST,
         drawBars,
         drawWaveform,
         drawCircular,
@@ -684,6 +1277,16 @@
         drawParticles,
         drawFire,
         drawBreathe,
-        drawOrbit
+        drawOrbit,
+        drawPond,
+        drawLissajous,
+        drawFireworks,
+        drawLightning,
+        drawWaterfall,
+        drawFerrofluid,
+        drawString,
+        drawOcean,
+        drawAurora,
+        drawMatrix
     };
 });
