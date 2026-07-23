@@ -1015,48 +1015,86 @@
     };
 
     /**
-     * Ocean — rolling swell layers; bass is the swell, treble is the foam.
+     * Ocean — a rolling wave train sorted by frequency: big slow swells on
+     * the bass side (left) shrinking to choppy ripples on the treble side.
+     * Each beat launches a swell that rolls across the water.
      */
     const drawOcean = (ctx, canvas, frequencyData, options) => {
         const { bufferLength, visualGain = 1, palette } = options;
         const W = canvas.width, H = canvas.height, S = Math.max(W, H) / 600;
         const a = audioBands(frequencyData, bufferLength, visualGain);
-        const st = getSceneState(canvas, 'ocean', () => ({ env: [0, 0, 0, 0] }));
-        trackSilence(st, a.energy);
-        const t = Date.now() * 0.001;
-        const drive = [a.bass, (a.bass + a.mid) / 2, a.mid, a.treble];
+        const BANDS = 48;
+        const st = getSceneState(canvas, 'ocean', () => ({
+            env: new Float32Array(BANDS), swells: [], phase: 0, surge: 0
+        }));
+        const beat = detectSceneBeat(st, a.bass);
+        const draining = trackSilence(st, a.energy);
+        if (beat) st.surge = 1; else st.surge *= 0.92;
+
+        // per-band envelopes across the width (bass left -> treble right)
+        const bins = Math.min(96, bufferLength);
+        let maxEnv = 0;
+        for (let b = 0; b < BANDS; b++) {
+            const fi = Math.floor((b / BANDS) * bins);
+            const level = Math.pow((frequencyData[fi] / 255) * a.trim, 0.85);
+            st.env[b] = Math.max(level, st.env[b] * 0.94);
+            if (draining) st.env[b] *= 0.92;
+            maxEnv = Math.max(maxEnv, st.env[b]);
+        }
+        if (draining && maxEnv < 0.02) return; // flat calm -> dark
+
+        // the water rolls; beats push it and launch a traveling swell
+        st.phase += 0.025 + a.energy * 0.04 + st.surge * 0.06;
+        if (beat) {
+            st.swells.push({ x: -W * 0.15, amp: 0.5 + a.bass, speed: (3.5 + a.bass * 6) * S });
+        }
+        st.swells = st.swells.filter(sw => sw.x < W * 1.3);
+        for (const sw of st.swells) sw.x += sw.speed;
+
         const baseHue = palette ? palette.hueBase : 205;
         const sat = palette ? palette.saturation : 65;
 
-        let any = false;
-        for (let l = 0; l < 4; l++) {
-            st.env[l] = Math.max(drive[l], st.env[l] * 0.975);
-            if (st.env[l] > 0.02) any = true;
-        }
-        if (!any) return;
-
-        for (let l = 0; l < 4; l++) {
-            const amp = st.env[l] * H * 0.16 * (1 - l * 0.12);
-            const baseY = H * (0.42 + l * 0.16);
-            const k1 = 0.011 - l * 0.0016, k2 = 0.023 + l * 0.003;
-            const s1 = 0.7 + l * 0.25, s2 = 1.3 - l * 0.2;
+        for (let l = 0; l < 3; l++) {
+            const baseY = H * (0.42 + l * 0.18);
+            const depth = 1 - l * 0.22;
             ctx.beginPath();
             ctx.moveTo(0, H);
             for (let x = 0; x <= W; x += 4) {
-                const y = baseY + Math.sin(x * k1 + t * s1) * amp * 0.6 + Math.sin(x * k2 - t * s2) * amp * 0.4;
+                const u = x / W;
+                const level = st.env[Math.min(BANDS - 1, (u * BANDS) | 0)];
+                // big slow rollers left -> small choppy ripples right
+                const ampScale = (1.15 - u * 0.85) * depth;
+                const k = 0.0045 + u * 0.024;
+                const roll = st.phase * (1.6 - u * 0.7) + l * 1.7;
+                let amp = (4 * S + level * H * 0.24) * ampScale;
+                // traveling beat swells lift the surface as they pass
+                for (const sw of st.swells) {
+                    const d = (x - sw.x) / (W * 0.09);
+                    amp += Math.exp(-d * d) * sw.amp * H * 0.10 * ampScale;
+                }
+                const y = baseY
+                    + Math.sin(x * k - roll) * amp * 0.65
+                    + Math.sin(x * k * 2.3 + roll * 0.7) * amp * 0.35;
                 ctx.lineTo(x, y);
             }
             ctx.lineTo(W, H);
             ctx.closePath();
-            ctx.fillStyle = `hsla(${baseHue + l * 6}, ${sat}%, ${16 + l * 9}%, 0.85)`;
+            ctx.fillStyle = `hsla(${baseHue + l * 7}, ${sat}%, ${15 + l * 10}%, 0.85)`;
             ctx.fill();
 
-            // foam pixels at the crests of the front layer
-            if (l === 3 && a.treble > 0.12) {
-                ctx.fillStyle = `hsla(${baseHue}, 30%, 92%, 0.8)`;
-                for (let i = 0; i < a.treble * 30; i++) {
+            // treble foam sparkling on the front layer's crests
+            if (l === 2 && a.treble > 0.1) {
+                ctx.fillStyle = `hsla(${baseHue}, 25%, 92%, 0.85)`;
+                const n = a.treble * 40;
+                for (let i = 0; i < n; i++) {
                     const x = Math.random() * W;
-                    const y = baseY + Math.sin(x * k1 + t * s1) * amp * 0.6 + Math.sin(x * k2 - t * s2) * amp * 0.4;
+                    const u = x / W;
+                    const level = st.env[Math.min(BANDS - 1, (u * BANDS) | 0)];
+                    const ampScale = (1.15 - u * 0.85) * depth;
+                    const k = 0.0045 + u * 0.024;
+                    const roll = st.phase * (1.6 - u * 0.7) + l * 1.7;
+                    let amp = (4 * S + level * H * 0.24) * ampScale;
+                    const y = baseY + Math.sin(x * k - roll) * amp * 0.65 + Math.sin(x * k * 2.3 + roll * 0.7) * amp * 0.35;
                     ctx.fillRect(x | 0, (y - 1) | 0, Math.max(1, S | 0), Math.max(1, S | 0));
                 }
             }
