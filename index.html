@@ -5653,7 +5653,10 @@ function App() {
             const [urlInput, setUrlInput] = useState('');
             const [showVisualizer, setShowVisualizer] = useState(true);
             const [visualizerFullscreen, setVisualizerFullscreen] = useState(false);
-            const [visualizerType, setVisualizerType] = useState('bars'); // bars, waveform, circular, mirrored, particles
+            const [visualizerType, setVisualizerType] = useState(() => {
+                // Orbit is the app's signature scene; user choice persists
+                try { return localStorage.getItem('mp3_8d_visualizer_type') || 'orbit'; } catch { return 'orbit'; }
+            });
 
             // Timer states
             const [activeTimerTab, setActiveTimerTab] = useState('sleep'); // 'sleep' or 'pomodoro'
@@ -5957,6 +5960,11 @@ function App() {
             const rotationStateRef = useRef(null);
             // Active theme's visualizer palette (kept in a ref for the rAF draw loop)
             const vizPaletteRef = useRef(null);
+            // Orbit drag-to-place: held azimuth while dragging, and a persistent
+            // offset so the orbit resumes from the released position without a jump
+            const manualAngleRef = useRef(null);
+            const angleOffsetRef = useRef(0);
+            const vizDragRef = useRef({ active: false, moved: false, startX: 0, startY: 0, suppressClick: false });
 
             // Dual Track refs
             const dualTrackEnabledRef = useRef(dualTrackEnabled);
@@ -7190,7 +7198,11 @@ function App() {
                 window.__spatialDebug = () => {
                     const n = rotationNodesRef.current;
                     if (!n) return null;
+                    const s = rotationStateRef.current;
                     return {
+                        pan: s ? +s.panPosition.toFixed(3) : null,
+                        angle: s ? +s.angle.toFixed(3) : null,
+                        autoAngle: s ? +s.autoAngle.toFixed(3) : null,
                         itdLeftMs: +(n.itdDelayLeft.delayTime.value * 1000).toFixed(3),
                         itdRightMs: +(n.itdDelayRight.delayTime.value * 1000).toFixed(3),
                         lpLeftHz: Math.round(n.lpFilterLeft.frequency.value),
@@ -7400,7 +7412,9 @@ function App() {
                         dualTrackMode: dualTrackModeRef.current,
                         track2Speed: track2SpeedRef.current,
                         variableSpeed: dualTrackEnabledRef.current && dualTrackVariableSpeedRef.current,
-                        spatial: spatialParamsRef.current
+                        spatial: spatialParamsRef.current,
+                        angleOffset: angleOffsetRef.current,
+                        overrideAngle: manualAngleRef.current
                     });
                     rotationStateRef.current = rotationState;
                     
@@ -10044,7 +10058,56 @@ function App() {
 
             useEffect(() => {
                 visualizerTypeRef.current = visualizerType;
+                try { localStorage.setItem('mp3_8d_visualizer_type', visualizerType); } catch (e) { /* storage unavailable */ }
             }, [visualizerType]);
+
+            // ==================== ORBIT DRAG-TO-PLACE ====================
+            // In the Orbit scene the source dot is an input: drag anywhere on the
+            // stage to hold the sound at that azimuth — ITD, head shadow, gains,
+            // and room all follow through the real engine path. Releasing resumes
+            // the orbit from the released position. A plain click (no movement)
+            // still toggles fullscreen.
+            const orbitAngleFromEvent = (e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const dx = e.clientX - (rect.left + rect.width / 2);
+                const dy = e.clientY - (rect.top + rect.height / 2);
+                return Math.atan2(dx, -dy); // matches the Orbit scene: x = sin(a), y = -cos(a)
+            };
+            const handleVizPointerDown = (e) => {
+                if (visualizerTypeRef.current !== 'orbit') return;
+                vizDragRef.current = { active: true, moved: false, startX: e.clientX, startY: e.clientY, suppressClick: false };
+                if (e.pointerId !== undefined && e.currentTarget.setPointerCapture) {
+                    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* unsupported */ }
+                }
+            };
+            const handleVizPointerMove = (e) => {
+                const d = vizDragRef.current;
+                if (!d.active) return;
+                if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 6) return;
+                d.moved = true;
+                manualAngleRef.current = orbitAngleFromEvent(e);
+            };
+            const handleVizPointerUp = () => {
+                const d = vizDragRef.current;
+                if (!d.active) return;
+                d.active = false;
+                if (d.moved) {
+                    d.suppressClick = true;
+                    const s = rotationStateRef.current;
+                    if (s && manualAngleRef.current !== null) {
+                        // Resume the orbit from the released position (no jump)
+                        angleOffsetRef.current += manualAngleRef.current - s.autoAngle;
+                    }
+                    manualAngleRef.current = null;
+                }
+            };
+            const vizClickGuard = (fn) => () => {
+                if (vizDragRef.current.suppressClick) {
+                    vizDragRef.current.suppressClick = false;
+                    return;
+                }
+                fn();
+            };
 
             // Mode themes: the active preset commits the whole app to its visual
             // world (body token class + visualizer palette). Skin only — layout
@@ -10981,11 +11044,14 @@ return (
                                         <canvas
                                             ref={canvasRef}
                                             width={visualizerFullscreen ? window.innerWidth : 600}
-                                            height={visualizerFullscreen ? window.innerHeight : 160}
+                                            height={visualizerFullscreen ? window.innerHeight : 220}
                                             role="img"
-                                            aria-label="Audio visualizer - click to toggle fullscreen"
-                                            title="Click to toggle fullscreen"
-                                            onClick={() => setVisualizerFullscreen(!visualizerFullscreen)}
+                                            aria-label={visualizerType === 'orbit' ? 'Orbit stage - drag to place the sound, click to toggle fullscreen' : 'Audio visualizer - click to toggle fullscreen'}
+                                            title={visualizerType === 'orbit' ? 'Drag to place the sound · click for fullscreen' : 'Click to toggle fullscreen'}
+                                            onClick={vizClickGuard(() => setVisualizerFullscreen(!visualizerFullscreen))}
+                                            onPointerDown={handleVizPointerDown}
+                                            onPointerMove={handleVizPointerMove}
+                                            onPointerUp={handleVizPointerUp}
                                             style={visualizerFullscreen ? {
                                                 position: 'fixed',
                                                 top: 0,
@@ -10993,10 +11059,12 @@ return (
                                                 width: '100vw',
                                                 height: '100vh',
                                                 zIndex: 9999,
-                                                cursor: 'zoom-out',
+                                                cursor: visualizerType === 'orbit' ? 'grab' : 'zoom-out',
+                                                touchAction: visualizerType === 'orbit' ? 'none' : 'auto',
                                                 background: darkMode ? '#1a2332' : '#0a0a0a'
                                             } : {
-                                                cursor: 'zoom-in',
+                                                cursor: visualizerType === 'orbit' ? 'grab' : 'zoom-in',
+                                                touchAction: visualizerType === 'orbit' ? 'none' : 'auto',
                                                 borderRadius: '8px'
                                             }}
                                         ></canvas>
@@ -11930,11 +11998,15 @@ return (
                                             width: '100%',
                                             height: '90px',
                                             display: 'block',
+                                            touchAction: visualizerType === 'orbit' ? 'none' : 'auto',
                                             background: darkMode ? '#1a2332' : '#0a0a0a'
                                         }}
-                                        onClick={() => setVisualizerFullscreen(true)}
+                                        onClick={vizClickGuard(() => setVisualizerFullscreen(true))}
+                                        onPointerDown={handleVizPointerDown}
+                                        onPointerMove={handleVizPointerMove}
+                                        onPointerUp={handleVizPointerUp}
                                         role="img"
-                                        aria-label="Audio visualizer - tap to go fullscreen"
+                                        aria-label={visualizerType === 'orbit' ? 'Orbit stage - drag to place the sound, tap to go fullscreen' : 'Audio visualizer - tap to go fullscreen'}
                                     />
                                     {!isPlaying && (
                                         <div style={{
@@ -12751,9 +12823,14 @@ return (
                                     top: 0,
                                     left: 0,
                                     width: '100%',
-                                    height: '100%'
+                                    height: '100%',
+                                    cursor: visualizerType === 'orbit' ? 'grab' : 'zoom-out',
+                                    touchAction: visualizerType === 'orbit' ? 'none' : 'auto'
                                 }}
-                                onClick={() => setVisualizerFullscreen(false)}
+                                onClick={vizClickGuard(() => setVisualizerFullscreen(false))}
+                                onPointerDown={handleVizPointerDown}
+                                onPointerMove={handleVizPointerMove}
+                                onPointerUp={handleVizPointerUp}
                             />
 
                             {/* Track info - at TOP */}

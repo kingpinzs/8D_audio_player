@@ -369,7 +369,9 @@
             dualTrackMode = 'synced',
             track2Speed = 0.5,
             variableSpeed = false,
-            spatial = null
+            spatial = null,
+            angleOffset = 0,
+            overrideAngle = null
         } = params;
 
         const sp = { ...DEFAULT_SPATIAL, ...(spatial || {}) };
@@ -379,9 +381,27 @@
         const driftMultiplier = variableSpeed ? calculateVariableSpeed(time, 1) : 1;
         const rotationHz = speedToHz(speed) * driftMultiplier;
 
-        const angle = 2 * Math.PI * rotationHz * time;
-        const { panPosition: rawPan, depthMultiplier } = calculatePanPosition(movement, angle, time, sp.backDepth);
-        const panPosition = rawPan * intensity;
+        // autoAngle: where the orbit would naturally be (offset preserves
+        // continuity after a manual drag). overrideAngle: user is holding the
+        // source at a fixed position (drag-to-place) — all cues still apply.
+        const autoAngle = 2 * Math.PI * rotationHz * time + angleOffset;
+        const isPlaced = !(overrideAngle === null || overrideAngle === undefined);
+        const angle = isPlaced ? overrideAngle : autoAngle;
+
+        let rawPan;
+        let depthMultiplier;
+        let panPosition;
+        if (isPlaced) {
+            // Drag-to-place: the position IS the meaning — bypass the movement
+            // pattern and intensity scaling. angle 0 = front, +90° = right.
+            rawPan = Math.sin(angle);
+            const behindness = Math.max(0, -Math.cos(angle));
+            depthMultiplier = 1 - (1 - sp.backDepth) * behindness;
+            panPosition = rawPan;
+        } else {
+            ({ panPosition: rawPan, depthMultiplier } = calculatePanPosition(movement, angle, time, sp.backDepth));
+            panPosition = rawPan * intensity;
+        }
         const isHardPan = movement === PATTERNS.QUADRANT;
 
         const track1Gains = calculateChannelGains(panPosition, isHardPan, depthMultiplier, sp.hardPanThreshold);
@@ -414,6 +434,7 @@
             panPosition,
             depthMultiplier,
             angle,
+            autoAngle,
             rotationHz
         };
     };
